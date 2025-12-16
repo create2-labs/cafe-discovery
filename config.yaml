@@ -1,0 +1,31 @@
+server:
+  host: "0.0.0.0"
+  port: "8080"
+
+blockchains:
+  - name: ethereum-mainnet
+    rpc: "https://ethereum-rpc.publicnode.com"
+    moralis_chain_name: "eth"
+
+  - name: optimism
+    rpc: "https://optimism-rpc.publicnode.com"
+    moralis_chain_name: "optimism"
+
+  - name: arbitrum-one
+    rpc: "https://arbitrum-one-rpc.publicnode.com"
+    moralis_chain_name: "arbitrum"
+
+  - name: base
+    rpc: "https://base-rpc.publicnode.com"
+    moralis_chain_name: "base"
+
+  - name: bsc
+    rpc: "https://bsc-rpc.publicnode.com"
+    moralis_chain_name: "bsc"
+
+  - name: polygon
+    rpc: "https://polygon-bor-rpc.publicnode.com"
+    moralis_chain_name: "polygon amoy"
+
+
+
