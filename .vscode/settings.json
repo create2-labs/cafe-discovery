@@ -1,0 +1,15 @@
+{
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
+  },
+
+  "golangci-lint.run": "onSave",
+  "golangci-lint.args": [
+    "--timeout=5m"
+  ],
+
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "workspace"
+}

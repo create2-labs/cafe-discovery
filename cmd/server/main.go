@@ -18,7 +18,10 @@ func initConfig() {
 		viper.SetDefault(configName, defaultValue)
 	}
 
-	viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		// Config file not found is acceptable, we use defaults and env vars
+		log.Printf("Config file not found, using defaults and environment variables: %v", err)
+	}
 	viper.AutomaticEnv()
 }
 

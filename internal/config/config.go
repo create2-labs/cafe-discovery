@@ -23,6 +23,7 @@ const (
 	Production = "PRODUCTION"
 
 	// Moralis API key.
+	// #nosec G101 -- This is a configuration key name, not a hardcoded credential
 	MoralisAPIKey = "MORALIS_API_KEY"
 
 	// Moralis API URL.

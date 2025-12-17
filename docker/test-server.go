@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -44,12 +45,15 @@ func main() {
 	// Handler simple
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprint(w, "ok\n")
+		if _, err := fmt.Fprint(w, "ok\n"); err != nil {
+			log.Printf("Error writing response: %v", err)
+		}
 	})
 
 	// Configuration TLS
 	server := &http.Server{
-		Addr: ":" + port,
+		Addr:              ":" + port,
+		ReadHeaderTimeout: 5 * time.Second,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},

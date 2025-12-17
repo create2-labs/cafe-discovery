@@ -27,6 +27,17 @@ type DiscoveryService struct {
 	planService    *PlanService
 }
 
+// scanResultData holds the data needed to build a scan result
+type scanResultData struct {
+	accountType domain.AccountType
+	algorithm   domain.Algorithm
+	nistLevel   domain.NISTLevel
+	keyExposed  bool
+	isERC4337   bool
+	publicKey   string
+	riskScore   float64
+}
+
 // NewDiscoveryService creates a new discovery service
 func NewDiscoveryService(clients map[string]*evm.Client, moralisClient *moralis.MoralisClient, scanResultRepo repository.ScanResultRepository, planService *PlanService) *DiscoveryService {
 	return &DiscoveryService{
@@ -39,46 +50,88 @@ func NewDiscoveryService(clients map[string]*evm.Client, moralisClient *moralis.
 
 // ScanWallet scans a wallet address across all configured networks and saves the result for the user
 func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, address string) (*domain.ScanResult, error) {
-	// Normalize address (ensure 0x prefix)
-	address = normalizeAddress(address)
-
-	if !isValidAddress(address) {
-		return nil, fmt.Errorf("invalid Ethereum address: %s", address)
+	normalizedAddress, err := s.validateAndNormalizeAddress(address)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if scan already exists in database
+	existingScan, err := s.getExistingScan(userID, normalizedAddress)
+	if err != nil || existingScan != nil {
+		return existingScan, err
+	}
+
+	if err := s.checkPlanLimits(userID); err != nil {
+		return nil, err
+	}
+
+	networkResults, networks, recoveredPublicKey := s.scanAllNetworks(ctx, normalizedAddress)
+	keyExposed, isERC4337 := s.extractKeyExposureInfo(networkResults)
+	accountType, algorithm, nistLevel := s.determineAccountType(networkResults)
+	riskScore := s.calculateRiskScore(networkResults, accountType, nistLevel)
+
+	scanData := scanResultData{
+		accountType: accountType,
+		algorithm:   algorithm,
+		nistLevel:   nistLevel,
+		keyExposed:  keyExposed,
+		isERC4337:   isERC4337,
+		publicKey:   recoveredPublicKey,
+		riskScore:   riskScore,
+	}
+	result := s.buildScanResult(normalizedAddress, scanData, networks)
+	s.saveScanResult(userID, result)
+
+	return result, nil
+}
+
+// validateAndNormalizeAddress validates and normalizes the Ethereum address
+func (s *DiscoveryService) validateAndNormalizeAddress(address string) (string, error) {
+	normalized := normalizeAddress(address)
+	if !isValidAddress(normalized) {
+		return "", fmt.Errorf("invalid Ethereum address: %s", address)
+	}
+	return normalized, nil
+}
+
+// getExistingScan checks if a scan already exists for the user and address
+func (s *DiscoveryService) getExistingScan(userID uuid.UUID, address string) (*domain.ScanResult, error) {
 	existingEntity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, address)
 	if err == nil && existingEntity != nil {
-		// Return existing scan result
 		return existingEntity.ToScanResult(), nil
 	}
+	return nil, err
+}
 
-	// Check plan limits
-	if s.planService != nil {
-		canScan, usage, err := s.planService.CheckScanLimit(userID, "wallet", s.scanResultRepo, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check plan limits: %w", err)
-		}
-		if !canScan {
-			return nil, fmt.Errorf("wallet scan limit reached (%d/%d). Please upgrade your plan to continue", usage.WalletScansUsed, usage.WalletScanLimit)
-		}
+// checkPlanLimits verifies if the user can perform a scan based on their plan limits
+func (s *DiscoveryService) checkPlanLimits(userID uuid.UUID) error {
+	if s.planService == nil {
+		return nil
 	}
 
+	canScan, usage, err := s.planService.CheckScanLimit(userID, "wallet", s.scanResultRepo, nil)
+	if err != nil {
+		return fmt.Errorf("failed to check plan limits: %w", err)
+	}
+	if !canScan {
+		return fmt.Errorf("wallet scan limit reached (%d/%d). Please upgrade your plan to continue", usage.WalletScansUsed, usage.WalletScanLimit)
+	}
+	return nil
+}
+
+// scanAllNetworks scans the address across all configured networks
+func (s *DiscoveryService) scanAllNetworks(ctx context.Context, address string) ([]domain.NetworkResult, []string, string) {
 	var networks []string
 	var networkResults []domain.NetworkResult
-	var recoveredPublicKey string // Store the first recovered public key
-	//now := time.Now()
+	var recoveredPublicKey string
 
 	for networkName, client := range s.clients {
 		result, err := s.scanNetwork(ctx, client, networkName, address)
 		if err != nil {
-			// Log error but continue with other networks
 			continue
 		}
 
 		networkResults = append(networkResults, *result)
 
-		// Use the first recovered public key we find
 		if recoveredPublicKey == "" && result.PublicKey != "" {
 			recoveredPublicKey = result.PublicKey
 		}
@@ -88,12 +141,14 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		}
 	}
 
-	// Determine account type and algorithm
-	accountType, algorithm, nistLevel := s.determineAccountType(networkResults)
+	return networkResults, networks, recoveredPublicKey
+}
 
-	// Check if key is exposed on any network
+// extractKeyExposureInfo extracts key exposure and ERC4337 information from network results
+func (s *DiscoveryService) extractKeyExposureInfo(networkResults []domain.NetworkResult) (bool, bool) {
 	keyExposed := false
 	isERC4337 := false
+
 	for _, nr := range networkResults {
 		if nr.IsKeyExposed {
 			keyExposed = true
@@ -103,33 +158,33 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		}
 	}
 
-	// Calculate risk score
-	riskScore := s.calculateRiskScore(networkResults, accountType, nistLevel)
+	return keyExposed, isERC4337
+}
 
-	result := &domain.ScanResult{
-		Address:    address,
-		Type:       accountType,
-		Algorithm:  algorithm,
-		NISTLevel:  nistLevel,
-		KeyExposed: keyExposed,
-		PublicKey:  recoveredPublicKey, // Add recovered public key if available
-		IsERC4337:  isERC4337,
-		RiskScore:  riskScore,
-		//	FirstSeen:   &now, // In production, would query blockchain for actual first transaction date
-		//	LastSeen:    &now, // In production, would query blockchain for actual last transaction date
+// buildScanResult constructs a ScanResult from the collected information
+func (s *DiscoveryService) buildScanResult(address string, data scanResultData, networks []string) *domain.ScanResult {
+	return &domain.ScanResult{
+		Address:     address,
+		Type:        data.accountType,
+		Algorithm:   data.algorithm,
+		NISTLevel:   data.nistLevel,
+		KeyExposed:  data.keyExposed,
+		PublicKey:   data.publicKey,
+		IsERC4337:   data.isERC4337,
+		RiskScore:   data.riskScore,
 		Networks:    networks,
-		Connections: []string{}, // Would be populated from transaction analysis to show connected addresses
+		Connections: []string{},
 	}
+}
 
-	// Save scan result to database
+// saveScanResult saves the scan result to the database
+func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanResult) {
 	scanResultEntity := domain.FromScanResult(userID, result)
 	if err := s.scanResultRepo.Create(scanResultEntity); err != nil {
 		// Log error but don't fail the request - scan was successful
 		// In production, you might want to use a logger here
 		_ = err
 	}
-
-	return result, nil
 }
 
 // ListScanResults lists scan results for a user with pagination
@@ -157,58 +212,21 @@ func (s *DiscoveryService) ListScanResults(ctx context.Context, userID uuid.UUID
 
 // scanNetwork scans a single network for the given address
 func (s *DiscoveryService) scanNetwork(ctx context.Context, client *evm.Client, networkName string, address string) (*domain.NetworkResult, error) {
-	var publicKey string
+	publicKey := s.tryRecoverPublicKeyFromMoralis(ctx, client, address, networkName)
 
-	// First, try to get transaction from Moralis if chain name is available
-	if s.moralisClient != nil && client.MoralisChainName != "" {
-		moralisTxs, err := s.moralisClient.GetTransactionsByAddress(address, client.MoralisChainName)
-		if err == nil && len(moralisTxs) > 0 {
-			// Get the first transaction hash
-			txHash := moralisTxs[0].Hash
-			if txHash != "" {
-				log.Println("txHash", txHash, "address", address, "networkName", networkName)
-				// Retrieve the transaction from RPC
-				txData, err := client.GetTransactionByHash(ctx, txHash)
-				if err == nil && txData != nil {
-					log.Println("txData", string(txData))
-					// Try to recover public key from transaction
-					recoveredKey, _, err := s.RecoverPublicKeyFromTransactionData(ctx, client, txData, txHash)
-					if err == nil && recoveredKey != "" {
-						publicKey = recoveredKey
-					}
-				}
-			}
-		}
-	}
-
-	// Check if address has code (smart contract)
-	// eth_getCode returns "0x" for EOA and "0x<bytecode>" for contracts
 	code, err := client.GetCode(ctx, address, "latest")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get code: %w", err)
 	}
 
-	// EOA has no code: eth_getCode returns "0x" for EOA
-	// Contract has bytecode: eth_getCode returns "0x" + hex bytecode (length > 2)
 	isEOA := isEOAAddress(code)
+	isERC4337 := s.checkERC4337Support(ctx, client, address, isEOA)
 
-	// Check if contract implements ERC-4337 (only if it's a contract, not EOA)
-	var isERC4337 bool
-	if !isEOA {
-		isERC4337, err = client.CheckERC4337Support(ctx, address)
-		if err != nil {
-			// Log error but don't fail - assume not ERC-4337 if check fails
-			isERC4337 = false
-		}
-	}
-
-	// Check transaction count to determine if key is exposed
 	txCount, err := client.GetTransactionCount(ctx, address, "latest")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction count: %w", err)
 	}
 
-	// Key is exposed if address has sent at least one transaction
 	isKeyExposed := txCount > 0
 
 	return &domain.NetworkResult{
@@ -219,6 +237,52 @@ func (s *DiscoveryService) scanNetwork(ctx context.Context, client *evm.Client, 
 		TransactionCount: txCount,
 		PublicKey:        publicKey,
 	}, nil
+}
+
+// tryRecoverPublicKeyFromMoralis attempts to recover the public key using Moralis transaction data
+func (s *DiscoveryService) tryRecoverPublicKeyFromMoralis(ctx context.Context, client *evm.Client, address, networkName string) string {
+	if s.moralisClient == nil || client.MoralisChainName == "" {
+		return ""
+	}
+
+	moralisTxs, err := s.moralisClient.GetTransactionsByAddress(address, client.MoralisChainName)
+	if err != nil || len(moralisTxs) == 0 {
+		return ""
+	}
+
+	txHash := moralisTxs[0].Hash
+	if txHash == "" {
+		return ""
+	}
+
+	log.Println("txHash", txHash, "address", address, "networkName", networkName)
+	txData, err := client.GetTransactionByHash(ctx, txHash)
+	if err != nil || txData == nil {
+		return ""
+	}
+
+	log.Println("txData", string(txData))
+	recoveredKey, _, err := s.RecoverPublicKeyFromTransactionData(ctx, client, txData, txHash)
+	if err != nil || recoveredKey == "" {
+		return ""
+	}
+
+	return recoveredKey
+}
+
+// checkERC4337Support checks if a contract implements ERC-4337 (only for contracts, not EOAs)
+func (s *DiscoveryService) checkERC4337Support(ctx context.Context, client *evm.Client, address string, isEOA bool) bool {
+	if isEOA {
+		return false
+	}
+
+	isERC4337, err := client.CheckERC4337Support(ctx, address)
+	if err != nil {
+		// Log error but don't fail - assume not ERC-4337 if check fails
+		return false
+	}
+
+	return isERC4337
 }
 
 // determineAccountType determines the account type, algorithm, and NIST level
@@ -262,6 +326,7 @@ func (s *DiscoveryService) determineAccountType(results []domain.NetworkResult) 
 // calculateRiskScore calculates the risk score based on network results
 // Returns a score between 0.0 and 1.0, where higher means higher risk
 func (s *DiscoveryService) calculateRiskScore(results []domain.NetworkResult, accountType domain.AccountType, nistLevel domain.NISTLevel) float64 {
+	_ = accountType // Reserved for future use in risk calculation
 	if len(results) == 0 {
 		return 0.0
 	}
@@ -323,6 +388,7 @@ func (s *DiscoveryService) calculateRiskScore(results []domain.NetworkResult, ac
 
 // determineRiskCategory determines the risk category based on score and NIST level
 // Note: This function is not currently used but kept for future use
+/*
 func (s *DiscoveryService) determineRiskCategory(riskScore float64, nistLevel domain.NISTLevel) domain.RiskCategory {
 	if nistLevel >= domain.NISTLevel5 {
 		return domain.RiskPQCReady
@@ -338,6 +404,7 @@ func (s *DiscoveryService) determineRiskCategory(riskScore float64, nistLevel do
 
 	return domain.RiskHigh // Conservative: low score but exposed is still high risk
 }
+*/
 
 // isEOAAddress determines if the code result indicates an EOA (Externally Owned Account)
 // eth_getCode returns "0x" for EOA and "0x<bytecode>" for contracts
@@ -364,7 +431,7 @@ func isValidAddress(address string) bool {
 
 	// Check if remaining characters are valid hex
 	for _, c := range address[2:] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -372,140 +439,242 @@ func isValidAddress(address string) bool {
 	return true
 }
 
-// recoverPublicKeyFromTransactionData attempts to recover the public key from a transaction
+// txFields holds extracted transaction fields
+type txFields struct {
+	nonceHex                string
+	gasHex                  string
+	toAddr                  string
+	valueHex                string
+	inputData               string
+	rHex                    string
+	sHex                    string
+	chainIDHex              string
+	maxFeePerGasHex         string
+	maxPriorityFeePerGasHex string
+	gasPriceHex             string
+}
+
+// txBuildParams holds parameters for building a transaction
+type txBuildParams struct {
+	chainID *big.Int
+	nonce   *big.Int
+	to      *common.Address
+	value   *big.Int
+	gas     *big.Int
+	data    []byte
+	v       *big.Int
+	r       *big.Int
+	s       *big.Int
+	fields  txFields
+}
+
+// RecoverPublicKeyFromTransactionData attempts to recover the public key from a transaction
 func (s *DiscoveryService) RecoverPublicKeyFromTransactionData(ctx context.Context, client *evm.Client, txData json.RawMessage, txHash string) (string, string, error) {
-	// Parse transaction data
-	var txJSON map[string]interface{}
-	if err := json.Unmarshal(txData, &txJSON); err != nil {
-		return "", "", fmt.Errorf("failed to unmarshal transaction: %w", err)
+	txJSON, err := s.parseTransactionJSON(txData)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Extract transaction fields needed for recovery
-	nonceHex, _ := txJSON["nonce"].(string)
-	gasHex, _ := txJSON["gas"].(string)
-	toAddr, _ := txJSON["to"].(string)
-	valueHex, _ := txJSON["value"].(string)
-	inputData, _ := txJSON["input"].(string)
-	rHex, _ := txJSON["r"].(string)
-	sHex, _ := txJSON["s"].(string)
-	chainIDHex, _ := txJSON["chainId"].(string)
+	fields := s.extractTransactionFields(txJSON)
+	isEIP1559 := s.isEIP1559Transaction(txJSON, fields)
+	chainID := s.parseChainID(fields.chainIDHex)
 
-	// Check if it's an EIP-1559 transaction (London fork)
-	maxFeePerGasHex, hasMaxFeePerGas := txJSON["maxFeePerGas"].(string)
-	maxPriorityFeePerGasHex, hasMaxPriorityFeePerGas := txJSON["maxPriorityFeePerGas"].(string)
-	isEIP1559 := hasMaxFeePerGas && hasMaxPriorityFeePerGas && maxFeePerGasHex != "" && maxPriorityFeePerGasHex != ""
-
-	// Get chain ID
-	var chainID *big.Int
-	if chainIDHex != "" && chainIDHex != "0x" {
-		chainID = new(big.Int)
-		chainID.SetString(chainIDHex, 0)
+	v, err := s.calculateV(txJSON, isEIP1559, chainID)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Build transaction for recovery
-	nonce := hexToBigInt(nonceHex)
-	gas := hexToBigInt(gasHex)
-	value := hexToBigInt(valueHex)
-	r := hexToBigInt(rHex)
-	sigS := hexToBigInt(sHex)
-
-	// Calculate v based on transaction type
-	var v *big.Int
-	if isEIP1559 {
-		// For EIP-1559, use yParity instead of v
-		// yParity is 0 or 1, and v = chainID * 2 + 35 + yParity
-		yParityHex, hasYParity := txJSON["yParity"].(string)
-		if !hasYParity {
-			// Fallback: try to get yParity from v if it's 0 or 1
-			vHex, _ := txJSON["v"].(string)
-			vVal := hexToBigInt(vHex)
-			if vVal.Uint64() == 0 || vVal.Uint64() == 1 {
-				yParityHex = vHex
-			} else {
-				return "", "", fmt.Errorf("yParity not found for EIP-1559 transaction")
-			}
-		}
-		yParity := hexToBigInt(yParityHex)
-		// v = chainID * 2 + 35 + yParity
-		v = new(big.Int).Mul(chainID, big.NewInt(2))
-		v.Add(v, big.NewInt(35))
-		v.Add(v, yParity)
-	} else {
-		// For legacy transactions, use v directly
-		vHex, _ := txJSON["v"].(string)
-		v = hexToBigInt(vHex)
+	data, err := s.decodeInputData(fields.inputData)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Decode input data
-	var data []byte
-	if inputData != "" && inputData != "0x" {
-		var err error
-		data, err = hex.DecodeString(strings.TrimPrefix(inputData, "0x"))
-		if err != nil {
-			return "", "", fmt.Errorf("failed to decode input data: %w", err)
-		}
+	to := s.parseToAddress(fields.toAddr)
+	tx, err := s.buildTransaction(fields, isEIP1559, chainID, to, data, v)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Create transaction
-	var to *common.Address
-	if toAddr != "" && toAddr != "0x" && toAddr != "null" {
-		addr := common.HexToAddress(toAddr)
-		to = &addr
-	}
-
-	var tx *types.Transaction
-
-	// Create transaction based on type
-	if isEIP1559 {
-		// EIP-1559 transaction (London fork)
-		maxFeePerGas := hexToBigInt(maxFeePerGasHex)
-		maxPriorityFeePerGas := hexToBigInt(maxPriorityFeePerGasHex)
-		tx = types.NewTx(&types.DynamicFeeTx{
-			ChainID:   chainID,
-			Nonce:     nonce.Uint64(),
-			To:        to,
-			Value:     value,
-			Gas:       gas.Uint64(),
-			GasFeeCap: maxFeePerGas,
-			GasTipCap: maxPriorityFeePerGas,
-			Data:      data,
-			V:         v,
-			R:         r,
-			S:         sigS,
-		})
-	} else {
-		// Legacy transaction (EIP-155 or before)
-		gasPriceHex, _ := txJSON["gasPrice"].(string)
-		gasPrice := hexToBigInt(gasPriceHex)
-		tx = types.NewTx(&types.LegacyTx{
-			Nonce:    nonce.Uint64(),
-			To:       to,
-			Value:    value,
-			Gas:      gas.Uint64(),
-			GasPrice: gasPrice,
-			Data:     data,
-			V:        v,
-			R:        r,
-			S:        sigS,
-		})
-	}
-
-	// Recover public key
-	// For EIP-1559, pass yParity directly if available
-	var yParity *big.Int
-	if isEIP1559 {
-		yParityHex, hasYParity := txJSON["yParity"].(string)
-		if hasYParity && yParityHex != "" {
-			yParity = hexToBigInt(yParityHex)
-		}
-	}
-
+	yParity := s.extractYParity(txJSON, isEIP1559)
 	pubKeyHex, recoveredTxHash, err := evm.RecoverPubKeyFromTx(tx, types.NewLondonSigner(chainID), chainID, yParity)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to recover public key: %w", err)
 	}
 
 	return pubKeyHex, recoveredTxHash, nil
+}
+
+// parseTransactionJSON parses the transaction JSON data
+func (s *DiscoveryService) parseTransactionJSON(txData json.RawMessage) (map[string]interface{}, error) {
+	var txJSON map[string]interface{}
+	if err := json.Unmarshal(txData, &txJSON); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal transaction: %w", err)
+	}
+	return txJSON, nil
+}
+
+// extractTransactionFields extracts all transaction fields from JSON
+func (s *DiscoveryService) extractTransactionFields(txJSON map[string]interface{}) txFields {
+	getString := func(key string) string {
+		val, _ := txJSON[key].(string)
+		return val
+	}
+
+	return txFields{
+		nonceHex:                getString("nonce"),
+		gasHex:                  getString("gas"),
+		toAddr:                  getString("to"),
+		valueHex:                getString("value"),
+		inputData:               getString("input"),
+		rHex:                    getString("r"),
+		sHex:                    getString("s"),
+		chainIDHex:              getString("chainId"),
+		maxFeePerGasHex:         getString("maxFeePerGas"),
+		maxPriorityFeePerGasHex: getString("maxPriorityFeePerGas"),
+		gasPriceHex:             getString("gasPrice"),
+	}
+}
+
+// isEIP1559Transaction determines if the transaction is EIP-1559
+func (s *DiscoveryService) isEIP1559Transaction(txJSON map[string]interface{}, fields txFields) bool {
+	_, hasMaxFeePerGas := txJSON["maxFeePerGas"].(string)
+	_, hasMaxPriorityFeePerGas := txJSON["maxPriorityFeePerGas"].(string)
+	return hasMaxFeePerGas && hasMaxPriorityFeePerGas && fields.maxFeePerGasHex != "" && fields.maxPriorityFeePerGasHex != ""
+}
+
+// parseChainID parses the chain ID from hex string
+func (s *DiscoveryService) parseChainID(chainIDHex string) *big.Int {
+	if chainIDHex == "" || chainIDHex == "0x" {
+		return nil
+	}
+	chainID := new(big.Int)
+	chainID.SetString(chainIDHex, 0)
+	return chainID
+}
+
+// calculateV calculates the v value based on transaction type
+func (s *DiscoveryService) calculateV(txJSON map[string]interface{}, isEIP1559 bool, chainID *big.Int) (*big.Int, error) {
+	if isEIP1559 {
+		return s.calculateVForEIP1559(txJSON, chainID)
+	}
+	return s.calculateVForLegacy(txJSON), nil
+}
+
+// calculateVForEIP1559 calculates v for EIP-1559 transactions
+func (s *DiscoveryService) calculateVForEIP1559(txJSON map[string]interface{}, chainID *big.Int) (*big.Int, error) {
+	yParityHex, hasYParity := txJSON["yParity"].(string)
+	if !hasYParity {
+		// Fallback: try to get yParity from v if it's 0 or 1
+		vHex, _ := txJSON["v"].(string)
+		vVal := hexToBigInt(vHex)
+		if vVal.Uint64() == 0 || vVal.Uint64() == 1 {
+			yParityHex = vHex
+		} else {
+			return nil, fmt.Errorf("yParity not found for EIP-1559 transaction")
+		}
+	}
+
+	yParity := hexToBigInt(yParityHex)
+	// v = chainID * 2 + 35 + yParity
+	v := new(big.Int).Mul(chainID, big.NewInt(2))
+	v.Add(v, big.NewInt(35))
+	v.Add(v, yParity)
+	return v, nil
+}
+
+// calculateVForLegacy calculates v for legacy transactions
+func (s *DiscoveryService) calculateVForLegacy(txJSON map[string]interface{}) *big.Int {
+	vHex, _ := txJSON["v"].(string)
+	return hexToBigInt(vHex)
+}
+
+// decodeInputData decodes the input data from hex string
+func (s *DiscoveryService) decodeInputData(inputData string) ([]byte, error) {
+	if inputData == "" || inputData == "0x" {
+		return nil, nil
+	}
+	data, err := hex.DecodeString(strings.TrimPrefix(inputData, "0x"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode input data: %w", err)
+	}
+	return data, nil
+}
+
+// parseToAddress parses the 'to' address from string
+func (s *DiscoveryService) parseToAddress(toAddr string) *common.Address {
+	if toAddr == "" || toAddr == "0x" || toAddr == "null" {
+		return nil
+	}
+	addr := common.HexToAddress(toAddr)
+	return &addr
+}
+
+// buildTransaction builds a transaction based on type
+func (s *DiscoveryService) buildTransaction(fields txFields, isEIP1559 bool, chainID *big.Int, to *common.Address, data []byte, v *big.Int) (*types.Transaction, error) {
+	params := txBuildParams{
+		chainID: chainID,
+		nonce:   hexToBigInt(fields.nonceHex),
+		to:      to,
+		value:   hexToBigInt(fields.valueHex),
+		gas:     hexToBigInt(fields.gasHex),
+		data:    data,
+		v:       v,
+		r:       hexToBigInt(fields.rHex),
+		s:       hexToBigInt(fields.sHex),
+		fields:  fields,
+	}
+
+	if isEIP1559 {
+		return s.buildEIP1559Transaction(params), nil
+	}
+	return s.buildLegacyTransaction(params), nil
+}
+
+// buildEIP1559Transaction builds an EIP-1559 transaction
+func (s *DiscoveryService) buildEIP1559Transaction(params txBuildParams) *types.Transaction {
+	maxFeePerGas := hexToBigInt(params.fields.maxFeePerGasHex)
+	maxPriorityFeePerGas := hexToBigInt(params.fields.maxPriorityFeePerGasHex)
+	return types.NewTx(&types.DynamicFeeTx{
+		ChainID:   params.chainID,
+		Nonce:     params.nonce.Uint64(),
+		To:        params.to,
+		Value:     params.value,
+		Gas:       params.gas.Uint64(),
+		GasFeeCap: maxFeePerGas,
+		GasTipCap: maxPriorityFeePerGas,
+		Data:      params.data,
+		V:         params.v,
+		R:         params.r,
+		S:         params.s,
+	})
+}
+
+// buildLegacyTransaction builds a legacy transaction
+func (s *DiscoveryService) buildLegacyTransaction(params txBuildParams) *types.Transaction {
+	gasPrice := hexToBigInt(params.fields.gasPriceHex)
+	return types.NewTx(&types.LegacyTx{
+		Nonce:    params.nonce.Uint64(),
+		To:       params.to,
+		Value:    params.value,
+		Gas:      params.gas.Uint64(),
+		GasPrice: gasPrice,
+		Data:     params.data,
+		V:        params.v,
+		R:        params.r,
+		S:        params.s,
+	})
+}
+
+// extractYParity extracts yParity for EIP-1559 transactions
+func (s *DiscoveryService) extractYParity(txJSON map[string]interface{}, isEIP1559 bool) *big.Int {
+	if !isEIP1559 {
+		return nil
+	}
+	yParityHex, hasYParity := txJSON["yParity"].(string)
+	if hasYParity && yParityHex != "" {
+		return hexToBigInt(yParityHex)
+	}
+	return nil
 }
 
 // hexToBigInt converts a hex string to *big.Int
