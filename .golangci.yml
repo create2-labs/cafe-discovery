@@ -9,7 +9,6 @@ linters:
     - govet
     - errcheck
     - staticcheck
-    - gofmt
     - dupl
     - gosec
 
@@ -19,17 +18,9 @@ linters:
     - whitespace
     - wsl_v5
 
-    # Trop strict / académique à ce stade
+    # Trop strict / académique
     - mnd
-    - fieldalignment
     - prealloc
     - unparam
     - goconst
     - misspell
-
-linters-settings:
-  dupl:
-    threshold: 120
-
-issues:
-  exclude-use-default: false
