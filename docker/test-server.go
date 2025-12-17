@@ -44,7 +44,9 @@ func main() {
 	// Handler simple
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprint(w, "ok\n")
+		if _, err := fmt.Fprint(w, "ok\n"); err != nil {
+			log.Printf("Error writing response: %v", err)
+		}
 	})
 
 	// Configuration TLS
