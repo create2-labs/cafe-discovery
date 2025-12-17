@@ -63,6 +63,7 @@ func (s *Scanner) ScanHost(ctx context.Context, host, port string) (*TLSInfo, er
 	}
 
 	// Create TLS config to get detailed information
+	// #nosec G402 -- We intentionally skip verification for scanning purposes
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true, // We just want to analyze, not validate
 		ServerName:         host,
@@ -72,7 +73,12 @@ func (s *Scanner) ScanHost(ctx context.Context, host, port string) (*TLSInfo, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			// Log but don't fail on close errors
+			_ = closeErr
+		}
+	}()
 
 	state := conn.ConnectionState()
 

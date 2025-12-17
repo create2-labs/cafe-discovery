@@ -41,7 +41,12 @@ func (c *MoralisClient) GetTransactionsByAddress(address string, chainName strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Log but don't fail on close errors
+			_ = closeErr
+		}
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err

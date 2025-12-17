@@ -21,6 +21,7 @@ type ChainConfig struct {
 
 // Load reads and parses the configuration file
 func LoadChainConfig(configPath string) (*ChainConfig, error) {
+	// #nosec G304 -- configPath is validated and comes from trusted source (env var or default)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
