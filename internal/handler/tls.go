@@ -76,35 +76,12 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 // ListScans handles GET /discovery/tls/scans
 // Returns the list of TLS scan results for the authenticated user with pagination
 func (h *TLSHandler) ListScans(c *fiber.Ctx) error {
-	// Get user ID from JWT context (set by middleware)
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		return err
 	}
 
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
-	}
-
-	// Parse pagination parameters from query string
-	limit := c.QueryInt("limit", 20)  // Default 20, max 100
-	offset := c.QueryInt("offset", 0) // Default 0
-
-	// Validate limit
-	if limit < 1 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := parsePaginationParams(c)
 
 	// Get TLS scan results from service
 	results, total, err := h.tlsService.ListTLSScanResults(c.Context(), userID, limit, offset)
