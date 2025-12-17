@@ -9,7 +9,8 @@ import (
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
-	databases "cafe-discovery/pkg/mysql"
+	"cafe-discovery/pkg/nats"
+	postgresdb "cafe-discovery/pkg/postgres"
 	"fmt"
 	"os"
 	"time"
@@ -32,7 +33,8 @@ type Container struct {
 	CafeWalletService *service.CafeWalletService
 	CafeWalletHandler *handler.CafeWalletHandler
 	App               *fiber.App
-	DB                databases.MySQLConnection
+	DB                postgresdb.PostgreSQLConnection
+	NATSConn          nats.Connection
 	MoralisClient     *moralis.MoralisClient
 }
 
@@ -47,10 +49,16 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize Moralis client
 	moralisClient := moralis.NewMoralisClient(viper.GetString(config.MoralisAPIKey), viper.GetString(config.MoralisAPIURL))
 
-	// Initialize database
-	db := databases.New()
+	// Initialize PostgreSQL database
+	db := postgresdb.New()
 	if err := db.Run(); err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
+		return nil, fmt.Errorf("failed to initialize PostgreSQL database: %w", err)
+	}
+
+	// Initialize NATS connection
+	natsConn, err := nats.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize NATS: %w", err)
 	}
 
 	// Run database migrations
@@ -82,8 +90,8 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
 	// Initialize handlers
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain)
-	tlsHandler := handler.NewTLSHandler(tlsService)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn)
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
@@ -117,6 +125,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		CafeWalletHandler: cafeWalletHandler,
 		App:               app,
 		DB:                db,
+		NATSConn:          natsConn,
 		MoralisClient:     moralisClient,
 	}
 
@@ -164,7 +173,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 }
 
 // runMigrations runs database migrations
-func runMigrations(db databases.MySQLConnection) error {
+func runMigrations(db postgresdb.PostgreSQLConnection) error {
 	// Auto-migrate all models
 	if err := db.GetDB().AutoMigrate(
 		&domain.Plan{},
@@ -235,5 +244,11 @@ func (c *Container) Start() error {
 
 // Shutdown gracefully shuts down the server
 func (c *Container) Shutdown() error {
+	if c.NATSConn != nil {
+		c.NATSConn.Close()
+	}
+	if c.DB != nil {
+		c.DB.Shutdown()
+	}
 	return c.App.Shutdown()
 }

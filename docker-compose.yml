@@ -1,24 +1,37 @@
 services:
-  cafe-db:
-    image: mysql:latest
-    container_name: cafe-mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: cafe-postgres
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "5432:5432"
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cafe}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-cafe}
-      MYSQL_USER: ${MYSQL_USER:-cafe}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cafe}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-cafe}
+      POSTGRES_USER: ${POSTGRES_USER:-cafe}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cafe}
     volumes:
-      - cafe_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cafe}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:latest
+    container_name: cafe-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # Monitoring port
+    command: ["-js", "-m", "8222"]
+    healthcheck:
+      test: [ "CMD", "nats", "server", "check", "--healthz" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
-  cafe_data:
+  postgres_data:
 
 
