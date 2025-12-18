@@ -1,0 +1,69 @@
+{
+    // Utilisez IntelliSense pour en savoir plus sur les attributs possibles.
+    // Pointez pour afficher la description des attributs existants.
+    // Pour plus d'informations, visitez : https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Server",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/server",
+            "env": {
+                "CONFIG_PATH": "${workspaceFolder}/config.yaml",
+                "JWT_SECRET": "dev-secret-key-change-in-production",
+                "SERVER_HOST": "0.0.0.0",
+                "SERVER_PORT": "8080",
+                "POSTGRES_HOST": "localhost",
+                "POSTGRES_PORT": "5432",
+                "POSTGRES_USER": "cafe",
+                "POSTGRES_PASSWORD": "cafe",
+                "POSTGRES_DATABASE": "cafe",
+                "POSTGRES_SSLMODE": "disable",
+                "NATS_URL": "nats://localhost:4222",
+                "MORALIS_API_KEY": "",
+                "MORALIS_API_URL": "https://deep-index.moralis.io",
+                "CORS_ALLOW_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:5173",
+                "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+                "LOG_LEVEL": "debug"
+            },
+            "args": [],
+            "showLog": true,
+            "trace": "log"
+        },
+        {
+            "name": "Debug Worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/worker",
+            "env": {
+                "CONFIG_PATH": "${workspaceFolder}/config.yaml",
+                "SERVER_HOST": "0.0.0.0",
+                "SERVER_PORT": "8080",
+                "POSTGRES_HOST": "localhost",
+                "POSTGRES_PORT": "5432",
+                "POSTGRES_USER": "cafe",
+                "POSTGRES_PASSWORD": "cafe",
+                "POSTGRES_DATABASE": "cafe",
+                "POSTGRES_SSLMODE": "disable",
+                "NATS_URL": "nats://localhost:4222",
+                "MORALIS_API_KEY": "",
+                "MORALIS_API_URL": "https://deep-index.moralis.io",
+                "LOG_LEVEL": "debug"
+            },
+            "args": [],
+            "showLog": true,
+            "trace": "log"
+        },
+        {
+            "name": "Debug Current File",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${fileDirname}",
+            "showLog": true
+        }
+    ]
+}
