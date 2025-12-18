@@ -54,20 +54,22 @@ The application uses an asynchronous message-based architecture with NATS and Po
 
 ```
 cafe-discovery/
-├── cmd/
-│   ├── server/         # API server entrypoint
-│   └── worker/         # Worker entrypoint for background processing
+├── cmd/   
+│   ├── server/            # API server entrypoint
+│   ├── worker/            # Worker entrypoint for background processing
+│   └── cli/               # Some command line tools
+│      └── publickey/      # Utility for testing public key recovery
 ├── internal/
-│   ├── app/            # Application container (orchestration)
-│   ├── domain/         # Domain models and types
-│   ├── handler/        # HTTP handlers (Fiber)
-│   ├── service/        # Business logic
-│   └── worker/         # NATS workers (wallet & TLS scanning)
+│   ├── app/               # Application container (orchestration)
+│   ├── domain/            # Domain models and types
+│   ├── handler/           # HTTP handlers (Fiber)
+│   ├── service/           # Business logic
+│   └── worker/            # NATS workers (wallet & TLS scanning)
 ├── pkg/
-│   ├── evm/            # EVM client for blockchain interactions
-│   ├── nats/           # NATS messaging client
-│   └── postgres/       # PostgreSQL database client
-└── config.yaml         # Configuration file
+│   ├── evm/               # EVM client for blockchain interactions
+│   ├── nats/              # NATS messaging client
+│   └── postgres/          # PostgreSQL database client
+└── config.yaml            # Configuration file
 ```
 
 ### Data Flow
@@ -217,7 +219,8 @@ export POSTGRES_SSLMODE=disable
 # NATS configuration
 export NATS_URL=nats://localhost:4222
 
-# Moralis API (optional, for enhanced wallet data)
+# Moralis API (required for wallet scanning features)
+# Get your API key from https://moralis.io
 export MORALIS_API_KEY=your_api_key_here
 export MORALIS_API_URL=https://deep-index.moralis.io
 
@@ -482,6 +485,33 @@ The application uses NATS for asynchronous message processing:
 - **Wallet Scans**: When a scan is requested via the API, it's queued in NATS and processed by the wallet worker
 - **TLS Scans**: TLS endpoint scans are also queued and processed by the TLS worker
 - **Scalability**: Multiple worker instances can be run to process messages in parallel
+
+## Development Tools
+
+### Public Key Recovery Utility (`cmd/cli/publickey`)
+
+A development utility for testing public key recovery from blockchain transactions. This tool demonstrates how the service recovers public keys from transaction data.
+
+**Usage:**
+
+```bash
+# Set required environment variable
+export MORALIS_API_KEY=your_api_key_here
+
+# Run the utility
+go run cmd/cli/publickey/getpublickey.go
+```
+
+**Note:** This utility requires a valid Moralis API key to fetch transaction data. The API key must be provided via the `MORALIS_API_KEY` environment variable.
+
+## Security Notes
+
+⚠️ **Important**: Never commit API keys or sensitive credentials to version control. Always use environment variables or secure configuration management:
+
+- Use environment variables for all API keys
+- Never hardcode credentials in source code
+- Use `.env` files (and add them to `.gitignore`) for local development
+- Use secret management services in production
 
 ## Stopping the Application
 
