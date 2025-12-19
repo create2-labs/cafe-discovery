@@ -29,6 +29,10 @@ const (
 	// Moralis API URL.
 	MoralisAPIURL = "MORALIS_API_URL"
 
+	// CORS configuration
+	CORSAllowOrigins = "CORS_ALLOW_ORIGINS"
+	CORSAllowMethods = "CORS_ALLOW_METHODS"
+
 	defaultProduction         = true
 	defaultPostgreSQLHost     = "127.0.0.1"
 	defaultPostgreSQLPort     = "5432"
@@ -41,6 +45,8 @@ const (
 	defaultMoralisAPIURL      = "https://deep-index.moralis.io"
 	defaultServerHost         = "0.0.0.0"
 	defaultServerPort         = "8080"
+	defaultCORSAllowOrigins   = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
+	defaultCORSAllowMethods   = "GET,POST,PUT,DELETE,OPTIONS"
 )
 
 func GetDefaultConfigValues() map[string]any {
@@ -57,5 +63,7 @@ func GetDefaultConfigValues() map[string]any {
 		ServerPort:         defaultServerPort,
 		MoralisAPIKey:      defaultMoralisAPIKey,
 		MoralisAPIURL:      defaultMoralisAPIURL,
+		CORSAllowOrigins:   defaultCORSAllowOrigins,
+		CORSAllowMethods:   defaultCORSAllowMethods,
 	}
 }

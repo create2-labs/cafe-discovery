@@ -21,6 +21,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	walletPubKeyHashPath = "/:pubKeyHash"
+)
+
 // Container holds all application dependencies
 type Container struct {
 	ChainConfig       *config.ChainConfig
@@ -69,7 +73,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Get JWT secret from environment or use default
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production" // Default for development
+		return nil, fmt.Errorf("JWT_SECRET environment not set")
 	}
 	jwtExpiry := 24 * time.Hour // Token expires in 24 hours
 
@@ -102,9 +106,11 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	})
 
 	// Enable CORS
+	corsOrigins := viper.GetString(config.CORSAllowOrigins)
+	corsMethods := viper.GetString(config.CORSAllowMethods)
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,http://localhost:3001,http://localhost:5173",
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowOrigins:     corsOrigins,
+		AllowMethods:     corsMethods,
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,
 		ExposeHeaders:    "Content-Length",
@@ -161,9 +167,9 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))
 	wallets.Get("/", cafeWalletHandler.GetAllWallets)
 	wallets.Post("/", cafeWalletHandler.CreateWallet)
-	wallets.Get("/:pubKeyHash", cafeWalletHandler.GetWallet)
-	wallets.Put("/:pubKeyHash", cafeWalletHandler.UpdateWallet)
-	wallets.Delete("/:pubKeyHash", cafeWalletHandler.DeleteWallet)
+	wallets.Get(walletPubKeyHashPath, cafeWalletHandler.GetWallet)
+	wallets.Put(walletPubKeyHashPath, cafeWalletHandler.UpdateWallet)
+	wallets.Delete(walletPubKeyHashPath, cafeWalletHandler.DeleteWallet)
 
 	// Plan routes
 	plans := app.Group("/plans", middleware.JWTMiddleware(authService))
@@ -185,54 +191,69 @@ func runMigrations(db postgresdb.PostgreSQLConnection) error {
 		return err
 	}
 
-	// Create default plans if they don't exist
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
-	// Check if FREE plan exists
-	freePlan, _ := planRepo.FindByType(domain.PlanTypeFree)
-	if freePlan == nil {
-		freePlan = &domain.Plan{
-			Name:              "Free Plan",
-			Type:              domain.PlanTypeFree,
-			WalletScanLimit:   5,
-			EndpointScanLimit: 5,
-			Price:             0,
-			IsActive:          true,
-		}
-		if err := planRepo.Create(freePlan); err != nil {
-			return fmt.Errorf("failed to create free plan: %w", err)
-		}
+	// Create default plans if they don't exist
+	freePlan, err := ensurePlanExists(planRepo, domain.PlanTypeFree, &domain.Plan{
+		Name:              "Free Plan",
+		Type:              domain.PlanTypeFree,
+		WalletScanLimit:   5,
+		EndpointScanLimit: 5,
+		Price:             0,
+		IsActive:          true,
+	})
+	if err != nil {
+		return err
 	}
 
-	// Check if PREMIUM plan exists
-	premiumPlan, _ := planRepo.FindByType(domain.PlanTypePremium)
-	if premiumPlan == nil {
-		premiumPlan = &domain.Plan{
-			Name:              "Premium Plan",
-			Type:              domain.PlanTypePremium,
-			WalletScanLimit:   0, // Unlimited
-			EndpointScanLimit: 0, // Unlimited
-			Price:             29.99,
-			IsActive:          false, // Coming soon
-		}
-		if err := planRepo.Create(premiumPlan); err != nil {
-			return fmt.Errorf("failed to create premium plan: %w", err)
-		}
+	_, err = ensurePlanExists(planRepo, domain.PlanTypePremium, &domain.Plan{
+		Name:              "Premium Plan",
+		Type:              domain.PlanTypePremium,
+		WalletScanLimit:   0, // Unlimited
+		EndpointScanLimit: 0, // Unlimited
+		Price:             29.99,
+		IsActive:          false, // Coming soon
+	})
+	if err != nil {
+		return err
 	}
 
 	// Assign FREE plan to existing users without a plan
+	if err := assignPlanToUsersWithoutPlan(db, freePlan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ensurePlanExists ensures a plan exists, creating it if it doesn't
+func ensurePlanExists(planRepo repository.PlanRepository, planType domain.PlanType, defaultPlan *domain.Plan) (*domain.Plan, error) {
+	plan, _ := planRepo.FindByType(planType)
+	if plan != nil {
+		return plan, nil
+	}
+
+	if err := planRepo.Create(defaultPlan); err != nil {
+		return nil, fmt.Errorf("failed to create %s plan: %w", planType, err)
+	}
+	return defaultPlan, nil
+}
+
+// assignPlanToUsersWithoutPlan assigns the free plan to users without a plan
+func assignPlanToUsersWithoutPlan(db postgresdb.PostgreSQLConnection, freePlan *domain.Plan) error {
 	var usersWithoutPlan []domain.User
-	if err := db.GetDB().Where("plan_id = ? OR plan_id IS NULL", uuid.Nil).Find(&usersWithoutPlan).Error; err == nil {
-		for _, user := range usersWithoutPlan {
-			if user.PlanID == uuid.Nil {
-				if err := db.GetDB().Model(&user).Update("plan_id", freePlan.ID).Error; err != nil {
-					// Log error but continue
-					fmt.Printf("Warning: failed to assign plan to user %s: %v\n", user.ID, err)
-				}
+	if err := db.GetDB().Where("plan_id = ? OR plan_id IS NULL", uuid.Nil).Find(&usersWithoutPlan).Error; err != nil {
+		return nil // Ignore query errors, continue with migration
+	}
+
+	for _, user := range usersWithoutPlan {
+		if user.PlanID == uuid.Nil {
+			if err := db.GetDB().Model(&user).Update("plan_id", freePlan.ID).Error; err != nil {
+				// Log error but continue
+				fmt.Printf("Warning: failed to assign plan to user %s: %v\n", user.ID, err)
 			}
 		}
 	}
-
 	return nil
 }
 
