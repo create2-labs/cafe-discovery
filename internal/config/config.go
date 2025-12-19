@@ -7,6 +7,9 @@ const (
 	ServerHost = "SERVER_HOST"
 	ServerPort = "SERVER_PORT"
 
+	// Worker health check configuration
+	WorkerHealthPort = "WORKER_HEALTH_PORT"
+
 	// PostgreSQL configuration
 	PostgreSQLHost = "POSTGRES_HOST"
 	PostgreSQLPort = "POSTGRES_PORT"
@@ -45,6 +48,7 @@ const (
 	defaultMoralisAPIURL      = "https://deep-index.moralis.io"
 	defaultServerHost         = "0.0.0.0"
 	defaultServerPort         = "8080"
+	defaultWorkerHealthPort   = "8081"
 	defaultCORSAllowOrigins   = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
 	defaultCORSAllowMethods   = "GET,POST,PUT,DELETE,OPTIONS"
 )
@@ -61,6 +65,7 @@ func GetDefaultConfigValues() map[string]any {
 		Production:         defaultProduction,
 		ServerHost:         defaultServerHost,
 		ServerPort:         defaultServerPort,
+		WorkerHealthPort:   defaultWorkerHealthPort,
 		MoralisAPIKey:      defaultMoralisAPIKey,
 		MoralisAPIURL:      defaultMoralisAPIURL,
 		CORSAllowOrigins:   defaultCORSAllowOrigins,

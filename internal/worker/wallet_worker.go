@@ -29,6 +29,11 @@ func (w *WalletWorker) Start(ctx context.Context) error {
 	return w.base.Start(ctx)
 }
 
+// IsRunning returns whether the wallet worker is currently running
+func (w *WalletWorker) IsRunning() bool {
+	return w.base.IsRunning()
+}
+
 // createMessageHandler creates a message handler for wallet scans
 func (w *WalletWorker) createMessageHandler() MessageHandler {
 	return func(msg *natslib.Msg) error {

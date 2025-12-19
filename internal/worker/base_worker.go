@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync"
 
 	"cafe-discovery/pkg/nats"
 
@@ -15,10 +16,12 @@ type MessageHandler func(msg *natslib.Msg) error
 
 // BaseWorker provides common functionality for all workers
 type BaseWorker struct {
-	natsConn nats.Connection
-	subject  string
-	handler  MessageHandler
-	name     string
+	natsConn  nats.Connection
+	subject   string
+	handler   MessageHandler
+	name      string
+	isRunning bool
+	mu        sync.RWMutex
 }
 
 // NewBaseWorker creates a new base worker
@@ -42,8 +45,24 @@ func (w *BaseWorker) Start(ctx context.Context) error {
 		return err
 	}
 
+	w.mu.Lock()
+	w.isRunning = true
+	w.mu.Unlock()
+
 	log.Printf("%s worker started and subscribed to %s", w.name, w.subject)
 	return nil
+}
+
+// IsRunning returns whether the worker is currently running
+func (w *BaseWorker) IsRunning() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.isRunning
+}
+
+// GetName returns the worker name
+func (w *BaseWorker) GetName() string {
+	return w.name
 }
 
 // handleMessage processes a NATS message

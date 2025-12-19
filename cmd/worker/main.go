@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
@@ -17,6 +18,7 @@ import (
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
 
@@ -111,6 +113,59 @@ func main() {
 
 	log.Println("Workers started successfully")
 
+	// Start health check HTTP server
+	healthPort := viper.GetString(config.WorkerHealthPort)
+
+	app := fiber.New(fiber.Config{
+		AppName: "Cafe Discovery Worker",
+	})
+
+	// Health check endpoint
+	app.Get("/health", func(c *fiber.Ctx) error {
+		// Check NATS connection
+		natsConnected := natsConn.IsConnected()
+
+		// Check workers status
+		walletWorkerRunning := walletWorker.IsRunning()
+		tlsWorkerRunning := tlsWorker.IsRunning()
+
+		// Determine overall health status
+		status := "ok"
+		httpStatus := 200
+		if !natsConnected || !walletWorkerRunning || !tlsWorkerRunning {
+			status = "degraded"
+			httpStatus = 503
+		}
+
+		return c.Status(httpStatus).JSON(fiber.Map{
+			"status":    status,
+			"app_name":  "Cafe Discovery Worker",
+			"timestamp": time.Now().Format(time.RFC3339),
+			"checks": fiber.Map{
+				"nats": fiber.Map{
+					"connected": natsConnected,
+				},
+				"workers": fiber.Map{
+					"wallet": fiber.Map{
+						"running": walletWorkerRunning,
+					},
+					"tls": fiber.Map{
+						"running": tlsWorkerRunning,
+					},
+				},
+			},
+		})
+	})
+
+	// Start health check server in a goroutine
+	go func() {
+		addr := "0.0.0.0:" + healthPort
+		log.Printf("Starting health check server on %s", addr)
+		if err := app.Listen(addr); err != nil {
+			log.Printf("Failed to start health check server: %v", err)
+		}
+	}()
+
 	// Setup graceful shutdown
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
@@ -118,4 +173,9 @@ func main() {
 
 	log.Println("Shutting down workers...")
 	cancel()
+
+	// Shutdown health check server
+	if err := app.Shutdown(); err != nil {
+		log.Printf("Error shutting down health check server: %v", err)
+	}
 }

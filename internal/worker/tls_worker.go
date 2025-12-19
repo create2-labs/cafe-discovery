@@ -31,6 +31,11 @@ func (w *TLSWorker) Start(ctx context.Context) error {
 	return w.base.Start(ctx)
 }
 
+// IsRunning returns whether the TLS worker is currently running
+func (w *TLSWorker) IsRunning() bool {
+	return w.base.IsRunning()
+}
+
 // processTLSScan processes a TLS scan message
 func (w *TLSWorker) processTLSScan(msg *natslib.Msg) error {
 	var scanMsg nats.TLSScanMessage
