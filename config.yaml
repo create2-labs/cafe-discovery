@@ -2,6 +2,10 @@ server:
   host: "0.0.0.0"
   port: "8080"
 
+# CORS configuration (can also be set via environment variables: CORS_ALLOW_ORIGINS, CORS_ALLOW_METHODS)
+CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:5173"
+CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+
 blockchains:
   - name: ethereum-mainnet
     rpc: "https://ethereum-rpc.publicnode.com"

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"cafe-discovery/internal/service"
+	"cafe-discovery/pkg/nats"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -12,12 +13,14 @@ import (
 // TLSHandler handles TLS-related HTTP requests
 type TLSHandler struct {
 	tlsService *service.TLSService
+	natsConn   nats.Connection
 }
 
 // NewTLSHandler creates a new TLS handler
-func NewTLSHandler(tlsService *service.TLSService) *TLSHandler {
+func NewTLSHandler(tlsService *service.TLSService, natsConn nats.Connection) *TLSHandler {
 	return &TLSHandler{
 		tlsService: tlsService,
+		natsConn:   natsConn,
 	}
 }
 
@@ -63,14 +66,24 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.tlsService.ScanTLS(c.Context(), userID, req.URL)
-	if err != nil {
+	// Publish scan request to NATS for async processing
+	scanMsg := nats.TLSScanMessage{
+		UserID:   userID,
+		Endpoint: req.URL,
+	}
+
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectTLSScan, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "failed to queue scan request",
 		})
 	}
 
-	return c.JSON(result)
+	// Return immediate response - scan will be processed asynchronously
+	return c.JSON(fiber.Map{
+		"message":  "scan queued successfully",
+		"endpoint": req.URL,
+		"status":   "processing",
+	})
 }
 
 // ListScans handles GET /discovery/tls/scans

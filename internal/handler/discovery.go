@@ -3,6 +3,7 @@ package handler
 import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/service"
+	"cafe-discovery/pkg/nats"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -12,13 +13,15 @@ import (
 type DiscoveryHandler struct {
 	discoveryService *service.DiscoveryService
 	cfgChain         *config.ChainConfig
+	natsConn         nats.Connection
 }
 
 // NewDiscoveryHandler creates a new discovery handler
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		cfgChain:         cfgChain,
+		natsConn:         natsConn,
 	}
 }
 
@@ -57,14 +60,24 @@ func (h *DiscoveryHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.discoveryService.ScanWallet(c.Context(), userID, req.Address)
-	if err != nil {
+	// Publish scan request to NATS for async processing
+	scanMsg := nats.WalletScanMessage{
+		UserID:  userID,
+		Address: req.Address,
+	}
+
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectWalletScan, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "failed to queue scan request",
 		})
 	}
 
-	return c.JSON(result)
+	// Return immediate response - scan will be processed asynchronously
+	return c.JSON(fiber.Map{
+		"message": "scan queued successfully",
+		"address": req.Address,
+		"status":  "processing",
+	})
 }
 
 // ListRPCs handles GET /discovery/rpcs

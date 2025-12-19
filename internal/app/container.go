@@ -9,7 +9,8 @@ import (
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
-	databases "cafe-discovery/pkg/mysql"
+	"cafe-discovery/pkg/nats"
+	postgresdb "cafe-discovery/pkg/postgres"
 	"fmt"
 	"os"
 	"time"
@@ -18,6 +19,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
+)
+
+const (
+	walletPubKeyHashPath = "/:pubKeyHash"
 )
 
 // Container holds all application dependencies
@@ -32,7 +37,8 @@ type Container struct {
 	CafeWalletService *service.CafeWalletService
 	CafeWalletHandler *handler.CafeWalletHandler
 	App               *fiber.App
-	DB                databases.MySQLConnection
+	DB                postgresdb.PostgreSQLConnection
+	NATSConn          nats.Connection
 	MoralisClient     *moralis.MoralisClient
 }
 
@@ -47,10 +53,16 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize Moralis client
 	moralisClient := moralis.NewMoralisClient(viper.GetString(config.MoralisAPIKey), viper.GetString(config.MoralisAPIURL))
 
-	// Initialize database
-	db := databases.New()
+	// Initialize PostgreSQL database
+	db := postgresdb.New()
 	if err := db.Run(); err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
+		return nil, fmt.Errorf("failed to initialize PostgreSQL database: %w", err)
+	}
+
+	// Initialize NATS connection
+	natsConn, err := nats.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize NATS: %w", err)
 	}
 
 	// Run database migrations
@@ -61,7 +73,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Get JWT secret from environment or use default
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production" // Default for development
+		return nil, fmt.Errorf("JWT_SECRET environment not set")
 	}
 	jwtExpiry := 24 * time.Hour // Token expires in 24 hours
 
@@ -82,8 +94,8 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
 	// Initialize handlers
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain)
-	tlsHandler := handler.NewTLSHandler(tlsService)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn)
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
@@ -94,9 +106,11 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	})
 
 	// Enable CORS
+	corsOrigins := viper.GetString(config.CORSAllowOrigins)
+	corsMethods := viper.GetString(config.CORSAllowMethods)
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,http://localhost:3001,http://localhost:5173",
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowOrigins:     corsOrigins,
+		AllowMethods:     corsMethods,
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,
 		ExposeHeaders:    "Content-Length",
@@ -117,6 +131,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		CafeWalletHandler: cafeWalletHandler,
 		App:               app,
 		DB:                db,
+		NATSConn:          natsConn,
 		MoralisClient:     moralisClient,
 	}
 
@@ -152,9 +167,9 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))
 	wallets.Get("/", cafeWalletHandler.GetAllWallets)
 	wallets.Post("/", cafeWalletHandler.CreateWallet)
-	wallets.Get("/:pubKeyHash", cafeWalletHandler.GetWallet)
-	wallets.Put("/:pubKeyHash", cafeWalletHandler.UpdateWallet)
-	wallets.Delete("/:pubKeyHash", cafeWalletHandler.DeleteWallet)
+	wallets.Get(walletPubKeyHashPath, cafeWalletHandler.GetWallet)
+	wallets.Put(walletPubKeyHashPath, cafeWalletHandler.UpdateWallet)
+	wallets.Delete(walletPubKeyHashPath, cafeWalletHandler.DeleteWallet)
 
 	// Plan routes
 	plans := app.Group("/plans", middleware.JWTMiddleware(authService))
@@ -164,7 +179,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 }
 
 // runMigrations runs database migrations
-func runMigrations(db databases.MySQLConnection) error {
+func runMigrations(db postgresdb.PostgreSQLConnection) error {
 	// Auto-migrate all models
 	if err := db.GetDB().AutoMigrate(
 		&domain.Plan{},
@@ -176,54 +191,69 @@ func runMigrations(db databases.MySQLConnection) error {
 		return err
 	}
 
-	// Create default plans if they don't exist
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
-	// Check if FREE plan exists
-	freePlan, _ := planRepo.FindByType(domain.PlanTypeFree)
-	if freePlan == nil {
-		freePlan = &domain.Plan{
-			Name:              "Free Plan",
-			Type:              domain.PlanTypeFree,
-			WalletScanLimit:   5,
-			EndpointScanLimit: 5,
-			Price:             0,
-			IsActive:          true,
-		}
-		if err := planRepo.Create(freePlan); err != nil {
-			return fmt.Errorf("failed to create free plan: %w", err)
-		}
+	// Create default plans if they don't exist
+	freePlan, err := ensurePlanExists(planRepo, domain.PlanTypeFree, &domain.Plan{
+		Name:              "Free Plan",
+		Type:              domain.PlanTypeFree,
+		WalletScanLimit:   5,
+		EndpointScanLimit: 5,
+		Price:             0,
+		IsActive:          true,
+	})
+	if err != nil {
+		return err
 	}
 
-	// Check if PREMIUM plan exists
-	premiumPlan, _ := planRepo.FindByType(domain.PlanTypePremium)
-	if premiumPlan == nil {
-		premiumPlan = &domain.Plan{
-			Name:              "Premium Plan",
-			Type:              domain.PlanTypePremium,
-			WalletScanLimit:   0, // Unlimited
-			EndpointScanLimit: 0, // Unlimited
-			Price:             29.99,
-			IsActive:          false, // Coming soon
-		}
-		if err := planRepo.Create(premiumPlan); err != nil {
-			return fmt.Errorf("failed to create premium plan: %w", err)
-		}
+	_, err = ensurePlanExists(planRepo, domain.PlanTypePremium, &domain.Plan{
+		Name:              "Premium Plan",
+		Type:              domain.PlanTypePremium,
+		WalletScanLimit:   0, // Unlimited
+		EndpointScanLimit: 0, // Unlimited
+		Price:             29.99,
+		IsActive:          false, // Coming soon
+	})
+	if err != nil {
+		return err
 	}
 
 	// Assign FREE plan to existing users without a plan
+	if err := assignPlanToUsersWithoutPlan(db, freePlan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ensurePlanExists ensures a plan exists, creating it if it doesn't
+func ensurePlanExists(planRepo repository.PlanRepository, planType domain.PlanType, defaultPlan *domain.Plan) (*domain.Plan, error) {
+	plan, _ := planRepo.FindByType(planType)
+	if plan != nil {
+		return plan, nil
+	}
+
+	if err := planRepo.Create(defaultPlan); err != nil {
+		return nil, fmt.Errorf("failed to create %s plan: %w", planType, err)
+	}
+	return defaultPlan, nil
+}
+
+// assignPlanToUsersWithoutPlan assigns the free plan to users without a plan
+func assignPlanToUsersWithoutPlan(db postgresdb.PostgreSQLConnection, freePlan *domain.Plan) error {
 	var usersWithoutPlan []domain.User
-	if err := db.GetDB().Where("plan_id = ? OR plan_id IS NULL", uuid.Nil).Find(&usersWithoutPlan).Error; err == nil {
-		for _, user := range usersWithoutPlan {
-			if user.PlanID == uuid.Nil {
-				if err := db.GetDB().Model(&user).Update("plan_id", freePlan.ID).Error; err != nil {
-					// Log error but continue
-					fmt.Printf("Warning: failed to assign plan to user %s: %v\n", user.ID, err)
-				}
+	if err := db.GetDB().Where("plan_id = ? OR plan_id IS NULL", uuid.Nil).Find(&usersWithoutPlan).Error; err != nil {
+		return nil // Ignore query errors, continue with migration
+	}
+
+	for _, user := range usersWithoutPlan {
+		if user.PlanID == uuid.Nil {
+			if err := db.GetDB().Model(&user).Update("plan_id", freePlan.ID).Error; err != nil {
+				// Log error but continue
+				fmt.Printf("Warning: failed to assign plan to user %s: %v\n", user.ID, err)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -235,5 +265,11 @@ func (c *Container) Start() error {
 
 // Shutdown gracefully shuts down the server
 func (c *Container) Shutdown() error {
+	if c.NATSConn != nil {
+		c.NATSConn.Close()
+	}
+	if c.DB != nil {
+		c.DB.Shutdown()
+	}
 	return c.App.Shutdown()
 }
