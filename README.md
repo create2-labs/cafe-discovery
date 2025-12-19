@@ -404,6 +404,47 @@ Returns the list of configured RPC endpoints. No authentication required.
 
 Health check endpoint. No authentication required.
 
+**Response:**
+```json
+{
+  "status": "ok",
+  "app_name": "Cafe Discovery Service",
+  "version": "1.0.0",
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+
+### Worker Health Check
+
+The worker exposes a health check endpoint on port `8081` (configurable via `WORKER_HEALTH_PORT` environment variable).
+
+**Endpoint:** `GET http://localhost:8081/health`
+
+**Response (healthy):**
+```json
+{
+  "status": "ok",
+  "app_name": "Cafe Discovery Worker",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "checks": {
+    "nats": {
+      "connected": true
+    },
+    "workers": {
+      "wallet": {
+        "running": true
+      },
+      "tls": {
+        "running": true
+      }
+    }
+  }
+}
+```
+
+**Response (degraded):**
+Returns HTTP 503 status code when NATS is disconnected or workers are not running.
+
 ## Testing
 
 ### 1. Register and Authenticate
