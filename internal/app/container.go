@@ -90,7 +90,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize services
 	discoveryService := service.NewDiscoveryService(clients, moralisClient, scanResultRepo, planService)
 	tlsService := service.NewTLSService(tlsScanResultRepo, planService)
-	authService := service.NewAuthService(userRepo, planRepo, jwtSecret, jwtExpiry)
+	authService, err := service.NewAuthService(userRepo, planRepo, jwtSecret, jwtExpiry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize auth service: %w", err)
+	}
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
 	// Initialize handlers
@@ -265,6 +268,9 @@ func (c *Container) Start() error {
 
 // Shutdown gracefully shuts down the server
 func (c *Container) Shutdown() error {
+	if c.AuthService != nil {
+		c.AuthService.Close()
+	}
 	if c.NATSConn != nil {
 		c.NATSConn.Close()
 	}
