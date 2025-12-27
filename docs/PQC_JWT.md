@@ -1,12 +1,8 @@
 # Post-Quantum Cryptography JWT Implementation
 
-This document describes the Post-Quantum Cryptography (PQC) JWT implementation in the Cafe Discovery service, based on the implementation from `lodygens/pqc-jwt`.
-
-## Overview
-
-The service **only supports hybrid PQC JWT tokens** that combine:
-- **EdDSA** (Ed25519): Classical signature algorithm for current security
-- **ML-DSA-65**: Post-quantum signature algorithm for future quantum resistance
+The service supports hybrid PQC JWT tokens that combine:
+- EdDSA (Ed25519): Classical signature algorithm for current security
+- ML-DSA-65: Post-quantum signature algorithm for future quantum resistance
 
 This hybrid approach provides security against both classical and quantum attacks. Classic HMAC tokens are not supported.
 

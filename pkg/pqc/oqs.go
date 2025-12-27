@@ -5,7 +5,7 @@ package pqc
 #cgo LDFLAGS: -L/opt/homebrew/opt/openssl@3/lib -L/opt/liboqs/lib -lssl -lcrypto -loqs -Wl,-rpath,/opt/liboqs/lib
 #include <stdlib.h>
 #include <string.h>
-#include "../native/oqs_wrapper.h"
+#include "../../native/oqs_wrapper.h"
 */
 import "C"
 
@@ -150,4 +150,3 @@ func (o *MLDSA) Verify(msg, sig []byte) (bool, error) {
 	}
 	return false, nil
 }
-

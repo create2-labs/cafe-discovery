@@ -106,6 +106,8 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		AppName: "Cafe Discovery Service",
+		// Increase header size limit to support PQC JWT tokens
+		ReadBufferSize: 10240, // 10KB buffer for reading requests with large headers
 	})
 
 	// Enable CORS
@@ -114,9 +116,11 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     corsOrigins,
 		AllowMethods:     corsMethods,
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Requested-With",
 		AllowCredentials: true,
 		ExposeHeaders:    "Content-Length",
+		MaxAge:           60, // 1 mn - cache preflight requests (reduces OPTIONS requests)
+		// MaxAge:           3600, // 1 hour - cache preflight requests (reduces OPTIONS requests)
 	}))
 
 	// Setup routes
