@@ -9,6 +9,8 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 - **Account Type Detection**: Determine if an address is an EOA (Externally Owned Account) or AA (Abstract Account/ERC-4337)
 - **Risk Assessment**: Calculate risk scores based on exposure across networks
 - **Quantum Security Level**: Assess NIST quantum-security levels
+- **TLS Scanning**: Scan TLS endpoints for post-quantum cryptography (PQC) certificate support
+- **Post-Quantum JWT**: Hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for quantum-resistant authentication
 
 ## Architecture
 
@@ -20,7 +22,7 @@ The application uses an asynchronous message-based architecture with NATS and Po
 
 - **Role**: HTTP server (Fiber) that exposes REST endpoints
 - **Responsibilities**:
-  - User authentication
+  - User authentication with hybrid PQC JWT tokens
   - Receiving scan requests (wallet and TLS)
   - Publishing NATS messages for asynchronous processing
   - Reading results from PostgreSQL
@@ -68,7 +70,12 @@ cafe-discovery/
 ├── pkg/
 │   ├── evm/               # EVM client for blockchain interactions
 │   ├── nats/              # NATS messaging client
-│   └── postgres/          # PostgreSQL database client
+│   ├── postgres/          # PostgreSQL database client
+│   ├── pqc/               # Post-quantum cryptography (JWT, KEM)
+│   └── tls/               # TLS scanner with PQC support
+├── docs/                  # Documentation
+│   ├── PQC_CERTIFICATES.md # PQC certificate generation guide
+│   └── PQC_JWT.md         # PQC JWT implementation guide
 └── config.yaml            # Configuration file
 ```
 
@@ -141,6 +148,9 @@ blockchains:
 - Docker and Docker Compose
 - PostgreSQL 16+ (via Docker)
 - NATS (via Docker)
+- **Required for JWT authentication**: Open Quantum Safe (OQS) library (liboqs) with ML-DSA-65 support
+  - The service uses hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for all authentication
+  - See [Post-Quantum Cryptography](#post-quantum-cryptography-pqc) section for installation instructions
 
 ## Running the Service
 
@@ -208,6 +218,9 @@ export CONFIG_PATH=config.yaml
 export SERVER_HOST=0.0.0.0
 export SERVER_PORT=8080
 
+# Worker health check port
+export WORKER_HEALTH_PORT=8081
+
 # PostgreSQL configuration (defaults match docker-compose.yml)
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
@@ -218,6 +231,11 @@ export POSTGRES_SSLMODE=disable
 
 # NATS configuration
 export NATS_URL=nats://localhost:4222
+
+# JWT configuration (required for authentication)
+# Note: The service always uses hybrid PQC tokens (EdDSA + ML-DSA-65)
+# JWT_SECRET is kept for API compatibility but not used for token signing
+export JWT_SECRET=your-secret-key-here
 
 # Moralis API (required for wallet scanning features)
 # Get your API key from https://moralis.io
@@ -259,11 +277,173 @@ echo "  kill $SERVER_PID $WORKER_PID"
 echo "  docker-compose down"
 ```
 
+## Post-Quantum Cryptography (PQC)
+
+The service implements post-quantum cryptography for both authentication (JWT) and TLS scanning capabilities.
+
+### PQC JWT Authentication
+
+The service uses **hybrid PQC JWT tokens** that combine:
+- **EdDSA (Ed25519)**: Classical signature algorithm for current security
+- **ML-DSA-65**: Post-quantum signature algorithm for future quantum resistance
+
+This hybrid approach provides security against both classical and quantum attacks. Classic HMAC tokens are not supported.
+
+#### Prerequisites for PQC JWT
+
+The PQC JWT implementation requires the Open Quantum Safe (OQS) library with ML-DSA-65 support.
+
+**macOS (Homebrew):**
+```bash
+brew install liboqs
+pkg-config --modversion liboqs
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git libssl-dev
+git clone https://github.com/open-quantum-safe/liboqs.git
+cd liboqs
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local ..
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+```
+
+#### JWT Token Format
+
+The application only supports hybrid PQC tokens (EdDSA + ML-DSA-65). Uses JWS JSON General Serialization:
+
+```json
+{
+  "payload": "<base64url-encoded-claims>",
+  "signatures": [
+    {
+      "protected": "<base64url-encoded-ed25519-header>",
+      "signature": "<base64url-encoded-ed25519-signature>"
+    },
+    {
+      "protected": "<base64url-encoded-mldsa65-header>",
+      "signature": "<base64url-encoded-mldsa65-signature>"
+    }
+  ]
+}
+```
+
+Both signatures must be valid for the token to be accepted.
+
+#### Configuration
+
+The application **always uses hybrid PQC tokens** (EdDSA + ML-DSA-65). No policy configuration is needed - hybrid mode is always enabled. Classic HMAC tokens are not supported.
+
+```bash
+# JWT_SECRET is required but not used for signing (kept for API compatibility)
+export JWT_SECRET=your-secret-key-here
+```
+
+**Important**: 
+- The OQS library must be installed and available for the service to start
+- If OQS is not found or ML-DSA-65 is not available, the service will fail to initialize the authentication service
+- The service will log an error message listing available algorithms if ML-DSA-65 is not found
+- See [docs/PQC_JWT.md](docs/PQC_JWT.md) for detailed installation instructions
+
+#### Security Considerations
+
+⚠️ **Important Security Notes**:
+
+1. **Key Storage**: Server private keys are stored in memory. In production:
+   - Consider using a Hardware Security Module (HSM)
+   - Implement key rotation policies
+   - Use secure key management services
+
+2. **Token Size**: Hybrid tokens are larger than classic tokens (due to ML-DSA-65 signatures). Ensure your HTTP infrastructure can handle larger headers.
+
+3. **Performance**: ML-DSA-65 signatures are slower than EdDSA. Consider:
+   - Token caching strategies
+   - Signature verification optimization
+   - Load testing with hybrid tokens
+
+For more details, see [docs/PQC_JWT.md](docs/PQC_JWT.md).
+
+### PQC TLS Certificate Scanning
+
+The service can scan TLS endpoints to detect post-quantum certificate support. You can generate PQC certificates for testing using the provided tools.
+
+#### Generating PQC Certificates
+
+**Quick method with script:**
+```bash
+./scripts/generate-pqc-cert.sh dilithium3 365 localhost
+```
+
+**Available PQC Algorithms:**
+
+| Algorithm    | NIST Level | Usage                               |
+| ------------ | ---------- | ----------------------------------- |
+| `dilithium2` | 2          | Signatures, medium size             |
+| `dilithium3` | 3          | Signatures, recommended             |
+| `dilithium5` | 5          | Signatures, maximum security        |
+| `falcon512`  | 1          | Signatures, compact                 |
+| `falcon1024` | 5          | Signatures, high security           |
+| `ED25519`    | -          | Quantum-resistant, widely supported |
+
+#### Prerequisites for PQC Certificates
+
+**Option 1: oqs-provider with OpenSSL 3.x (Recommended)**
+
+```bash
+# Install OpenSSL 3.x
+sudo apt-get update
+sudo apt-get install openssl libssl-dev
+
+# Install oqs-provider
+git clone https://github.com/open-quantum-safe/oqs-provider.git
+cd oqs-provider
+mkdir _build && cd _build
+cmake ..
+make -j$(nproc)
+sudo make install
+```
+
+**Option 2: Standard OpenSSL (for Ed25519)**
+
+Ed25519 is quantum-resistant and supported by standard OpenSSL 1.1.1+.
+
+#### Testing with PQC Certificates
+
+1. Generate a certificate:
+```bash
+./scripts/generate-pqc-cert.sh dilithium3 365 localhost
+```
+
+2. Run a test HTTPS server (see `docker/test-server.go` for example)
+
+3. Scan with the API:
+```bash
+curl -X POST http://localhost:8080/discovery/tls/scan \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"url": "https://localhost:8443"}'
+```
+
+#### Current Limitations
+
+⚠️ **Important**: PQC certificates have limitations:
+
+1. **Browser support**: Browsers do not yet natively support PQC certificates
+2. **TLS 1.3**: PQC support in TLS 1.3 is still experimental
+3. **Certificate authorities**: No public CA currently issues PQC certificates
+4. **Interoperability**: Few servers/clients currently support PQC certificates
+
+For detailed instructions, see [docs/PQC_CERTIFICATES.md](docs/PQC_CERTIFICATES.md).
+
 ## API Endpoints
 
 ### Authentication
 
-Most endpoints require JWT authentication. See the authentication endpoints below.
+Most endpoints require JWT authentication. The service uses hybrid PQC JWT tokens (EdDSA + ML-DSA-65).
 
 ### POST /auth/signup
 
@@ -279,7 +459,7 @@ Register a new user account.
 
 ### POST /auth/signin
 
-Sign in and receive a JWT token.
+Sign in and receive a hybrid PQC JWT token.
 
 **Request:**
 ```json
@@ -292,13 +472,15 @@ Sign in and receive a JWT token.
 **Response:**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJwYXlsb2FkIjoi...",
   "user": {
     "id": "uuid",
     "email": "user@example.com"
   }
 }
 ```
+
+The token is a hybrid PQC JWT (base64url-encoded JWS JSON General Serialization format).
 
 ### POST /discovery/scan
 
@@ -455,7 +637,7 @@ curl -X POST http://localhost:8080/auth/signup \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com", "password": "testpassword123"}'
 
-# Sign in and get JWT token
+# Sign in and get JWT token (hybrid PQC token)
 TOKEN=$(curl -s -X POST http://localhost:8080/auth/signin \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com", "password": "testpassword123"}' \
@@ -500,6 +682,9 @@ curl http://localhost:8080/discovery/rpcs
 
 # Health check (no auth required)
 curl http://localhost:8080/health
+
+# Worker health check (no auth required)
+curl http://localhost:8081/health
 ```
 
 ## Risk Scoring
@@ -574,3 +759,9 @@ To stop and remove volumes (clears database):
 docker-compose down -v
 ```
 
+## Additional Resources
+
+- [Post-Quantum JWT Documentation](docs/PQC_JWT.md) - Detailed guide on PQC JWT implementation
+- [PQC Certificate Generation Guide](docs/PQC_CERTIFICATES.md) - Guide for generating and testing PQC TLS certificates
+- [Open Quantum Safe](https://openquantumsafe.org/) - Official OQS project
+- [NIST PQC Standards](https://csrc.nist.gov/projects/post-quantum-cryptography) - NIST post-quantum cryptography standards
