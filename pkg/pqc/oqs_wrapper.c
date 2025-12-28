@@ -1,3 +1,6 @@
+#ifndef OQS_WRAPPER_C
+#define OQS_WRAPPER_C
+
 #include "oqs_wrapper.h"
 
 OQS_SIG* go_oqs_sig_new(const char* alg) {
@@ -98,4 +101,6 @@ OQS_STATUS go_oqs_kem_encaps(OQS_KEM* k, uint8_t* ciphertext, uint8_t* shared_se
 OQS_STATUS go_oqs_kem_decaps(OQS_KEM* k, uint8_t* shared_secret, const uint8_t* ciphertext, const uint8_t* sk) {
     return k->decaps(shared_secret, ciphertext, sk);
 }
+
+#endif // OQS_WRAPPER_C
 

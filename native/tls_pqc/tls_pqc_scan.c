@@ -417,13 +417,36 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
   // negotiated group (classiques). For hybrids, fallback to grp (requested)
   char group[128] = "";
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-  int nid = SSL_get_shared_group(ssl, 0);
+  // Try SSL_get_negotiated_group first (TLS 1.3)
+  int nid = SSL_get_negotiated_group(ssl);
   if (nid > 0) {
     const char *sn = OBJ_nid2sn(nid);
     if (sn)
       snprintf(group, sizeof(group), "%s", sn);
   }
+  // Fallback to SSL_get_shared_group if negotiated_group didn't work
+  if (!group[0]) {
+    nid = SSL_get_shared_group(ssl, 0);
+    if (nid > 0) {
+      const char *sn = OBJ_nid2sn(nid);
+      if (sn)
+        snprintf(group, sizeof(group), "%s", sn);
+    }
+  }
+  // Try to get from cipher suite name as last resort
+  if (!group[0] && sc) {
+    const char *cipher_name = SSL_CIPHER_get_name(sc);
+    // Extract group from cipher name if it contains group info
+    // Some ciphers include group in their name
+    if (cipher_name && strstr(cipher_name, "X25519"))
+      snprintf(group, sizeof(group), "X25519");
+    else if (cipher_name && strstr(cipher_name, "secp256"))
+      snprintf(group, sizeof(group), "secp256r1");
+    else if (cipher_name && strstr(cipher_name, "secp384"))
+      snprintf(group, sizeof(group), "secp384r1");
+  }
 #endif
+  // Final fallback: use requested group if provided
   if (!group[0] && grp && *grp)
     snprintf(group, sizeof(group), "%s", grp);
 

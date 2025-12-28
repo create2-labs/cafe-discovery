@@ -52,6 +52,10 @@ type TLSInfo struct {
 	CipherSuites     []uint16
 	ProtocolVersion  uint16
 	NegotiatedCipher uint16
+	ALPN             string // Application-Layer Protocol Negotiation
+	OCSPStapled      bool   // OCSP stapling
+	// PQC information (from OQS/OpenSSL scan)
+	PQCInfo *PQCInfo
 }
 
 // ScanHost scans a host:port for TLS information
@@ -94,9 +98,49 @@ func (s *Scanner) ScanHost(ctx context.Context, host, port string) (*TLSInfo, er
 		CipherSuites:     cipherSuites,
 		ProtocolVersion:  state.Version,
 		NegotiatedCipher: state.CipherSuite,
+		ALPN:             state.NegotiatedProtocol,
+		OCSPStapled:      len(state.OCSPResponse) > 0,
 	}
 
+	// Try to get PQC information using OQS/OpenSSL
+	// This is done even if Go TLS scan succeeded to get PQC-specific info
+	pqcInfo, errPQC := s.scanPQCInfo(host, port, state.Version)
+	if errPQC == nil {
+		info.PQCInfo = pqcInfo
+	}
+	// Don't fail if PQC scan fails - we still have the Go TLS info
+
 	return info, nil
+}
+
+// scanPQCInfo performs PQC-specific scanning using OQS/OpenSSL
+func (s *Scanner) scanPQCInfo(host, port string, tlsVersion uint16) (*PQCInfo, error) {
+	// Only attempt PQC scan for TLS 1.3 (PQC is mainly supported in TLS 1.3)
+	if tlsVersion != tls.VersionTLS13 {
+		// Try anyway, but with lower priority
+		pqcInfo, err := ScanPQC(host, port, "", false)
+		if err == nil {
+			return pqcInfo, nil
+		}
+		return nil, fmt.Errorf("PQC scan not applicable for TLS < 1.3")
+	}
+
+	// First try without specifying a group (let server choose)
+	pqcInfo, err := ScanPQC(host, port, "", false)
+	if err == nil && (pqcInfo.KexPQCReady || pqcInfo.PQCMode == "hybrid" || pqcInfo.PQCMode == "pure") {
+		return pqcInfo, nil
+	}
+
+	// If no PQC detected, try with specific PQC groups
+	for _, group := range DefaultPQCGroups {
+		info, err := ScanPQC(host, port, group, false)
+		if err == nil && (info.KexPQCReady || info.PQCMode == "hybrid" || info.PQCMode == "pure") {
+			return info, nil
+		}
+	}
+
+	// Return the first result even if no PQC was detected
+	return pqcInfo, nil
 }
 
 // GetProtocolVersion returns the TLS protocol version as string

@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"cafe-discovery/internal/domain"
@@ -17,27 +18,29 @@ import (
 
 // TLSService handles TLS certificate scanning and analysis
 type TLSService struct {
-	scanner          *tlspkg.Scanner
-	pqcRules         *tlspkg.PQCRules
+	scanner           *tlspkg.Scanner
+	pqcRules          *tlspkg.PQCRules
 	tlsScanResultRepo repository.TLSScanResultRepository
-	planService      *PlanService
+	planService       *PlanService
 }
 
 // NewTLSService creates a new TLS service
 func NewTLSService(tlsScanResultRepo repository.TLSScanResultRepository, planService *PlanService) *TLSService {
 	return &TLSService{
-		scanner:          tlspkg.NewScanner(),
-		pqcRules:         tlspkg.NewPQCRules(),
+		scanner:           tlspkg.NewScanner(),
+		pqcRules:          tlspkg.NewPQCRules(),
 		tlsScanResultRepo: tlsScanResultRepo,
-		planService:      planService,
+		planService:       planService,
 	}
 }
 
 // ScanTLS scans a URL for TLS certificate and cipher suite information and saves the result for the user
-func (s *TLSService) ScanTLS(ctx context.Context, userID uuid.UUID, targetURL string) (*domain.TLSScanResult, error) {
-	// Check plan limits
-	if s.planService != nil {
-		canScan, usage, err := s.planService.CheckScanLimit(userID, "endpoint", nil, s.tlsScanResultRepo)
+// userID can be nil for default endpoints (isDefault=true)
+// isDefault indicates whether this is a default endpoint (default=false for user-scanned endpoints)
+func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL string, isDefault bool) (*domain.TLSScanResult, error) {
+	// Check plan limits only for user-scanned endpoints (not for default endpoints)
+	if !isDefault && userID != nil && s.planService != nil {
+		canScan, usage, err := s.planService.CheckScanLimit(*userID, "endpoint", nil, s.tlsScanResultRepo)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check plan limits: %w", err)
 		}
@@ -98,8 +101,60 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID uuid.UUID, targetURL st
 		ScannedAt:       time.Now(),
 	}
 
+	// Integrate PQC information from OQS/OpenSSL scan if available
+	if info.PQCInfo != nil {
+		result.KexAlgorithm = info.PQCInfo.KexAlg
+		if result.KexAlgorithm == "" {
+			result.KexAlgorithm = info.PQCInfo.Group
+		}
+		result.KexPQCReady = info.PQCInfo.KexPQCReady || info.PQCInfo.PQC
+		result.PQCMode = info.PQCInfo.PQCMode
+		result.NISTLevels = info.PQCInfo.NISTLevels
+		result.Curve = info.PQCInfo.CertPubkeyECGroup
+
+		// Update PFS from cipher suite name
+		if info.PQCInfo.CipherSuite != "" {
+			result.PFS = s.hasPFSFromCipherName(info.PQCInfo.CipherSuite)
+		}
+	}
+
+	// Set ALPN and OCSP from Go TLS scan (available in TLSInfo)
+	result.ALPN = info.ALPN
+	result.OCSPStapled = info.OCSPStapled
+
+	// Set PFS if not already set
+	if !result.PFS && len(cipherSuites) > 0 {
+		cipherName := tlspkg.GetCipherSuiteName(cipherSuites[0].ID)
+		result.PFS = s.hasPFSFromCipherName(cipherName)
+	}
+
+	// Update overall NIST level if PQC scan provides better information
+	if info.PQCInfo != nil && info.PQCInfo.NISTLevels != nil {
+		// Use the worst NIST level from all components
+		if kexLevel, ok := info.PQCInfo.NISTLevels["kex"]; ok && domain.NISTLevel(kexLevel) < overallLevel {
+			overallLevel = domain.NISTLevel(kexLevel)
+		}
+		if sigLevel, ok := info.PQCInfo.NISTLevels["sig"]; ok && domain.NISTLevel(sigLevel) < overallLevel {
+			overallLevel = domain.NISTLevel(sigLevel)
+		}
+		if cipherLevel, ok := info.PQCInfo.NISTLevels["cipher"]; ok && domain.NISTLevel(cipherLevel) < overallLevel {
+			overallLevel = domain.NISTLevel(cipherLevel)
+		}
+		result.NISTLevel = overallLevel
+	}
+
+	// Update PQC risk based on real PQC detection
+	if info.PQCInfo != nil && (result.KexPQCReady || result.PQCMode == "hybrid" || result.PQCMode == "pure") {
+		result.PQCRisk = "safe"
+		// Add PQC algorithms to supported list
+		if result.KexAlgorithm != "" {
+			supportedPQCs = append(supportedPQCs, result.KexAlgorithm)
+		}
+	}
+	result.SupportedPQCs = supportedPQCs
+
 	// Save TLS scan result to database
-	tlsScanResultEntity := domain.FromTLSScanResult(userID, result)
+	tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
 	if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
 		// Log error but don't fail the request - scan was successful
 		// In production, you might want to use a logger here
@@ -110,15 +165,16 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID uuid.UUID, targetURL st
 }
 
 // ListTLSScanResults lists TLS scan results for a user with pagination
+// Returns both user's scans and default endpoints (default=true)
 func (s *TLSService) ListTLSScanResults(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResult, int64, error) {
-	// Get TLS scan results from repository
-	entities, err := s.tlsScanResultRepo.FindByUserID(userID, limit, offset)
+	// Get TLS scan results from repository (user's scans + default endpoints)
+	entities, err := s.tlsScanResultRepo.FindByUserIDOrDefault(userID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to fetch TLS scan results: %w", err)
 	}
 
-	// Get total count for pagination
-	total, err := s.tlsScanResultRepo.CountByUserID(userID)
+	// Get total count for pagination (user's scans + default endpoints)
+	total, err := s.tlsScanResultRepo.CountByUserIDOrDefault(userID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count TLS scan results: %w", err)
 	}
@@ -284,4 +340,10 @@ func (s *TLSService) detectSupportedPQC(cert domain.CertificateInfo, suites []do
 	}
 
 	return supported
+}
+
+// hasPFSFromCipherName checks if a cipher suite name indicates Perfect Forward Secrecy
+func (s *TLSService) hasPFSFromCipherName(cipherName string) bool {
+	cipherUpper := strings.ToUpper(cipherName)
+	return strings.Contains(cipherUpper, "ECDHE") || strings.Contains(cipherUpper, "DHE")
 }

@@ -11,6 +11,7 @@ import (
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -106,8 +107,9 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		AppName: "Cafe Discovery Service",
-		// Increase header size limit to support PQC JWT tokens
-		ReadBufferSize: 10240, // 10KB buffer for reading requests with large headers
+		// Buffer sizes to support PQC JWT tokens (hybrid tokens are larger)
+		ReadBufferSize:  10240,
+		WriteBufferSize: 10240,
 	})
 
 	// Enable CORS
@@ -142,6 +144,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		MoralisClient:     moralisClient,
 	}
 
+	// Initialize default endpoints scanning (runs asynchronously)
+	// Default endpoints are not associated with any user and can be read by all users
+	service.InitializeDefaultEndpoints(context.Background(), tlsService, tlsScanResultRepo)
+
 	return container, nil
 }
 
@@ -165,7 +171,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	// Protected routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
 	api.Post("/scan/wallet", discoveryHandler.Scan)
-	api.Post("/scan/endpoints", tlsHandler.Scan)
+	api.Post("/tls/scan", tlsHandler.Scan) // Changed from /scan/endpoints to /tls/scan for consistency
 	api.Get("/rpcs", discoveryHandler.ListRPCs)
 	api.Get("/scans", discoveryHandler.ListScans)
 	api.Get("/tls/scans", tlsHandler.ListScans)

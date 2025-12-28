@@ -246,6 +246,41 @@ export MORALIS_API_URL=https://deep-index.moralis.io
 export LOG_LEVEL=info  # Options: trace, debug, info, warn, error, fatal, panic
 ```
 
+### Démarrer en mode debug
+
+Pour activer les logs de debug, définissez la variable d'environnement `LOG_LEVEL` à `debug` :
+
+```bash
+# Mode debug
+export LOG_LEVEL=debug
+go run cmd/server/main.go
+
+# Ou pour le worker
+export LOG_LEVEL=debug
+go run cmd/worker/main.go
+```
+
+**Niveaux de log disponibles :**
+- `trace` : Niveau le plus détaillé (tous les logs)
+- `debug` : Logs de débogage détaillés
+- `info` : Informations générales (par défaut)
+- `warn` : Avertissements
+- `error` : Erreurs uniquement
+- `fatal` : Erreurs fatales uniquement
+- `panic` : Panics uniquement
+
+**Exemple avec les deux services en mode debug :**
+
+```bash
+# Terminal 1 - Serveur en mode debug
+export LOG_LEVEL=debug
+go run cmd/server/main.go
+
+# Terminal 2 - Worker en mode debug
+export LOG_LEVEL=debug
+go run cmd/worker/main.go
+```
+
 ### Quick Start Script
 
 You can create a simple startup script:
@@ -544,6 +579,8 @@ Scans a TLS endpoint for quantum-safe certificate support. Requires authenticati
 }
 ```
 
+**Note**: You can specify a custom port in the URL (e.g., `https://example.com:8443`). If no port is specified, port 443 is used by default for HTTPS URLs.
+
 **Response:**
 ```json
 {
@@ -663,11 +700,17 @@ curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
 ### 3. Test TLS Scanning
 
 ```bash
-# Queue a TLS scan
+# Queue a TLS scan (default port 443)
 curl -X POST http://localhost:8080/discovery/tls/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://example.com"}'
+
+# Queue a TLS scan with custom port (e.g., 8443)
+curl -X POST http://localhost:8080/discovery/tls/scan \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"url": "https://localhost:8443"}'
 
 # List TLS scan results
 curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \

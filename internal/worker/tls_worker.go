@@ -46,7 +46,9 @@ func (w *TLSWorker) processTLSScan(msg *natslib.Msg) error {
 
 	log.Printf("Processing TLS scan for user %s, endpoint %s", scanMsg.UserID, scanMsg.Endpoint)
 
-	_, err := w.tlsService.ScanTLS(context.Background(), scanMsg.UserID, scanMsg.Endpoint)
+	// Pass pointer to userID for user-scanned endpoints
+	userID := &scanMsg.UserID
+	_, err := w.tlsService.ScanTLS(context.Background(), userID, scanMsg.Endpoint, false) // false = user-scanned endpoint
 	if err != nil {
 		log.Printf("Failed to scan TLS endpoint %s for user %s: %v", scanMsg.Endpoint, scanMsg.UserID, err)
 		return err
