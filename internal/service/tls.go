@@ -72,14 +72,15 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		}
 	}
 
-	// Calculate risk score
-	riskScore := s.calculateTLSRiskScore(certLevel, cipherSuites)
+	// Calculate risk score (will be updated after PQC info is integrated)
+	protocolVersionStr := tlspkg.GetProtocolVersion(info.ProtocolVersion)
+	riskScore := s.calculateTLSRiskScore(certLevel, cipherSuites, protocolVersionStr, false, false, false, false, nil)
 
 	// Determine PQC risk level
 	pqcRisk := s.determinePQCRisk(overallLevel, isPQCCert)
 
-	// Generate recommendations
-	recommendations := s.generateRecommendations(certInfo, cipherSuites, overallLevel)
+	// Generate recommendations (will be updated after PQC info is integrated)
+	recommendations := s.generateRecommendations(certInfo, cipherSuites, overallLevel, protocolVersionStr, false, false, false, false)
 
 	// Check for supported PQC algorithms
 	supportedPQCs := s.detectSupportedPQC(certInfo, cipherSuites)
@@ -152,6 +153,30 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		}
 	}
 	result.SupportedPQCs = supportedPQCs
+
+	// Recalculate risk score with complete information (PQC, PFS, OCSP, etc.)
+	result.RiskScore = s.calculateTLSRiskScore(
+		result.NISTLevel,
+		cipherSuites,
+		protocolVersionStr,
+		result.PFS,
+		result.OCSPStapled,
+		result.KexPQCReady,
+		result.PQCMode == "hybrid" || result.PQCMode == "pure",
+		result.NISTLevels,
+	)
+
+	// Regenerate recommendations with complete information
+	result.Recommendations = s.generateRecommendations(
+		certInfo,
+		cipherSuites,
+		result.NISTLevel,
+		protocolVersionStr,
+		result.PFS,
+		result.OCSPStapled,
+		result.KexPQCReady,
+		result.PQCMode == "hybrid" || result.PQCMode == "pure",
+	)
 
 	// Save TLS scan result to database
 	tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
@@ -239,38 +264,138 @@ func (s *TLSService) extractCipherSuites(info *tlspkg.TLSInfo) []domain.CipherSu
 	return suites
 }
 
-// calculateTLSRiskScore calculates the risk score for TLS configuration
-func (s *TLSService) calculateTLSRiskScore(certLevel domain.NISTLevel, cipherSuites []domain.CipherSuiteInfo) float64 {
-	// Base risk from certificate level
-	baseRisk := 1.0 - (float64(certLevel) * 0.15)
-
-	// Check cipher suites
-	if len(cipherSuites) == 0 {
-		return 1.0 // High risk if no cipher suites
-	}
-
-	// Find worst cipher suite level
-	worstLevel := certLevel
-	for _, cs := range cipherSuites {
-		if cs.NISTLevel < worstLevel {
-			worstLevel = cs.NISTLevel
+// calculateTLSRiskScore calculates a comprehensive risk score for TLS configuration
+// The score ranges from 0.0 (lowest risk) to 1.0 (highest risk)
+//
+// Factors considered:
+//   - NIST security levels (certificate, cipher suites, and detailed component levels)
+//   - TLS protocol version (TLS 1.3 is preferred)
+//   - Perfect Forward Secrecy (PFS) support
+//   - OCSP stapling support
+//   - Post-Quantum Cryptography (PQC) readiness
+//   - PQC mode (hybrid or pure PQC)
+//
+// The calculation uses weighted components:
+//   - Base risk (40%): Based on worst NIST level across all components
+//   - Cipher suite risk (25%): Based on weakest cipher suite
+//   - Protocol risk (15%): TLS 1.2 or older increases risk
+//   - Security features (10%): PFS and OCSP stapling reduce risk
+//   - PQC readiness (10%): PQC support significantly reduces risk
+func (s *TLSService) calculateTLSRiskScore(
+	certLevel domain.NISTLevel,
+	cipherSuites []domain.CipherSuiteInfo,
+	protocolVersion string,
+	hasPFS bool,
+	hasOCSPStapling bool,
+	kexPQCReady bool,
+	isPQCMode bool,
+	detailedNISTLevels map[string]int,
+) float64 {
+	// 1. Base risk from NIST levels (40% weight)
+	// Use detailed NIST levels if available, otherwise use certificate level
+	var worstNISTLevel domain.NISTLevel = certLevel
+	if len(detailedNISTLevels) > 0 {
+		// Find the worst level from all components
+		for _, level := range detailedNISTLevels {
+			if domain.NISTLevel(level) < worstNISTLevel {
+				worstNISTLevel = domain.NISTLevel(level)
+			}
+		}
+	} else {
+		// Fallback: check cipher suites if no detailed levels
+		for _, cs := range cipherSuites {
+			if cs.NISTLevel < worstNISTLevel {
+				worstNISTLevel = cs.NISTLevel
+			}
 		}
 	}
 
-	// Adjust risk based on worst cipher suite
-	if worstLevel < certLevel {
-		baseRisk += 0.2 // Additional risk if cipher suites are weaker
-	}
-
-	// Clamp between 0.0 and 1.0
-	if baseRisk > 1.0 {
-		baseRisk = 1.0
-	}
+	// NIST level to risk: Level 1 = 1.0, Level 5 = 0.0
+	// Linear mapping: risk = 1.0 - ((level - 1) / 4)
+	baseRisk := 1.0 - ((float64(worstNISTLevel) - 1.0) / 4.0)
 	if baseRisk < 0.0 {
 		baseRisk = 0.0
 	}
+	if baseRisk > 1.0 {
+		baseRisk = 1.0
+	}
 
-	return baseRisk
+	// 2. Cipher suite risk (25% weight)
+	cipherRisk := 0.0
+	if len(cipherSuites) == 0 {
+		cipherRisk = 1.0 // High risk if no cipher suites
+	} else {
+		// Find worst cipher suite level
+		worstCipherLevel := worstNISTLevel
+		for _, cs := range cipherSuites {
+			if cs.NISTLevel < worstCipherLevel {
+				worstCipherLevel = cs.NISTLevel
+			}
+		}
+		cipherRisk = 1.0 - ((float64(worstCipherLevel) - 1.0) / 4.0)
+		if cipherRisk < 0.0 {
+			cipherRisk = 0.0
+		}
+		if cipherRisk > 1.0 {
+			cipherRisk = 1.0
+		}
+	}
+
+	// 3. Protocol version risk (15% weight)
+	// TLS 1.3 = 0.0 risk, TLS 1.2 = 0.3 risk, TLS 1.1 or older = 0.8 risk
+	protocolRisk := 0.0
+	protocolUpper := strings.ToUpper(protocolVersion)
+	if strings.Contains(protocolUpper, "1.3") {
+		protocolRisk = 0.0
+	} else if strings.Contains(protocolUpper, "1.2") {
+		protocolRisk = 0.3
+	} else if strings.Contains(protocolUpper, "1.1") || strings.Contains(protocolUpper, "1.0") {
+		protocolRisk = 0.8
+	} else {
+		protocolRisk = 0.5 // Unknown protocol version
+	}
+
+	// 4. Security features risk reduction (10% weight)
+	// PFS and OCSP stapling reduce risk
+	securityFeaturesRisk := 0.5 // Default: moderate risk
+	if hasPFS && hasOCSPStapling {
+		securityFeaturesRisk = 0.0 // Both features present: no additional risk
+	} else if hasPFS {
+		securityFeaturesRisk = 0.2 // PFS only: low additional risk
+	} else if hasOCSPStapling {
+		securityFeaturesRisk = 0.3 // OCSP only: moderate additional risk
+	}
+
+	// 5. PQC readiness risk reduction (10% weight)
+	// PQC support significantly reduces quantum risk
+	pqcRisk := 0.5 // Default: moderate quantum risk
+	if isPQCMode {
+		// Pure or hybrid PQC mode: minimal quantum risk
+		pqcRisk = 0.0
+	} else if kexPQCReady {
+		// PQC KEX ready but not in PQC mode: low quantum risk
+		pqcRisk = 0.2
+	} else if worstNISTLevel >= domain.NISTLevel4 {
+		// High NIST level but no PQC: moderate quantum risk
+		pqcRisk = 0.3
+	}
+
+	// Weighted combination
+	riskScore := (baseRisk * 0.40) +
+		(cipherRisk * 0.25) +
+		(protocolRisk * 0.15) +
+		(securityFeaturesRisk * 0.10) +
+		(pqcRisk * 0.10)
+
+	// Clamp between 0.0 and 1.0
+	if riskScore > 1.0 {
+		riskScore = 1.0
+	}
+	if riskScore < 0.0 {
+		riskScore = 0.0
+	}
+
+	return riskScore
 }
 
 // determinePQCRisk determines the PQC risk category
@@ -284,35 +409,86 @@ func (s *TLSService) determinePQCRisk(level domain.NISTLevel, isPQC bool) string
 	return "critical"
 }
 
-// generateRecommendations generates recommendations based on scan results
-func (s *TLSService) generateRecommendations(cert domain.CertificateInfo, suites []domain.CipherSuiteInfo, level domain.NISTLevel) []string {
+// generateRecommendations generates comprehensive security recommendations based on scan results
+// Takes into account NIST levels, protocol version, PFS, OCSP, and PQC readiness
+func (s *TLSService) generateRecommendations(
+	cert domain.CertificateInfo,
+	suites []domain.CipherSuiteInfo,
+	level domain.NISTLevel,
+	protocolVersion string,
+	hasPFS bool,
+	hasOCSPStapling bool,
+	kexPQCReady bool,
+	isPQCMode bool,
+) []string {
 	var recommendations []string
 
+	// 1. NIST Level recommendations (highest priority)
 	if level <= domain.NISTLevel1 {
-		recommendations = append(recommendations, "CRITICAL: Certificate uses quantum-vulnerable algorithms. Migrate to post-quantum cryptography immediately.")
+		recommendations = append(recommendations, "CRITICAL: Certificate uses quantum-vulnerable algorithms (NIST Level 1). Migrate to post-quantum cryptography immediately.")
 	} else if level <= domain.NISTLevel2 {
-		recommendations = append(recommendations, "WARNING: Certificate may be vulnerable to quantum attacks. Consider migrating to PQC.")
+		recommendations = append(recommendations, "WARNING: Certificate may be vulnerable to quantum attacks (NIST Level 2). Consider migrating to PQC.")
+	} else if level == domain.NISTLevel3 {
+		recommendations = append(recommendations, "INFO: Certificate provides moderate quantum resistance (NIST Level 3). Consider upgrading to NIST Level 4 or 5 for better protection.")
 	}
 
+	// 2. Certificate PQC readiness
 	if !cert.IsPQCReady {
-		recommendations = append(recommendations, "Upgrade certificate to use post-quantum signature algorithms (e.g., Dilithium, Falcon).")
+		recommendations = append(recommendations, "Upgrade certificate to use post-quantum signature algorithms (e.g., Dilithium-3, Falcon-1024) for quantum-resistant authentication.")
 	}
 
-	// Check cipher suites
+	// 3. Protocol version recommendations
+	protocolUpper := strings.ToUpper(protocolVersion)
+	if !strings.Contains(protocolUpper, "1.3") {
+		if strings.Contains(protocolUpper, "1.2") {
+			recommendations = append(recommendations, "Upgrade to TLS 1.3 for improved security, better performance, and mandatory PFS.")
+		} else {
+			recommendations = append(recommendations, "CRITICAL: TLS protocol version is outdated and insecure. Immediately upgrade to TLS 1.3.")
+		}
+	}
+
+	// 4. PFS recommendations
+	if !hasPFS {
+		recommendations = append(recommendations, "Enable Perfect Forward Secrecy (PFS) by using ECDHE or DHE cipher suites. This protects past communications even if the private key is compromised.")
+	}
+
+	// 5. OCSP Stapling recommendations
+	if !hasOCSPStapling {
+		recommendations = append(recommendations, "Enable OCSP stapling to improve performance and reduce certificate validation latency.")
+	}
+
+	// 6. Cipher suite recommendations
 	hasWeakCipher := false
+	worstCipherLevel := level
 	for _, cs := range suites {
+		if cs.NISTLevel < worstCipherLevel {
+			worstCipherLevel = cs.NISTLevel
+		}
 		if cs.NISTLevel <= domain.NISTLevel1 && !cs.IsPQCReady {
 			hasWeakCipher = true
-			break
 		}
 	}
 
 	if hasWeakCipher {
-		recommendations = append(recommendations, "Disable weak cipher suites and prefer TLS 1.3 with PQC key exchange algorithms.")
+		recommendations = append(recommendations, "Disable weak cipher suites (NIST Level 1) and prefer TLS 1.3 with PQC key exchange algorithms.")
+	} else if worstCipherLevel <= domain.NISTLevel2 {
+		recommendations = append(recommendations, "Consider upgrading cipher suites to NIST Level 3 or higher for better quantum resistance.")
 	}
 
-	if len(recommendations) == 0 {
-		recommendations = append(recommendations, "TLS configuration appears quantum-resistant. Continue monitoring PQC standards updates.")
+	// 7. PQC readiness recommendations
+	if !isPQCMode && !kexPQCReady {
+		if level >= domain.NISTLevel4 {
+			recommendations = append(recommendations, "Enable post-quantum key exchange (PQC KEX) to achieve hybrid or pure PQC mode for complete quantum protection.")
+		} else {
+			recommendations = append(recommendations, "Upgrade to post-quantum cryptography (PQC) for key exchange. Consider hybrid PQC algorithms like ML-KEM combined with classical algorithms.")
+		}
+	} else if kexPQCReady && !isPQCMode {
+		recommendations = append(recommendations, "PQC key exchange is ready. Consider enabling pure PQC mode for maximum quantum security.")
+	}
+
+	// 8. Positive feedback for good configurations
+	if len(recommendations) == 0 || (level >= domain.NISTLevel4 && isPQCMode && hasPFS && hasOCSPStapling && strings.Contains(protocolUpper, "1.3")) {
+		recommendations = append(recommendations, "TLS configuration appears quantum-resistant and well-configured. Continue monitoring PQC standards updates and maintain current security practices.")
 	}
 
 	return recommendations

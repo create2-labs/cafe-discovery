@@ -732,7 +732,9 @@ curl http://localhost:8081/health
 
 ## Risk Scoring
 
-The risk score (0.0 to 1.0, where higher = higher risk) is calculated based on:
+### Wallet Risk Score
+
+The wallet risk score (0.0 to 1.0, where higher = higher risk) is calculated based on:
 
 1. **Base Risk**: NIST Level 1 (ECDSA-secp256k1) contributes 0.5 base risk (quantum-broken)
 2. **Network Exposure**: Each network where the key is exposed adds up to 0.4 risk
@@ -746,6 +748,67 @@ The risk score (0.0 to 1.0, where higher = higher risk) is calculated based on:
 **Account Type Detection**:
 - **EOA**: Externally Owned Account using ECDSA-secp256k1 (quantum-breakable)
 - **AA**: Abstract Account compliant with ERC-4337 (potentially more flexible for PQC migration)
+
+### TLS Risk Score
+
+The TLS risk score (0.0 to 1.0, where higher = higher risk) is a comprehensive assessment of TLS endpoint security, considering both classical and post-quantum cryptography factors.
+
+#### Calculation Method
+
+The risk score uses a weighted combination of multiple security factors:
+
+**1. Base Risk (40% weight)**
+- Based on the worst NIST security level across all TLS components
+- Uses detailed NIST levels (kex, sig, cipher, hkdf, session) if available from PQC scan
+- Falls back to certificate and cipher suite levels if detailed levels are not available
+- Formula: `risk = 1.0 - ((level - 1) / 4)`
+  - NIST Level 1 (quantum-broken): 1.0 risk
+  - NIST Level 3 (moderate): 0.5 risk
+  - NIST Level 5 (PQC-ready): 0.0 risk
+
+**2. Cipher Suite Risk (25% weight)**
+- Evaluates the weakest cipher suite supported
+- No cipher suites available: 1.0 risk (critical)
+- Uses the same NIST level mapping as base risk
+
+**3. Protocol Version Risk (15% weight)**
+- TLS 1.3: 0.0 risk (most secure)
+- TLS 1.2: 0.3 risk (acceptable but older)
+- TLS 1.1 or older: 0.8 risk (deprecated, insecure)
+- Unknown protocol: 0.5 risk (moderate)
+
+**4. Security Features (10% weight)**
+- Perfect Forward Secrecy (PFS) and OCSP Stapling reduce risk:
+  - Both PFS and OCSP: 0.0 additional risk
+  - PFS only: 0.2 additional risk
+  - OCSP only: 0.3 additional risk
+  - Neither: 0.5 additional risk
+
+**5. Post-Quantum Cryptography Readiness (10% weight)**
+- Pure or hybrid PQC mode: 0.0 quantum risk (fully protected)
+- PQC KEX ready (but not in PQC mode): 0.2 quantum risk
+- High NIST level (≥4) but no PQC: 0.3 quantum risk
+- Low NIST level or no PQC: 0.5 quantum risk
+
+#### Final Score
+
+The final risk score is calculated as:
+```
+risk_score = (base_risk × 0.40) +
+             (cipher_risk × 0.25) +
+             (protocol_risk × 0.15) +
+             (security_features_risk × 0.10) +
+             (pqc_risk × 0.10)
+```
+
+The score is clamped between 0.0 (lowest risk) and 1.0 (highest risk).
+
+#### Risk Categories
+
+- **0.0 - 0.1**: Very Low Risk - Excellent TLS configuration with PQC support
+- **0.1 - 0.4**: Low Risk - Good TLS configuration, minor improvements possible
+- **0.4 - 0.7**: Medium Risk - Acceptable but should be improved
+- **0.7 - 1.0**: High Risk - Critical security issues, immediate action required
 
 ## Background Processing
 
