@@ -1,11 +1,12 @@
 package pqc
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../native -I/opt/homebrew/opt/openssl@3/include -I/opt/liboqs/include
+#cgo CFLAGS: -I${SRCDIR} -I${SRCDIR}/../native -I/opt/homebrew/opt/openssl@3/include -I/opt/liboqs/include
 #cgo LDFLAGS: -L/opt/homebrew/opt/openssl@3/lib -L/opt/liboqs/lib -lssl -lcrypto -loqs -Wl,-rpath,/opt/liboqs/lib
 #include <stdlib.h>
 #include <string.h>
-#include "../../native/oqs_wrapper.h"
+#include "oqs_wrapper.h"
+// Note: oqs_wrapper.c is compiled by CGO in this package (shared with oqs.go)
 */
 import "C"
 import (

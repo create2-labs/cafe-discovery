@@ -30,7 +30,7 @@ all: tls_pqc_scan
 clean:
 	rm -f  tls_pqc_scan
 
-tls_pqc_scan: tls_pqc_scan.c
+tls_pqc_scan: tls_pqc/tls_pqc_scan.c
 	$(CC) -DTEST_MAIN $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 

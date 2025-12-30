@@ -12,9 +12,13 @@ import (
 type TLSScanResultRepository interface {
 	Create(tlsScanResult *domain.TLSScanResultEntity) error
 	FindByUserID(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
+	FindByUserIDOrDefault(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error)
 	FindByUserIDAndURL(userID uuid.UUID, url string) (*domain.TLSScanResultEntity, error)
+	FindByURL(url string) (*domain.TLSScanResultEntity, error)
+	FindDefaultByURL(url string) (*domain.TLSScanResultEntity, error)
 	CountByUserID(userID uuid.UUID) (int64, error)
+	CountByUserIDOrDefault(userID uuid.UUID) (int64, error)
 }
 
 // tlsScanResultRepository implements TLSScanResultRepository interface
@@ -51,7 +55,60 @@ func (r *tlsScanResultRepository) FindByUserIDAndURL(userID uuid.UUID, url strin
 	return r.findByUserIDAndField(userID, "url", url, &result)
 }
 
+// FindByURL finds a TLS scan result by URL (regardless of user)
+func (r *tlsScanResultRepository) FindByURL(url string) (*domain.TLSScanResultEntity, error) {
+	var result domain.TLSScanResultEntity
+	if err := r.db.Where("url = ?", url).Order("created_at DESC").First(&result).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &result, nil
+}
+
+// FindDefaultByURL finds a default TLS scan result by URL (default=true)
+func (r *tlsScanResultRepository) FindDefaultByURL(url string) (*domain.TLSScanResultEntity, error) {
+	var result domain.TLSScanResultEntity
+	if err := r.db.Where("url = ? AND \"default\" = ?", url, true).Order("created_at DESC").First(&result).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &result, nil
+}
+
+// FindByUserIDOrDefault finds all TLS scan results for a user OR default endpoints (default=true)
+// This allows users to see both their own scans and default endpoints
+func (r *tlsScanResultRepository) FindByUserIDOrDefault(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error) {
+	var results []*domain.TLSScanResultEntity
+	query := r.db.Where("user_id = ? OR \"default\" = ?", userID, true).Order("created_at DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	if err := query.Find(&results).Error; err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 // CountByUserID counts the total number of TLS scan results for a user
 func (r *tlsScanResultRepository) CountByUserID(userID uuid.UUID) (int64, error) {
 	return r.countByUserID(userID, &domain.TLSScanResultEntity{})
+}
+
+// CountByUserIDOrDefault counts the total number of TLS scan results for a user OR default endpoints
+func (r *tlsScanResultRepository) CountByUserIDOrDefault(userID uuid.UUID) (int64, error) {
+	var count int64
+	result := r.db.Model(&domain.TLSScanResultEntity{}).Where("user_id = ? OR \"default\" = ?", userID, true).Count(&count)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return count, nil
 }

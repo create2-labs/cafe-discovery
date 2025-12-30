@@ -4,13 +4,50 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"cafe-discovery/internal/app"
 	"cafe-discovery/internal/config"
 
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
+
+func initLogging() {
+	logLevel := viper.GetString(config.LogLevel)
+	if logLevel == "" {
+		logLevel = "info" // Default to info if not set
+	}
+
+	// Parse log level
+	var level zerolog.Level
+	switch strings.ToLower(logLevel) {
+	case "trace":
+		level = zerolog.TraceLevel
+	case "debug":
+		level = zerolog.DebugLevel
+	case "info":
+		level = zerolog.InfoLevel
+	case "warn":
+		level = zerolog.WarnLevel
+	case "error":
+		level = zerolog.ErrorLevel
+	case "fatal":
+		level = zerolog.FatalLevel
+	case "panic":
+		level = zerolog.PanicLevel
+	default:
+		level = zerolog.InfoLevel
+	}
+
+	zerolog.SetGlobalLevel(level)
+
+	// Use console writer for better readability
+	output := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"}
+	logger := zerolog.New(output).With().Timestamp().Logger()
+	zerolog.DefaultContextLogger = &logger
+}
 
 func initConfig() {
 
@@ -27,6 +64,7 @@ func initConfig() {
 
 func main() {
 	initConfig()
+	initLogging()
 	// Load configuration
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
