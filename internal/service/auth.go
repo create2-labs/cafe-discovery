@@ -219,6 +219,33 @@ func (s *AuthService) Signin(req SigninRequest) (*AuthResponse, error) {
 	}, nil
 }
 
+// GetAnonymousToken generates a JWT token for anonymous (non-authenticated) users
+// This token uses a special UUID (nil UUID) and email to indicate anonymous access
+// The token is valid but does not correspond to any user in the database
+func (s *AuthService) GetAnonymousToken() (*AuthResponse, error) {
+	// Use nil UUID and special email for anonymous users
+	anonymousUserID := uuid.Nil
+	anonymousEmail := "anonymous@cafe-discovery.local"
+
+	// Generate JWT token
+	token, err := s.generateToken(anonymousUserID, anonymousEmail)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate anonymous token: %w", err)
+	}
+
+	// Create a minimal user object for the response (not saved in DB)
+	anonymousUser := &domain.User{
+		ID:    anonymousUserID,
+		Email: anonymousEmail,
+		// PlanID will be set to FREE plan type, but user doesn't exist in DB
+	}
+
+	return &AuthResponse{
+		Token: token,
+		User:  anonymousUser,
+	}, nil
+}
+
 // ValidateToken validates a JWT token and returns the claims
 // Only hybrid PQC tokens (EdDSA + ML-DSA-65) are accepted
 func (s *AuthService) ValidateToken(tokenString string) (*JWTClaims, error) {
