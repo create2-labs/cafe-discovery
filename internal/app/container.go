@@ -11,6 +11,7 @@ import (
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
+	redisconn "cafe-discovery/pkg/redis"
 	"context"
 	"fmt"
 	"os"
@@ -40,6 +41,7 @@ type Container struct {
 	App               *fiber.App
 	DB                postgresdb.PostgreSQLConnection
 	NATSConn          nats.Connection
+	RedisConn         redisconn.Connection
 	MoralisClient     *moralis.MoralisClient
 }
 
@@ -66,6 +68,12 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to initialize NATS: %w", err)
 	}
 
+	// Initialize Redis connection
+	redisConn, err := redisconn.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Redis: %w", err)
+	}
+
 	// Run database migrations
 	if err := runMigrations(db); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
@@ -82,6 +90,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	userRepo := repository.NewUserRepository(db.GetDB())
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
+	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
 	cafeWalletRepo := repository.NewCafeWalletRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -99,7 +108,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 
 	// Initialize handlers
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, tlsScanResultRepo, planService, redisTLSScanRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
@@ -141,6 +150,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		App:               app,
 		DB:                db,
 		NATSConn:          natsConn,
+		RedisConn:         redisConn,
 		MoralisClient:     moralisClient,
 	}
 
@@ -157,6 +167,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	auth := app.Group("/auth")
 	auth.Post("/signup", authHandler.Signup)
 	auth.Post("/signin", authHandler.Signin)
+	auth.Get("/anonymous", authHandler.GetAnonymousToken) // Anonymous token for non-authenticated users
 
 	// Health check endpoint (public)
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -175,6 +186,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	api.Get("/rpcs", discoveryHandler.ListRPCs)
 	api.Get("/scans", discoveryHandler.ListScans)
 	api.Get("/tls/scans", tlsHandler.ListScans)
+	api.Get("/tls/scans/anonymous", tlsHandler.ListAnonymousScans) // Route for anonymous scans from Redis
 
 	// Wallet management routes
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))

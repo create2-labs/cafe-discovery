@@ -178,12 +178,16 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		result.PQCMode == "hybrid" || result.PQCMode == "pure",
 	)
 
-	// Save TLS scan result to database
-	tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
-	if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
-		// Log error but don't fail the request - scan was successful
-		// In production, you might want to use a logger here
-		_ = err
+	// Save TLS scan result to database for authenticated users or default endpoints
+	// Anonymous users (uuid.Nil) can scan but results are not saved to DB (they go to Redis)
+	// Default endpoints (isDefault=true, userID=nil) should be saved to DB
+	if isDefault || (userID != nil && *userID != uuid.Nil) {
+		tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
+		if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
+			// Log error but don't fail the request - scan was successful
+			// In production, you might want to use a logger here
+			_ = err
+		}
 	}
 
 	return result, nil

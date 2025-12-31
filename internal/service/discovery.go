@@ -55,11 +55,16 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		return nil, err
 	}
 
-	existingScan, err := s.getExistingScan(userID, normalizedAddress)
-	if err != nil || existingScan != nil {
-		return existingScan, err
+	// For anonymous users (uuid.Nil), skip existing scan check but still check rate limits
+	isAnonymous := userID == uuid.Nil
+	if !isAnonymous {
+		existingScan, err := s.getExistingScan(userID, normalizedAddress)
+		if err != nil || existingScan != nil {
+			return existingScan, err
+		}
 	}
 
+	// Check plan limits for both authenticated and anonymous users (anonymous uses rate limiting)
 	if err := s.checkPlanLimits(userID); err != nil {
 		return nil, err
 	}
@@ -79,7 +84,12 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		riskScore:   riskScore,
 	}
 	result := s.buildScanResult(normalizedAddress, scanData, networks)
-	s.saveScanResult(userID, result)
+
+	// Save scan result only if not anonymous (userID != uuid.Nil)
+	// Anonymous users can scan but results are not saved
+	if !isAnonymous {
+		s.saveScanResult(userID, result)
+	}
 
 	return result, nil
 }

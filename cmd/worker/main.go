@@ -18,6 +18,7 @@ import (
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
+	redisconn "cafe-discovery/pkg/redis"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -110,6 +111,13 @@ func main() {
 	}
 	defer natsConn.Close()
 
+	// Initialize Redis connection
+	redisConn, err := redisconn.New()
+	if err != nil {
+		log.Fatalf("Failed to initialize Redis: %v", err)
+	}
+	defer redisConn.Close()
+
 	// Create EVM clients for each configured blockchain
 	clients := make(map[string]*evm.Client)
 	for _, blockchain := range cfgChain.Blockchains {
@@ -122,6 +130,7 @@ func main() {
 	// Initialize repositories
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
+	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
 	userRepo := repository.NewUserRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -135,6 +144,7 @@ func main() {
 	// Initialize workers
 	walletWorker := worker.NewWalletWorker(discoveryService, natsConn)
 	tlsWorker := worker.NewTLSWorker(tlsService, natsConn)
+	tlsAnonymousWorker := worker.NewTLSAnonymousWorker(tlsService, redisTLSScanRepo, natsConn)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -147,6 +157,10 @@ func main() {
 
 	if err := tlsWorker.Start(ctx); err != nil {
 		log.Fatalf("Failed to start TLS worker: %v", err)
+	}
+
+	if err := tlsAnonymousWorker.Start(ctx); err != nil {
+		log.Fatalf("Failed to start TLS anonymous worker: %v", err)
 	}
 
 	log.Println("Workers started successfully")
@@ -166,11 +180,12 @@ func main() {
 		// Check workers status
 		walletWorkerRunning := walletWorker.IsRunning()
 		tlsWorkerRunning := tlsWorker.IsRunning()
+		tlsAnonymousWorkerRunning := tlsAnonymousWorker.IsRunning()
 
 		// Determine overall health status
 		status := "ok"
 		httpStatus := 200
-		if !natsConnected || !walletWorkerRunning || !tlsWorkerRunning {
+		if !natsConnected || !walletWorkerRunning || !tlsWorkerRunning || !tlsAnonymousWorkerRunning {
 			status = "degraded"
 			httpStatus = 503
 		}
@@ -189,6 +204,9 @@ func main() {
 					},
 					"tls": fiber.Map{
 						"running": tlsWorkerRunning,
+					},
+					"tls_anonymous": fiber.Map{
+						"running": tlsAnonymousWorkerRunning,
 					},
 				},
 			},

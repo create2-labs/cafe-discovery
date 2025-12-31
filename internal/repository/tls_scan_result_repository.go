@@ -17,6 +17,7 @@ type TLSScanResultRepository interface {
 	FindByUserIDAndURL(userID uuid.UUID, url string) (*domain.TLSScanResultEntity, error)
 	FindByURL(url string) (*domain.TLSScanResultEntity, error)
 	FindDefaultByURL(url string) (*domain.TLSScanResultEntity, error)
+	FindAllDefault() ([]*domain.TLSScanResultEntity, error)
 	CountByUserID(userID uuid.UUID) (int64, error)
 	CountByUserIDOrDefault(userID uuid.UUID) (int64, error)
 }
@@ -93,6 +94,15 @@ func (r *tlsScanResultRepository) FindByUserIDOrDefault(userID uuid.UUID, limit,
 	}
 
 	if err := query.Find(&results).Error; err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// FindAllDefault finds all default TLS scan results (default=true)
+func (r *tlsScanResultRepository) FindAllDefault() ([]*domain.TLSScanResultEntity, error) {
+	var results []*domain.TLSScanResultEntity
+	if err := r.db.Where("\"default\" = ?", true).Order("created_at DESC").Find(&results).Error; err != nil {
 		return nil, err
 	}
 	return results, nil

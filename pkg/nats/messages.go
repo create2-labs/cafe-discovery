@@ -12,4 +12,5 @@ type WalletScanMessage struct {
 type TLSScanMessage struct {
 	UserID   uuid.UUID `json:"user_id"`
 	Endpoint string    `json:"endpoint"`
+	Token    string    `json:"token,omitempty"` // JWT token for anonymous users (to create unique Redis keys)
 }

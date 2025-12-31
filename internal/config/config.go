@@ -22,6 +22,9 @@ const (
 	// NATS configuration
 	NATSURL = "NATS_URL"
 
+	// Redis configuration
+	RedisURL = "REDIS_URL"
+
 	// Boolean; used to register commands at development guild level or globally.
 	Production = "PRODUCTION"
 
@@ -44,6 +47,7 @@ const (
 	defaultPostgreSQLDatabase = "cafe"
 	defaultPostgreSQLSSLMode  = "disable"
 	defaultNATSURL            = "nats://localhost:4222"
+	defaultRedisURL            = "redis://localhost:6379"
 	defaultMoralisAPIKey      = ""
 	defaultMoralisAPIURL      = "https://deep-index.moralis.io"
 	defaultServerHost         = "0.0.0.0"
@@ -62,6 +66,7 @@ func GetDefaultConfigValues() map[string]any {
 		PostgreSQLDatabase: defaultPostgreSQLDatabase,
 		PostgreSQLSSLMode:  defaultPostgreSQLSSLMode,
 		NATSURL:            defaultNATSURL,
+		RedisURL:           defaultRedisURL,
 		Production:         defaultProduction,
 		ServerHost:         defaultServerHost,
 		ServerPort:         defaultServerPort,
