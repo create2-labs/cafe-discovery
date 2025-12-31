@@ -39,6 +39,10 @@ const (
 	CORSAllowOrigins = "CORS_ALLOW_ORIGINS"
 	CORSAllowMethods = "CORS_ALLOW_METHODS"
 
+	// Cloudflare Turnstile configuration
+	TurnstileSecretKey = "TURNSTILE_SECRET_KEY"
+	TurnstileSiteKey   = "TURNSTILE_SITE_KEY"
+
 	defaultProduction         = true
 	defaultPostgreSQLHost     = "127.0.0.1"
 	defaultPostgreSQLPort     = "5432"
@@ -55,6 +59,10 @@ const (
 	defaultWorkerHealthPort   = "8081"
 	defaultCORSAllowOrigins   = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
 	defaultCORSAllowMethods   = "GET,POST,PUT,DELETE,OPTIONS"
+	// Cloudflare Turnstile development keys (always pass verification)
+	// These are free test keys provided by Cloudflare for development
+	defaultTurnstileSecretKey = "1x0000000000000000000000000000000AA"
+	defaultTurnstileSiteKey   = "1x00000000000000000000AA"
 )
 
 func GetDefaultConfigValues() map[string]any {
@@ -75,5 +83,7 @@ func GetDefaultConfigValues() map[string]any {
 		MoralisAPIURL:      defaultMoralisAPIURL,
 		CORSAllowOrigins:   defaultCORSAllowOrigins,
 		CORSAllowMethods:   defaultCORSAllowMethods,
+		TurnstileSecretKey: defaultTurnstileSecretKey,
+		TurnstileSiteKey:   defaultTurnstileSiteKey,
 	}
 }
