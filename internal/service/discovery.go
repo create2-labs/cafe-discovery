@@ -94,13 +94,19 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 	return result, nil
 }
 
-// validateAndNormalizeAddress validates and normalizes the Ethereum address
-func (s *DiscoveryService) validateAndNormalizeAddress(address string) (string, error) {
+// ValidateAndNormalizeAddress validates and normalizes the Ethereum address
+// This is a public method that can be used by handlers to validate addresses before queuing
+func (s *DiscoveryService) ValidateAndNormalizeAddress(address string) (string, error) {
 	normalized := normalizeAddress(address)
 	if !isValidAddress(normalized) {
 		return "", fmt.Errorf("invalid Ethereum address: %s", address)
 	}
 	return normalized, nil
+}
+
+// validateAndNormalizeAddress is kept for backward compatibility (used internally)
+func (s *DiscoveryService) validateAndNormalizeAddress(address string) (string, error) {
+	return s.ValidateAndNormalizeAddress(address)
 }
 
 // getExistingScan checks if a scan already exists for the user and address

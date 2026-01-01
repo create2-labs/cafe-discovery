@@ -60,10 +60,19 @@ func (h *DiscoveryHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
+	// Validate and normalize the Ethereum address before queuing
+	// This ensures we return an error immediately if the address is invalid
+	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(req.Address)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	// Publish scan request to NATS for async processing
 	scanMsg := nats.WalletScanMessage{
 		UserID:  userID,
-		Address: req.Address,
+		Address: normalizedAddress,
 	}
 
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectWalletScan, scanMsg); err != nil {
@@ -75,7 +84,7 @@ func (h *DiscoveryHandler) Scan(c *fiber.Ctx) error {
 	// Return immediate response - scan will be processed asynchronously
 	return c.JSON(fiber.Map{
 		"message": "scan queued successfully",
-		"address": req.Address,
+		"address": normalizedAddress,
 		"status":  "processing",
 	})
 }
