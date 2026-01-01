@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/pqc"
@@ -10,17 +12,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrInvalidPassword   = errors.New("invalid password")
-	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidPassword     = errors.New("invalid password")
+	ErrUserAlreadyExists   = errors.New("user already exists")
+	ErrTurnstileValidation = errors.New("turnstile verification failed")
 )
 
 var b64u = base64.RawURLEncoding
@@ -102,6 +109,7 @@ func (s *AuthService) Close() {
 
 // SignupRequest represents the signup request
 type SignupRequest struct {
+	TurnstileToken string `json:"turnstile_token"`
 	Email           string `json:"email"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirm_password"`
@@ -109,8 +117,9 @@ type SignupRequest struct {
 
 // SigninRequest represents the signin request
 type SigninRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 // AuthResponse represents the authentication response
@@ -119,8 +128,75 @@ type AuthResponse struct {
 	User  *domain.User `json:"user"`
 }
 
+// verifyTurnstileToken verifies a Cloudflare Turnstile token
+func verifyTurnstileToken(token string) error {
+	secretKey := viper.GetString(config.TurnstileSecretKey)
+	
+	// Check if using Cloudflare development keys (always pass verification)
+	const devSecretKey = "1x0000000000000000000000000000000AA"
+	isDevMode := secretKey == "" || secretKey == devSecretKey
+	
+	if isDevMode {
+		if secretKey == devSecretKey {
+			log.Printf("⚠️  WARNING: Using Cloudflare Turnstile development keys. Turnstile verification is disabled in development mode.")
+		} else {
+			log.Printf("⚠️  WARNING: TURNSTILE_SECRET_KEY not configured. Turnstile verification is disabled.")
+		}
+		// In development mode, accept any non-empty token
+		if token == "" {
+			return ErrTurnstileValidation
+		}
+		return nil
+	}
+
+	if token == "" {
+		return ErrTurnstileValidation
+	}
+
+	// Call Cloudflare Turnstile API to verify the token
+	url := "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+	data := map[string]string{
+		"secret": secretKey,
+		"response": token,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal turnstile request: %w", err)
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to verify turnstile token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read turnstile response: %w", err)
+	}
+
+	var result struct {
+		Success bool     `json:"success"`
+		Errors  []string `json:"error-codes"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("failed to unmarshal turnstile response: %w", err)
+	}
+
+	if !result.Success {
+		return ErrTurnstileValidation
+	}
+
+	return nil
+}
+
 // Signup creates a new user account
 func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
+	// Verify Turnstile token
+	if err := verifyTurnstileToken(req.TurnstileToken); err != nil {
+		return nil, err
+	}
+
 	// Validate passwords match
 	if req.Password != req.ConfirmPassword {
 		return nil, fmt.Errorf("passwords do not match")
@@ -186,6 +262,11 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 
 // Signin authenticates a user and returns a JWT token
 func (s *AuthService) Signin(req SigninRequest) (*AuthResponse, error) {
+	// Verify Turnstile token
+	if err := verifyTurnstileToken(req.TurnstileToken); err != nil {
+		return nil, err
+	}
+
 	if req.Email == "" {
 		return nil, fmt.Errorf("email is required")
 	}
