@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"cafe-discovery/internal/domain"
@@ -53,10 +54,34 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate URL format (should start with https://)
+	// Validate URL format (should start with https:// and be a valid URL)
 	if !strings.HasPrefix(req.URL, "https://") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "url must use https:// protocol",
+		})
+	}
+
+	// Validate that the URL is well-formed and can be parsed
+	// This catches issues like invalid hostnames before they reach the worker
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": fmt.Sprintf("invalid URL format: %v", err),
+		})
+	}
+
+	// Check that the URL has a valid hostname
+	if parsedURL.Host == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "url must include a valid hostname",
+		})
+	}
+
+	// Basic validation: hostname should not be empty after parsing
+	hostname := parsedURL.Hostname()
+	if hostname == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "url must include a valid hostname",
 		})
 	}
 
