@@ -42,10 +42,12 @@ The application uses an asynchronous message-based architecture with NATS and Po
   - `cafe.discovery.wallet.scan`: Wallet scan requests
   - `cafe.discovery.tls.scan`: TLS scan requests
 - **Queue**: `cafe.workers` (enables load distribution between multiple workers)
+- **Note**: NATS is managed in [cafe-infra](../cafe-infra/README.md)
 
 #### 4. PostgreSQL
 
 - **Role**: Primary database
+- **Note**: PostgreSQL is managed in [cafe-infra](../cafe-infra/README.md)
 - **Advantages**:
   - Better performance for complex queries
   - Native JSON support
@@ -65,6 +67,7 @@ cafe-discovery/
 │   ├── app/               # Application container (orchestration)
 │   ├── domain/            # Domain models and types
 │   ├── handler/           # HTTP handlers (Fiber)
+│   ├── metrics/           # Prometheus metrics registration
 │   ├── service/           # Business logic
 │   └── worker/            # NATS workers (wallet & TLS scanning)
 ├── pkg/
@@ -111,7 +114,7 @@ Same flow as wallet scan, but using the `cafe.discovery.tls.scan` subject.
 
 #### Development
 
-- Use Docker Compose for local PostgreSQL and NATS instances
+- Infrastructure services (PostgreSQL, NATS, Redis) are managed in `cafe-infra`
 - Run API server and worker as separate processes
 
 #### Production
@@ -120,10 +123,6 @@ Same flow as wallet scan, but using the `cafe.discovery.tls.scan` subject.
 - **Workers**: Deploy multiple instances for horizontal scalability
 - **NATS**: Use NATS JetStream for persistence and high availability
 - **PostgreSQL**: Use a PostgreSQL cluster with read replicas
-
-### Migration Notes
-
-The application was migrated from MySQL to PostgreSQL. Repositories use GORM which abstracts database differences, but some queries may require adjustments.
 
 ## Configuration
 
@@ -146,40 +145,103 @@ blockchains:
 
 - Go 1.24+ 
 - Docker and Docker Compose
-- PostgreSQL 16+ (via Docker)
-- NATS (via Docker)
+- Infrastructure services (PostgreSQL, NATS, Redis) - see [cafe-infra](../cafe-infra/README.md)
 - **Required for JWT authentication**: Open Quantum Safe (OQS) library (liboqs) with ML-DSA-65 support
   - The service uses hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for all authentication
   - See [Post-Quantum Cryptography](#post-quantum-cryptography-pqc) section for installation instructions
 
 ## Running the Service
 
-The application consists of three components that need to be running:
+The application can be run in two ways:
+1. **Docker Compose** (recommended) - Services run in containers connected to cafe-infra network
+2. **Local development** - Run directly with `go run` for development
 
-### Step 1: Start Infrastructure Services
+### Option 1: Docker Compose (Recommended)
 
-Start PostgreSQL and NATS using Docker Compose:
+#### Step 1: Start Infrastructure Services
+
+Start the infrastructure services from the `cafe-infra` directory:
 
 ```bash
+cd ../cafe-infra
 docker-compose up -d
 ```
 
 This will start:
 - PostgreSQL on port `5432`
 - NATS on ports `4222` (client) and `8222` (monitoring)
+- Redis on port `6379`
+- Observability stack:
+  - Prometheus on port `9090` (metrics collection)
+  - Grafana on port `3000` (dashboards and visualization)
+  - Loki on port `3100` (log aggregation)
+  - Tempo on port `3200` (distributed tracing)
+  - OpenTelemetry Collector on ports `4317` (gRPC) and `4318` (HTTP)
 
 Verify services are running:
 ```bash
 docker-compose ps
 ```
 
-### Step 2: Install Dependencies
+For more details, see the [cafe-infra README](../cafe-infra/README.md).
+
+#### Step 2: Start Cafe Discovery Services
+
+From the `cafe-discovery` directory:
+
+```bash
+# Set required environment variables
+export JWT_SECRET=your-secret-key-here
+export MORALIS_API_KEY=your_api_key_here
+
+# Start both server and worker
+docker-compose up -d
+
+# Or start individually
+docker-compose up -d cafe-discovery-backend
+docker-compose up -d cafe-discovery-worker
+```
+
+The services will:
+- Build the Docker images (first time only)
+- Connect to the `cafe-infra_observability` network
+- Use service names for connections (postgres, nats, redis)
+- Expose the API server on `http://localhost:8080`
+
+**Verify services are running:**
+```bash
+# Check container status
+docker-compose ps
+
+# Health check
+curl http://localhost:8080/health
+
+# Metrics endpoint (Prometheus format)
+curl http://localhost:8080/metrics
+
+# View logs
+docker-compose logs -f cafe-discovery-backend
+docker-compose logs -f cafe-discovery-worker
+```
+
+**Stop services:**
+```bash
+docker-compose down
+```
+
+### Option 2: Local Development
+
+#### Step 1: Start Infrastructure Services
+
+Same as Option 1, Step 1.
+
+#### Step 2: Install Dependencies
 
 ```bash
 go mod tidy
 ```
 
-### Step 3: Start the API Server
+#### Step 3: Start the API Server
 
 In a separate terminal:
 
@@ -194,7 +256,18 @@ CONFIG_PATH=config.yaml go run cmd/server/main.go
 
 The API server will start on `http://localhost:8080` by default.
 
-### Step 4: Start the Worker
+**Note**: When running locally, you need to use `host.docker.internal` (Mac/Windows) or `172.17.0.1` (Linux) to connect to Docker services, or configure your environment variables accordingly.
+
+**Verify the server is running:**
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Metrics endpoint (Prometheus format)
+curl http://localhost:8080/metrics
+```
+
+#### Step 4: Start the Worker
 
 In another terminal:
 
@@ -205,6 +278,32 @@ go run cmd/worker/main.go
 The worker processes background tasks:
 - **Wallet Worker**: Processes wallet scan requests from NATS
 - **TLS Worker**: Processes TLS scan requests from NATS
+
+**Verify the worker is running:**
+```bash
+# Worker health check
+curl http://localhost:8081/health
+```
+
+### Step 5: Verify Observability (Optional)
+
+Once all services are running, you can verify that metrics are being collected:
+
+1. **Check metrics endpoint:**
+   ```bash
+   curl http://localhost:8080/metrics | grep cafe_discovery
+   ```
+
+2. **Access Grafana** (if observability stack is running):
+   - URL: http://localhost:3000
+   - Default credentials: `admin` / `admin`
+   - Navigate to Dashboards to view CAFE Platform metrics
+
+3. **Check Prometheus** (if observability stack is running):
+   - URL: http://localhost:9090
+   - Search for `cafe_discovery` metrics in the Prometheus UI
+
+**Note**: The observability stack (Prometheus, Grafana, etc.) is managed in `cafe-infra`. Make sure it's running and configured to scrape the discovery service metrics endpoint.
 
 ### Environment Variables
 
@@ -221,7 +320,7 @@ export SERVER_PORT=8080
 # Worker health check port
 export WORKER_HEALTH_PORT=8081
 
-# PostgreSQL configuration (defaults match docker-compose.yml)
+# PostgreSQL configuration (services managed in cafe-infra)
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
 export POSTGRES_DATABASE=cafe
@@ -229,8 +328,11 @@ export POSTGRES_USER=cafe
 export POSTGRES_PASSWORD=cafe
 export POSTGRES_SSLMODE=disable
 
-# NATS configuration
+# NATS configuration (services managed in cafe-infra)
 export NATS_URL=nats://localhost:4222
+
+# Redis configuration (services managed in cafe-infra)
+export REDIS_URL=redis://localhost:6379
 
 # JWT configuration (required for authentication)
 # Note: The service always uses hybrid PQC tokens (EdDSA + ML-DSA-65)
@@ -299,8 +401,10 @@ You can create a simple startup script:
 #!/bin/bash
 # Start all services
 
-echo "Starting infrastructure services..."
+echo "Starting infrastructure services from cafe-infra..."
+cd ../cafe-infra
 docker-compose up -d
+cd ../cafe-discovery
 
 echo "Waiting for services to be ready..."
 sleep 5
@@ -317,9 +421,44 @@ echo "Services started!"
 echo "API Server PID: $SERVER_PID"
 echo "Worker PID: $WORKER_PID"
 echo ""
+echo "Service endpoints:"
+echo "  - API Server: http://localhost:8080"
+echo "  - Health: http://localhost:8080/health"
+echo "  - Metrics: http://localhost:8080/metrics"
+echo "  - Worker Health: http://localhost:8081/health"
+echo "  - Grafana: http://localhost:3000 (admin/admin)"
+echo "  - Prometheus: http://localhost:9090"
+echo ""
 echo "To stop services:"
 echo "  kill $SERVER_PID $WORKER_PID"
-echo "  docker-compose down"
+echo "  cd ../cafe-infra && docker-compose down"
+```
+
+### Verifying Everything Works
+
+After starting all services, verify the complete setup:
+
+```bash
+# 1. Check infrastructure services
+cd ../cafe-infra
+docker-compose ps
+
+# 2. Check API server
+curl http://localhost:8080/health
+
+# 3. Check metrics endpoint
+curl http://localhost:8080/metrics | head -20
+
+# 4. Check worker
+curl http://localhost:8081/health
+
+# 5. Check Prometheus is scraping (if observability stack is running)
+curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="cafe-discovery")'
+
+# 6. Access Grafana (if observability stack is running)
+# Open http://localhost:3000 in your browser
+# Login with admin/admin
+# Navigate to Dashboards to see CAFE Platform metrics
 ```
 
 ## Post-Quantum Cryptography (PQC)
@@ -650,6 +789,28 @@ Health check endpoint. No authentication required.
 }
 ```
 
+### GET /metrics
+
+Prometheus metrics endpoint. Exposes metrics in Prometheus format for scraping. No authentication required.
+
+**Response:**
+Prometheus text format with all available metrics.
+
+**Example:**
+```
+# HELP cafe_discovery_wallet_scans_total Total number of wallet scans performed
+# TYPE cafe_discovery_wallet_scans_total counter
+cafe_discovery_wallet_scans_total{scan_type="wallet"} 42
+
+# HELP cafe_discovery_wallet_scan_duration_seconds Duration of wallet scans in seconds
+# TYPE cafe_discovery_wallet_scan_duration_seconds histogram
+cafe_discovery_wallet_scan_duration_seconds_bucket{scan_type="wallet",le="0.005"} 5
+cafe_discovery_wallet_scan_duration_seconds_bucket{scan_type="wallet",le="0.01"} 10
+...
+```
+
+**Note**: This endpoint is used by Prometheus (or other monitoring systems) to scrape metrics. The infrastructure stack in `cafe-infra` includes Prometheus configured to scrape this endpoint.
+
 ### Worker Health Check
 
 The worker exposes a health check endpoint on port `8081` (configurable via `WORKER_HEALTH_PORT` environment variable).
@@ -758,6 +919,9 @@ curl http://localhost:8080/discovery/rpcs
 # Health check (no auth required)
 curl http://localhost:8080/health
 
+# Prometheus metrics (no auth required)
+curl http://localhost:8080/metrics
+
 # Worker health check (no auth required)
 curl http://localhost:8081/health
 ```
@@ -842,6 +1006,97 @@ The score is clamped between 0.0 (lowest risk) and 1.0 (highest risk).
 - **0.4 - 0.7**: Medium Risk - Acceptable but should be improved
 - **0.7 - 1.0**: High Risk - Critical security issues, immediate action required
 
+## Observability
+
+The service exposes Prometheus-compatible metrics for monitoring and observability. Metrics are collected passively without affecting business logic.
+
+### Metrics Endpoint
+
+The service exposes a `/metrics` endpoint that provides metrics in Prometheus format:
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+### Available Metrics
+
+#### Wallet Scan Metrics
+
+- **`cafe_discovery_wallet_scans_total`** (counter): Total number of wallet scans performed
+  - Labels: `scan_type="wallet"`
+- **`cafe_discovery_wallet_scan_duration_seconds`** (histogram): Duration of wallet scans in seconds
+  - Labels: `scan_type="wallet"`
+  - Buckets: Default Prometheus buckets (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+- **`cafe_discovery_wallet_scan_success_total`** (counter): Total number of successful wallet scans
+  - Labels: `scan_type="wallet"`, `result="success"`
+- **`cafe_discovery_wallet_scan_error_total`** (counter): Total number of failed wallet scans
+  - Labels: `scan_type="wallet"`, `result="failure"`
+
+#### TLS Scan Metrics
+
+- **`cafe_discovery_tls_scans_total`** (counter): Total number of TLS scans performed
+  - Labels: `scan_type="tls"`
+- **`cafe_discovery_tls_scan_duration_seconds`** (histogram): Duration of TLS scans in seconds
+  - Labels: `scan_type="tls"`
+  - Buckets: Default Prometheus buckets (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+- **`cafe_discovery_tls_scan_success_total`** (counter): Total number of successful TLS scans
+  - Labels: `scan_type="tls"`, `result="success"`
+- **`cafe_discovery_tls_scan_error_total`** (counter): Total number of failed TLS scans
+  - Labels: `scan_type="tls"`, `result="failure"`
+
+### Metric Collection
+
+Metrics are automatically recorded when:
+- **Wallet scans** are performed via `ScanWallet()` service method
+- **TLS scans** are performed via `ScanTLS()` service method
+
+Both API-initiated scans and worker-processed scans are instrumented, as workers call the same service methods.
+
+### Prometheus Configuration
+
+The infrastructure stack in `cafe-infra` includes Prometheus configured to scrape the `/metrics` endpoint. 
+
+**For local development**, if you're running the discovery service on `localhost:8080`, you may need to configure Prometheus to scrape it. Add the following to `cafe-infra/prometheus/prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'cafe-discovery'
+    static_configs:
+      - targets: ['host.docker.internal:8080']  # For Docker Compose on Mac/Windows
+      # Or use: ['localhost:8080']  # For Linux or if Prometheus runs on host
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+```
+
+**Note**: 
+- If Prometheus runs in Docker (via `cafe-infra`), use `host.docker.internal:8080` on Mac/Windows to access the host machine
+- On Linux, you may need to use `172.17.0.1:8080` or configure Docker networking
+- For production deployments, use the appropriate service discovery mechanism (DNS, Kubernetes service discovery, etc.)
+
+After updating the Prometheus configuration, restart Prometheus:
+```bash
+cd ../cafe-infra
+docker-compose restart prometheus
+```
+
+Verify Prometheus is scraping the service:
+```bash
+# Check targets in Prometheus UI
+open http://localhost:9090/targets
+
+# Or via API
+curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="cafe-discovery")'
+```
+
+### Metric Design Principles
+
+- **Passive instrumentation**: Metrics are collected without modifying business logic
+- **Low cardinality**: Labels are carefully chosen to avoid high cardinality (no user IDs, addresses, or endpoints in labels)
+- **Factual metrics**: Metrics record counts, durations, and errors - no business decisions or classifications
+- **Long-term monitoring**: Metrics are suitable for platform monitoring and audit purposes
+
+For more information about the observability stack, see the [cafe-infra README](../cafe-infra/README.md).
+
 ## Background Processing
 
 The application uses NATS for asynchronous message processing:
@@ -887,13 +1142,15 @@ To stop all services:
 pkill -f "go run cmd/server/main.go"
 pkill -f "go run cmd/worker/main.go"
 
-# Stop Docker services
+# Stop Docker services (from cafe-infra)
+cd ../cafe-infra
 docker-compose down
 ```
 
 To stop and remove volumes (clears database):
 
 ```bash
+cd ../cafe-infra
 docker-compose down -v
 ```
 

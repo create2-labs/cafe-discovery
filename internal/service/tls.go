@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/repository"
 	tlspkg "cafe-discovery/pkg/tls"
 
@@ -37,7 +38,16 @@ func NewTLSService(tlsScanResultRepo repository.TLSScanResultRepository, planSer
 // ScanTLS scans a URL for TLS certificate and cipher suite information and saves the result for the user
 // userID can be nil for default endpoints (isDefault=true)
 // isDefault indicates whether this is a default endpoint (default=false for user-scanned endpoints)
-func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL string, isDefault bool) (*domain.TLSScanResult, error) {
+func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL string, isDefault bool) (result *domain.TLSScanResult, err error) {
+	// Record metrics for TLS scan
+	startTime := time.Now()
+	m := metrics.Get()
+	defer func() {
+		duration := time.Since(startTime)
+		// Record success if no error occurred, failure otherwise
+		success := err == nil
+		m.RecordTLSScan(duration, success)
+	}()
 	// Check plan limits only for user-scanned endpoints (not for default endpoints)
 	if !isDefault && userID != nil && s.planService != nil {
 		canScan, usage, err := s.planService.CheckScanLimit(*userID, "endpoint", nil, s.tlsScanResultRepo)
@@ -87,7 +97,7 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 
 	port, _ := strconv.Atoi(info.Port)
 
-	result := &domain.TLSScanResult{
+	result = &domain.TLSScanResult{
 		URL:             targetURL,
 		Host:            info.Host,
 		Port:            port,

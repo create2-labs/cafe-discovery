@@ -4,6 +4,7 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
+	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/middleware"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
@@ -19,7 +20,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 )
 
@@ -113,6 +116,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
 
+	// Initialize Prometheus metrics
+	// This must be called before starting the server to register all metrics
+	metrics.Init()
+
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		AppName: "Cafe Discovery Service",
@@ -178,6 +185,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Prometheus metrics endpoint (public)
+	// This endpoint exposes metrics in Prometheus format for scraping
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	// Protected routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
