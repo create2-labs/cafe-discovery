@@ -1,0 +1,23 @@
+##############################
+# Stage 1 — Build server binary using OQS base image
+##############################
+FROM oqs:dev
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the server
+RUN go build -o server ./cmd/server/main.go
+
+# Make server binary executable
+RUN chmod +x /app/server
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["./server"]
