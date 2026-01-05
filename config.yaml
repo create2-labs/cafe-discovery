@@ -2,6 +2,34 @@ server:
   host: "0.0.0.0"
   port: "8080"
 
+# PostgreSQL configuration (for Docker, use service name 'postgres')
+POSTGRES_HOST: "cafe-postgres"
+POSTGRES_PORT: "5432"
+POSTGRES_DATABASE: "cafe"
+POSTGRES_USER: "cafe"
+POSTGRES_PASSWORD: "cafe"
+POSTGRES_SSLMODE: "disable"
+
+# NATS configuration (for Docker, use service name 'nats')
+NATS_URL: "nats://nats:4222"
+
+# Redis configuration (for Docker, use service name 'redis')
+REDIS_URL: "redis://redis:6379"
+
+# JWT configuration (required for authentication)
+JWT_SECRET: "change-me-in-production"
+
+# Moralis API configuration
+MORALIS_API_KEY: ""
+MORALIS_API_URL: "https://deep-index.moralis.io"
+
+# Cloudflare Turnstile configuration (optional, uses dev keys by default)
+TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
+TURNSTILE_SITE_KEY: "1x00000000000000000AA"
+
+# Logging
+LOG_LEVEL: "info"
+
 # CORS configuration (can also be set via environment variables: CORS_ALLOW_ORIGINS, CORS_ALLOW_METHODS)
 CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:5173"
 CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
