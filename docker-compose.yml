@@ -1,49 +1,112 @@
+version: '3.8'
+
+# IMPORTANT: Before building the services, you must first build the OQS base image:
+#   docker build -f Dockerfile-oqs -t oqs:dev .
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: cafe-postgres
+  # Cafe Discovery API Server
+  cafe-discovery-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile-discovery-backend
+    container_name: cafe-discovery-backend
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "8080:8080"
     environment:
-      POSTGRES_DB: ${POSTGRES_DATABASE:-cafe}
-      POSTGRES_USER: ${POSTGRES_USER:-cafe}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cafe}
+      # Server configuration
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      
+      # PostgreSQL (using cafe-infra service names)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=cafe
+      - POSTGRES_USER=${POSTGRES_USER:-cafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
+      - POSTGRES_SSLMODE=disable
+      
+      # NATS (using cafe-infra service names)
+      - NATS_URL=nats://nats:4222
+      
+      # Redis (using cafe-infra service names)
+      - REDIS_URL=redis://redis:6379
+      
+      # JWT configuration (required)
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      
+      # Moralis API (required for wallet scanning)
+      - MORALIS_API_KEY=${MORALIS_API_KEY}
+      - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
+      
+      # Cloudflare Turnstile (optional, uses dev keys by default)
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-1x0000000000000000000000000000000AA}
+      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-1x00000000000000000000AA}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+      # Configuration file path
+      - CONFIG_PATH=/app/config.yaml
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - cafe-infra_observability
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cafe}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  nats:
-    image: nats:latest
-    container_name: cafe-nats
+  # Cafe Discovery Worker
+  cafe-discovery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile-discovery-worker
+    container_name: cafe-discovery-worker
     restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"  # Monitoring port
-    command: ["-js", "-m", "8222"]
+    environment:
+      # Worker health check port
+      - WORKER_HEALTH_PORT=8081
+      
+      # PostgreSQL (using cafe-infra service names)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=cafe
+      - POSTGRES_USER=${POSTGRES_USER:-cafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
+      - POSTGRES_SSLMODE=disable
+      
+      # NATS (using cafe-infra service names)
+      - NATS_URL=nats://nats:4222
+      
+      # Redis (using cafe-infra service names)
+      - REDIS_URL=redis://redis:6379
+      
+      # JWT configuration (required)
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      
+      # Moralis API (required for wallet scanning)
+      - MORALIS_API_KEY=${MORALIS_API_KEY}
+      - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+      # Configuration file path
+      - CONFIG_PATH=/app/config.yaml
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - cafe-infra_observability
     healthcheck:
-      test: [ "CMD", "nats", "server", "check", "--healthz" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - cafe-discovery-backend
 
-  redis:
-    image: redis:7-alpine
-    container_name: cafe-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_data:
-
-
+networks:
+  cafe-infra_observability:
+    external: true
