@@ -44,7 +44,7 @@ services:
       - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-1x00000000000000000000AA}
       
       # Logging
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
       
       # Configuration file path
       - CONFIG_PATH=/app/config.yaml
@@ -57,6 +57,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Cafe Discovery Worker
   cafe-discovery-worker:
@@ -104,8 +105,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    depends_on:
-      - cafe-discovery-backend
+      start_period: 10s
 
 networks:
   cafe-infra_observability:

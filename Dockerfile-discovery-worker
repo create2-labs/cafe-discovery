@@ -12,12 +12,10 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the server
+# Build the worker
 RUN go build -o worker ./cmd/worker/main.go
 
-# Make server binary executable
-RUN chmod +x /app/server
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Make worker binary executable
+RUN chmod +x /app/worker
 
 CMD ["./worker"]

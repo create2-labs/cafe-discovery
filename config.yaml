@@ -29,7 +29,7 @@ TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
 TURNSTILE_SITE_KEY: "1x00000000000000000AA"
 
 # Logging
-LOG_LEVEL: "info"
+LOG_LEVEL: "debug"
 
 # CORS configuration (can also be set via environment variables: CORS_ALLOW_ORIGINS, CORS_ALLOW_METHODS)
 CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:5173"

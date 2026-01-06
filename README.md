@@ -371,6 +371,30 @@ Stop services:
 docker-compose down
 ```
 
+#### Step 3-bis: start services independently
+
+- Start the backend
+
+```
+docker run --network cafe-infra_observability --rm \
+  -v $(pwd)/$config.yaml:/app/config.yaml:ro \
+  -e CONFIG_PATH=/app/config.yaml \
+  -e LOG_LEVEL=debug \
+  -e JWT_SECRET=totorigolo \
+  discovery-server:dev
+```
+
+- Start the worker
+
+```
+docker run --network cafe-infra_observability --rm \
+  -v $(pwd)/$config.yaml:/app/config.yaml:ro \
+  -e CONFIG_PATH=/app/config.yaml \
+  -e LOG_LEVEL=debug \
+  -e JWT_SECRET=totorigolo \
+  discovery-worker:dev
+```
+
 ### Environment Variables
 
 You can configure the application using environment variables. Environment variables always override values from `config.yaml`.
@@ -1078,7 +1102,7 @@ Note:
 - On Linux, you may need to use `172.17.0.1:8080` or configure Docker networking
 - For production deployments, use the appropriate service discovery mechanism (DNS, Kubernetes service discovery, etc.)
 
-After updating the Prometheus configuration, restart Prometheus:
+After updating the Prometheus configuration, rePrometheus:
 ```bash
 cd ../cafe-infra
 docker-compose restart prometheus
@@ -1137,26 +1161,12 @@ Note: This utility requires a valid Moralis API key to fetch transaction data. T
 - Use `.env` files (and add them to `.gitignore`) for local development
 - Use secret management services in production
 
-## Stopping the Application
+## Stopping Discovery services
 
 To stop all services:
 
 ```bash
-# Stop Go processes (Ctrl+C in each terminal)
-# Or find and kill processes:
-pkill -f "go run cmd/server/main.go"
-pkill -f "go run cmd/worker/main.go"
-
-# Stop Docker services (from cafe-infra)
-cd ../cafe-infra
 docker-compose down
-```
-
-To stop and remove volumes (clears database):
-
-```bash
-cd ../cafe-infra
-docker-compose down -v
 ```
 
 ## Additional Resources
