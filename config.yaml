@@ -17,7 +17,8 @@ NATS_URL: "nats://nats:4222"
 REDIS_URL: "redis://redis:6379"
 
 # JWT configuration (required for authentication)
-JWT_SECRET: "change-me-in-production"
+# To enforce security, there is no default value for JWT_SECRET: it must explicitly be set.
+# JWT_SECRET: "you-must-set-it"
 
 # Moralis API configuration
 MORALIS_API_KEY: ""
