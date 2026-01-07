@@ -112,8 +112,7 @@ cafe-discovery/
 │   ├── PQC_CERTIFICATES.md # PQC certificate generation guide
 │   └── PQC_JWT.md         # PQC JWT implementation guide
 ├── scripts/               # Build and utility scripts
-│   └── install_oqs_openssl_debian.sh  # OQS installation script
-├── Dockerfile-oqs         # Base image with PQC facilities (build: oqs:dev)
+│   └── install_oqs_openssl_debian.sh  # OQS installation script (legacy, see cafe-infra/oqs)
 ├── Dockerfile-discovery-backend  # API server image (uses oqs:dev)
 ├── Dockerfile-discovery-worker   # Worker image (uses oqs:dev)
 ├── docker-compose.yml     # Docker Compose configuration to manage backend and nats worker
@@ -124,26 +123,24 @@ cafe-discovery/
 
 The project uses a multi-stage Docker build approach with a shared base image:
 
-1. `Dockerfile-oqs`: 
-   - Base image containing Open Quantum Safe (OQS) libraries
-   - Includes liboqs, OpenSSL with oqs-provider, and Go runtime
-   - Build command: `docker build -f Dockerfile-oqs -t oqs:dev .`
-   - This image must be built before building the application images
+1. OQS Base Image (managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)):
+   - Build instructions: See [cafe-infra/oqs/README.md](https://github.com/kantika-tech/cafe-infra/oqs/README.md)
+   - Generated images: `cafe-oqs:build` and `cafe-oqs:runtime`
 
 2. `Dockerfile-discovery-backend`:
    - Builds the API server binary
-   - Uses `oqs:dev` as base image
+   - Uses `oqs:dev` as base image (must be built from cafe-infra)
    - Creates a slim runtime image with only necessary dependencies
    - Output: `cafe-discovery-backend` service
 
 3. `Dockerfile-discovery-worker`:
    - Builds the worker binary
-   - Uses `oqs:dev` as base image
+   - Uses `oqs:dev` as base image (must be built from cafe-infra)
    - Creates a slim runtime image with only necessary dependencies
    - Output: `cafe-discovery-worker` service
 
 Build Order:
-1. First, build the base image: `docker build -f Dockerfile-oqs -t oqs:dev .`
+1. First, build the OQS base image from `cafe-infra` (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
 2. Then, build the services: `docker-compose build` (or `docker-compose up --build`)
 
 ### Data Flow
@@ -153,7 +150,7 @@ Build Order:
 ```
 Client HTTP → Discovery → NATS (publish) → Worker → Service → PostgreSQL
                backend           ↓
-                         Immediate Response
+                              Immediate Response
 ```
 
 1. Client sends a POST request to `/discovery/scan`
@@ -289,20 +286,31 @@ Backend and worker are managed by Docker Compose
 
 ### Step 1: Build OQS Base Image
 
-Before building the discovery services, you must first build the OQS base image:
+Before building the discovery services, you must first build the OQS base image from the `cafe-infra` repository:
 
 ```bash
-cd cafe-discovery
-docker build -f Dockerfile-oqs -t oqs:dev .
+# Navigate to cafe-infra
+cd ../cafe-infra/oqs
+
+# Build the OQS images (builds both cafe-oqs:build and cafe-oqs:runtime)
+./build.sh
+
+# Tag the build image as oqs:dev for compatibility with cafe-discovery Dockerfiles
+docker tag cafe-oqs:build oqs:dev
+
+# Return to cafe-discovery
+cd ../../cafe-discovery
 ```
 
-This creates the base image `oqs:dev` containing:
-- Open Quantum Safe (OQS) library (liboqs)
-- OpenSSL with oqs-provider
-- Go runtime environment
-- All necessary build tools and dependencies
+This creates the base images containing:
+- `cafe-oqs:build`: Build environment with Open Quantum Safe (OQS) library (liboqs), OpenSSL with oqs-provider, and Go runtime
+- `cafe-oqs:runtime`: Minimal runtime image with OQS support
+- `oqs:dev`: Tagged alias of `cafe-oqs:build` for compatibility
 
-Note: This step only needs to be done once, or when you need to update the OQS libraries.
+**Note**: 
+- The OQS Dockerfile has been moved from `cafe-discovery` to `cafe-infra/oqs`
+- This step only needs to be done once, or when you need to update the OQS libraries
+- For detailed OQS build instructions, see [cafe-infra/oqs/README.md](../cafe-infra/oqs/README.md)
 
 ### Step 2: Start Infrastructure Services
 
@@ -339,14 +347,14 @@ docker-compose up -d cafe-discovery-worker
 
 The services will:
 - Build the Docker images using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
-- These Dockerfiles use `oqs:dev` as the base image
+- These Dockerfiles use `oqs:dev` as the base image (must be built from `cafe-infra/oqs`)
 - Connect to the `cafe-infra_observability` network
 - Use service names for connections (postgres, nats, redis) as configured in `config.yaml`
 - Expose the API server on `http://localhost:8080`
 - Load configuration from `/app/config.yaml` (mounted from `./config.yaml`)
 
 Dockerfile Structure:
-- `Dockerfile-oqs`: Base image with OQS libraries and build tools
+- **OQS Base Image**: Managed in [cafe-infra/oqs](../cafe-infra/oqs/) - builds `cafe-oqs:build` and `cafe-oqs:runtime`, tagged as `oqs:dev` for compatibility
 - `Dockerfile-discovery-backend`: Builds the API server using `oqs:dev` as base
 - `Dockerfile-discovery-worker`: Builds the worker using `oqs:dev` as base
 
