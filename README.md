@@ -141,7 +141,7 @@ The project uses a multi-stage Docker build approach with a shared base image:
 
 Build Order:
 1. First, build the OQS base image from `cafe-infra` (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
-2. Then, build the services: `docker-compose build` (or `docker-compose up --build`)
+2. Then, build the services using Docker Compose: `docker compose build` (or `docker compose up --build`)
 
 ### Data Flow
 
@@ -328,7 +328,7 @@ For information, the infrastructure is as follow:
   - Tempo on port `3200` (distributed tracing)
   - OpenTelemetry Collector on ports `4317` (gRPC) and `4318` (HTTP)
 
-#### Step 3: Start Cafe Discovery Services
+#### Step 3: Build and Start Cafe Discovery Services
 
 From the `cafe-discovery` directory:
 
@@ -337,17 +337,26 @@ From the `cafe-discovery` directory:
 export JWT_SECRET=your-secret-key-here
 export MORALIS_API_KEY=your_api_key_here
 
+# Build the images using Docker Compose
+docker compose build
+
 # Start both server and worker
-docker-compose up -d
+docker compose up -d
+
+# Or build and start in one command
+docker compose up -d --build
 
 # Or start individually
-docker-compose up -d cafe-discovery-backend
-docker-compose up -d cafe-discovery-worker
+docker compose up -d cafe-discovery-backend
+docker compose up -d cafe-discovery-worker
 ```
 
+**Important**: The images are built using Docker Compose, which automatically:
+- Builds the Docker images using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
+- These Dockerfiles use `oqs:dev` as the base image (must be built from `cafe-infra/oqs` in Step 1)
+- Manages the build context and dependencies
+
 The services will:
-- Build the Docker images using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
-- These Dockerfiles use `oqs:dev` as the base image (must be built from `cafe-infra/oqs`)
 - Connect to the `cafe-infra_observability` network
 - Use service names for connections (postgres, nats, redis) as configured in `config.yaml`
 - Expose the API server on `http://localhost:8080`
@@ -361,7 +370,7 @@ Dockerfile Structure:
 Verify services are running:
 ```bash
 # Check container status
-docker-compose ps
+docker compose ps
 
 # Health check
 curl http://localhost:8080/health
@@ -370,13 +379,13 @@ curl http://localhost:8080/health
 curl http://localhost:8080/metrics
 
 # View logs
-docker-compose logs -f cafe-discovery-backend
-docker-compose logs -f cafe-discovery-worker
+docker compose logs -f cafe-discovery-backend
+docker compose logs -f cafe-discovery-worker
 ```
 
 Stop services:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 #### Step 3-bis: start services independently
@@ -507,7 +516,7 @@ After starting all services, verify the complete setup:
 ```bash
 # 1. Check infrastructure services
 cd ../cafe-infra
-docker-compose ps
+docker compose ps
 
 # 2. Check API server
 curl http://localhost:8080/health
@@ -1110,10 +1119,10 @@ Note:
 - On Linux, you may need to use `172.17.0.1:8080` or configure Docker networking
 - For production deployments, use the appropriate service discovery mechanism (DNS, Kubernetes service discovery, etc.)
 
-After updating the Prometheus configuration, rePrometheus:
+After updating the Prometheus configuration, restart Prometheus:
 ```bash
 cd ../cafe-infra
-docker-compose restart prometheus
+docker compose restart prometheus
 ```
 
 Verify Prometheus is scraping the service:
@@ -1174,7 +1183,7 @@ Note: This utility requires a valid Moralis API key to fetch transaction data. T
 To stop all services:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Additional Resources

@@ -57,6 +57,7 @@ WORKDIR /app
 COPY --from=builder /app/worker /app/worker
 
 EXPOSE 8080
+ENTRYPOINT []
 CMD ["./worker"]
 
 
