@@ -15,12 +15,11 @@ import (
 	redisconn "cafe-discovery/pkg/redis"
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
@@ -82,10 +81,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	// Get JWT secret from environment or use default
-	jwtSecret := os.Getenv("JWT_SECRET")
+	// Get JWT secret from Viper (reads from config file or environment variable)
+	jwtSecret := viper.GetString(config.JWTSecret)
 	if jwtSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET environment not set")
+		return nil, fmt.Errorf("JWT_SECRET not set in config file or environment variable")
 	}
 	jwtExpiry := 24 * time.Hour // Token expires in 24 hours
 

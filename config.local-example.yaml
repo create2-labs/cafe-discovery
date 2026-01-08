@@ -1,0 +1,63 @@
+server:
+  host: "0.0.0.0"
+  port: "8080"
+
+# PostgreSQL configuration (for local development, use localhost)
+POSTGRES_HOST: "localhost"
+POSTGRES_PORT: "5432"
+POSTGRES_DATABASE: "cafe"
+POSTGRES_USER: "cafe"
+POSTGRES_PASSWORD: "cafe"
+POSTGRES_SSLMODE: "disable"
+
+# NATS configuration (for local development, use localhost)
+NATS_URL: "nats://localhost:4222"
+
+# Redis configuration (for local development, use localhost)
+REDIS_URL: "redis://localhost:6379"
+
+# JWT configuration (required for authentication)
+# To enforce security, there is no default value for JWT_SECRET: it must explicitly be set.
+# JWT_SECRET: "you-must-set-it"
+
+# Moralis API configuration
+MORALIS_API_KEY: ""
+MORALIS_API_URL: "https://deep-index.moralis.io"
+
+# Cloudflare Turnstile configuration (optional, uses dev keys by default)
+TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
+TURNSTILE_SITE_KEY: "1x00000000000000000AA"
+
+# Logging
+LOG_LEVEL: "debug"
+
+# CORS configuration (can also be set via environment variables: CORS_ALLOW_ORIGINS, CORS_ALLOW_METHODS)
+CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:5173"
+CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+
+JWT_SECRET: "verysecret"
+
+blockchains:
+  - name: ethereum-mainnet
+    rpc: "https://ethereum-rpc.publicnode.com"
+    moralis_chain_name: "eth"
+
+  - name: optimism
+    rpc: "https://optimism-rpc.publicnode.com"
+    moralis_chain_name: "optimism"
+
+  - name: arbitrum-one
+    rpc: "https://arbitrum-one-rpc.publicnode.com"
+    moralis_chain_name: "arbitrum"
+
+  - name: base
+    rpc: "https://base-rpc.publicnode.com"
+    moralis_chain_name: "base"
+
+  - name: bsc
+    rpc: "https://bsc-rpc.publicnode.com"
+    moralis_chain_name: "bsc"
+
+  - name: polygon
+    rpc: "https://polygon-bor-rpc.publicnode.com"
+    moralis_chain_name: "polygon amoy"

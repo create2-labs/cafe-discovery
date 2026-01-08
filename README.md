@@ -282,6 +282,50 @@ Note:
 
 ## Running the Service
 
+### Development Mode (Local, Outside Docker)
+
+To run the backend locally for debugging:
+
+1. **Create a local configuration file** (copy from `config.yaml` and modify for localhost):
+
+```bash
+# Create config.local.yaml with localhost values
+cp config.yaml config.local.yaml
+# Edit config.local.yaml to use localhost instead of Docker service names
+```
+
+Or use the provided `config.local.yaml` template (already created with localhost values).
+
+2. **Ensure infrastructure services are running** (PostgreSQL, NATS, Redis):
+   - Either run them via Docker Compose from `cafe-infra`
+   - Or run them locally on your machine
+
+3. **Set environment variables** (optional, can override config file values):
+
+```bash
+export CONFIG_PATH=config.local.yaml
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export NATS_URL="nats://localhost:4222"
+export REDIS_URL="redis://localhost:6379"
+export JWT_SECRET="your-secret-key-here"
+export MORALIS_API_KEY="your-api-key-here"
+```
+
+4. **Run the server**:
+
+```bash
+CONFIG_PATH=config.local.yaml go run cmd/server/main.go
+```
+
+**Note**: The `CONFIG_PATH` must point to a YAML file (not `.env`). The YAML file contains both:
+- Viper configuration (POSTGRES_HOST, NATS_URL, etc.)
+- Chain configuration (blockchains section)
+
+You can also use environment variables to override any value from the config file (environment variables have highest priority).
+
+### Docker Compose Mode
+
 Backend and worker are managed by Docker Compose
 
 ### Step 1: Build OQS Base Image

@@ -43,6 +43,10 @@ const (
 	TurnstileSecretKey = "TURNSTILE_SECRET_KEY"
 	TurnstileSiteKey   = "TURNSTILE_SITE_KEY"
 
+	// JWT configuration
+	// #nosec G101 -- This is a configuration key name, not a hardcoded credential
+	JWTSecret = "JWT_SECRET"
+
 	defaultProduction         = true
 	defaultPostgreSQLHost     = "127.0.0.1"
 	defaultPostgreSQLPort     = "5432"
@@ -51,7 +55,7 @@ const (
 	defaultPostgreSQLDatabase = "cafe"
 	defaultPostgreSQLSSLMode  = "disable"
 	defaultNATSURL            = "nats://localhost:4222"
-	defaultRedisURL            = "redis://localhost:6379"
+	defaultRedisURL           = "redis://localhost:6379"
 	defaultMoralisAPIKey      = ""
 	defaultMoralisAPIURL      = "https://deep-index.moralis.io"
 	defaultServerHost         = "0.0.0.0"
