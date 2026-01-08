@@ -11,7 +11,7 @@
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/server",
             "env": {
-                "CONFIG_PATH": "${workspaceFolder}/config.yaml",
+                "CONFIG_PATH": "${workspaceFolder}/config.local.yaml",
                 "JWT_SECRET": "dev-secret-key-change-in-production",
                 "SERVER_HOST": "0.0.0.0",
                 "SERVER_PORT": "8080",
