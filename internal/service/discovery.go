@@ -8,8 +8,10 @@ import (
 	"log"
 	"math/big"
 	"strings"
+	"time"
 
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
@@ -49,7 +51,17 @@ func NewDiscoveryService(clients map[string]*evm.Client, moralisClient *moralis.
 }
 
 // ScanWallet scans a wallet address across all configured networks and saves the result for the user
-func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, address string) (*domain.ScanResult, error) {
+func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, address string) (result *domain.ScanResult, err error) {
+	// Record metrics for wallet scan
+	startTime := time.Now()
+	m := metrics.Get()
+	defer func() {
+		duration := time.Since(startTime)
+		// Record success if no error occurred, failure otherwise
+		success := err == nil
+		m.RecordWalletScan(duration, success)
+	}()
+
 	normalizedAddress, err := s.validateAndNormalizeAddress(address)
 	if err != nil {
 		return nil, err
@@ -83,7 +95,7 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		publicKey:   recoveredPublicKey,
 		riskScore:   riskScore,
 	}
-	result := s.buildScanResult(normalizedAddress, scanData, networks)
+	result = s.buildScanResult(normalizedAddress, scanData, networks)
 
 	// Save scan result only if not anonymous (userID != uuid.Nil)
 	// Anonymous users can scan but results are not saved

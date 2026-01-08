@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+README.md
+
+# Docker files (don't need in image)
+docker/
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+coverage/
+*.test
+*.out
+
+# Local config (will be mounted as volume)
+config.yaml
+
+# Native build artifacts
+native/*.o
+native/*.so
+native/tls_pqc_scan
+
+# Landing page (not needed in service)
+cafe-landing/
+
+# CLI tools (not needed in service)
+cmd/cli/
+
+# Test files
+*_test.go
+test/

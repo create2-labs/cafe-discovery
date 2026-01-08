@@ -2,7 +2,7 @@ FROM debian
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-COPY install_oqs_openssl_debian.sh /root/install_oqs_openssl_debian.sh
+COPY scripts/install_oqs_openssl_debian.sh /root/install_oqs_openssl_debian.sh
 
 RUN chmod +x /root/install_oqs_openssl_debian.sh
 

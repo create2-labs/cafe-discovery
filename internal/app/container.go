@@ -4,6 +4,7 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
+	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/middleware"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
@@ -14,12 +15,13 @@ import (
 	redisconn "cafe-discovery/pkg/redis"
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 )
 
@@ -79,10 +81,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	// Get JWT secret from environment or use default
-	jwtSecret := os.Getenv("JWT_SECRET")
+	// Get JWT secret from Viper (reads from config file or environment variable)
+	jwtSecret := viper.GetString(config.JWTSecret)
 	if jwtSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET environment not set")
+		return nil, fmt.Errorf("JWT_SECRET not set in config file or environment variable")
 	}
 	jwtExpiry := 24 * time.Hour // Token expires in 24 hours
 
@@ -112,6 +114,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
+
+	// Initialize Prometheus metrics
+	// This must be called before starting the server to register all metrics
+	metrics.Init()
 
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
@@ -178,6 +184,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Prometheus metrics endpoint (public)
+	// This endpoint exposes metrics in Prometheus format for scraping
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	// Protected routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))

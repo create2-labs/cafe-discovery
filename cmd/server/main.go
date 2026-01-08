@@ -50,15 +50,30 @@ func initLogging() {
 }
 
 func initConfig() {
-
+	// Set defaults first
 	for configName, defaultValue := range config.GetDefaultConfigValues() {
 		viper.SetDefault(configName, defaultValue)
 	}
 
+	// Configure Viper to read from CONFIG_PATH or default location
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
+	// Set config file path and type
+	viper.SetConfigFile(configPath)
+	viper.SetConfigType("yaml")
+
+	// Try to read config file (not found is acceptable, we use defaults and env vars)
 	if err := viper.ReadInConfig(); err != nil {
 		// Config file not found is acceptable, we use defaults and env vars
 		log.Printf("Config file not found, using defaults and environment variables: %v", err)
+	} else {
+		log.Printf("Loaded config from: %s", viper.ConfigFileUsed())
 	}
+
+	// Enable automatic environment variable reading
 	viper.AutomaticEnv()
 }
 

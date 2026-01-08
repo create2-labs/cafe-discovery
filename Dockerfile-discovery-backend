@@ -1,0 +1,60 @@
+##############################
+# Stage 1 — Build (Go + OQS)
+##############################
+FROM cafe-oqs:build AS builder
+
+ARG TARGETARCH
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---- Install Go (BUILD ONLY) ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go manually (multi-arch)
+ENV GO_VERSION=1.25.4
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      amd64)  GO_ARCH=amd64 ;; \
+      arm64)  GO_ARCH=arm64 ;; \
+      *) echo "unsupported arch $TARGETARCH"; exit 1 ;; \
+    esac; \
+    wget -q https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
+    rm go${GO_VERSION}.linux-${GO_ARCH}.tar.gz
+
+ENV PATH=/usr/local/go/bin:$PATH
+ENV CGO_ENABLED=1
+
+# ---- CGO + OQS flags ----
+ENV CGO_CFLAGS="-I/opt/liboqs/include"
+ENV CGO_LDFLAGS="-L/opt/liboqs/lib -loqs -lssl -lcrypto -Wl,-rpath,/opt/liboqs/lib"
+ENV PKG_CONFIG_PATH=/opt/liboqs/lib/pkgconfig
+
+WORKDIR /app
+
+# ---- Go deps ----
+COPY go.mod go.sum ./
+RUN go mod download
+
+# ---- Sources ----
+COPY . .
+
+# ---- Build ----
+RUN go build -o server ./cmd/server/main.go
+
+
+##############################
+# Stage 2 — Runtime 
+##############################
+FROM cafe-oqs:runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/server /app/server
+
+EXPOSE 8080
+ENTRYPOINT ["./server"]
