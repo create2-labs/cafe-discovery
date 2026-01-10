@@ -18,6 +18,7 @@ type DefaultEndpoint struct {
 // DefaultEndpoints is the list of endpoints to scan at application startup
 // if they are not already in the database
 var DefaultEndpoints = []DefaultEndpoint{
+	{URL: "https://nginx", Default: true, Comment: "Cafe Discovery"},
 	{URL: "https://test.openquantumsafe.org", Default: true, Comment: "OpenQuantum Safe Test"},
 	{URL: "https://test.openquantumsafe.org:6001", Default: true, Comment: "OpenQuantum Safe Test - Hybrid SecP256r1MLKEM768"},
 	{URL: "https://test.openquantumsafe.org:6002", Default: true, Comment: "OpenQuantum Safe Test - Hybrid SecP384r1MLKEM1024"},
