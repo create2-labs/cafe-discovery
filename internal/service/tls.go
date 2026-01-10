@@ -139,19 +139,54 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		result.PFS = s.hasPFSFromCipherName(cipherName)
 	}
 
-	// Update overall NIST level if PQC scan provides better information
+	// Update risk score with PFS and OCSP information if not already updated by PQC scan
+	if info.PQCInfo == nil || info.PQCInfo.NISTLevels == nil {
+		result.RiskScore = s.calculateTLSRiskScore(
+			certLevel,
+			cipherSuites,
+			protocolVersionStr,
+			result.PFS,
+			result.OCSPStapled,
+			result.KexPQCReady,
+			result.PQCMode == "hybrid" || result.PQCMode == "pure",
+			nil,
+		)
+	}
+
+	// Update overall NIST level using all available information
+	// Take the minimum (worst) level from certificate, cipher suites, and detailed levels
 	if info.PQCInfo != nil && info.PQCInfo.NISTLevels != nil {
-		// Use the worst NIST level from all components
-		if kexLevel, ok := info.PQCInfo.NISTLevels["kex"]; ok && domain.NISTLevel(kexLevel) < overallLevel {
-			overallLevel = domain.NISTLevel(kexLevel)
-		}
-		if sigLevel, ok := info.PQCInfo.NISTLevels["sig"]; ok && domain.NISTLevel(sigLevel) < overallLevel {
-			overallLevel = domain.NISTLevel(sigLevel)
-		}
-		if cipherLevel, ok := info.PQCInfo.NISTLevels["cipher"]; ok && domain.NISTLevel(cipherLevel) < overallLevel {
-			overallLevel = domain.NISTLevel(cipherLevel)
+		// Check all detailed NIST levels and take the minimum
+		for _, level := range info.PQCInfo.NISTLevels {
+			if domain.NISTLevel(level) < overallLevel {
+				overallLevel = domain.NISTLevel(level)
+			}
 		}
 		result.NISTLevel = overallLevel
+
+		// Recalculate risk score with detailed NIST levels and updated PQC info
+		result.RiskScore = s.calculateTLSRiskScore(
+			certLevel,
+			cipherSuites,
+			protocolVersionStr,
+			result.PFS,
+			result.OCSPStapled,
+			result.KexPQCReady,
+			result.PQCMode == "hybrid" || result.PQCMode == "pure",
+			info.PQCInfo.NISTLevels,
+		)
+
+		// Regenerate recommendations with updated information
+		result.Recommendations = s.generateRecommendations(
+			certInfo,
+			cipherSuites,
+			overallLevel,
+			protocolVersionStr,
+			result.PFS,
+			result.OCSPStapled,
+			result.KexPQCReady,
+			result.PQCMode == "hybrid" || result.PQCMode == "pure",
+		)
 	}
 
 	// Update PQC risk based on real PQC detection
@@ -306,27 +341,57 @@ func (s *TLSService) calculateTLSRiskScore(
 	detailedNISTLevels map[string]int,
 ) float64 {
 	// 1. Base risk from NIST levels (40% weight)
-	// Use detailed NIST levels if available, otherwise use certificate level
+	// Use weighted average of all components to better reflect overall security
+	// Critical components (certificate/signature) have more weight
 	var worstNISTLevel domain.NISTLevel = certLevel
+	var avgNISTLevel float64 = float64(certLevel)
+	var componentCount float64 = 1.0
+
 	if len(detailedNISTLevels) > 0 {
-		// Find the worst level from all components
-		for _, level := range detailedNISTLevels {
-			if domain.NISTLevel(level) < worstNISTLevel {
-				worstNISTLevel = domain.NISTLevel(level)
+		// Find the worst level and calculate weighted average
+		// Certificate/signature are critical (weight 2x), others are standard (weight 1x)
+		for key, level := range detailedNISTLevels {
+			nistLevel := domain.NISTLevel(level)
+			if nistLevel < worstNISTLevel {
+				worstNISTLevel = nistLevel
 			}
+
+			// Weight critical components more heavily
+			weight := 1.0
+			if key == "sig" || key == "certificate" {
+				weight = 2.0 // Certificate and signature are critical
+			}
+
+			avgNISTLevel += float64(nistLevel) * weight
+			componentCount += weight
 		}
+
+		// Calculate weighted average
+		avgNISTLevel = avgNISTLevel / componentCount
 	} else {
 		// Fallback: check cipher suites if no detailed levels
 		for _, cs := range cipherSuites {
 			if cs.NISTLevel < worstNISTLevel {
 				worstNISTLevel = cs.NISTLevel
 			}
+			avgNISTLevel += float64(cs.NISTLevel)
+			componentCount += 1.0
 		}
+		avgNISTLevel = avgNISTLevel / componentCount
+	}
+
+	// Use weighted average for risk calculation, but cap at worst level
+	// This reflects that one weak component doesn't make everything weak,
+	// but the worst component still matters significantly
+	effectiveLevel := avgNISTLevel
+	if float64(worstNISTLevel) < effectiveLevel {
+		// If worst level is significantly lower, blend it in (30% worst, 70% average)
+		effectiveLevel = 0.3*float64(worstNISTLevel) + 0.7*effectiveLevel
 	}
 
 	// NIST level to risk: Level 1 = 1.0, Level 5 = 0.0
 	// Linear mapping: risk = 1.0 - ((level - 1) / 4)
-	baseRisk := 1.0 - ((float64(worstNISTLevel) - 1.0) / 4.0)
+	baseRisk := 1.0 - ((effectiveLevel - 1.0) / 4.0)
 	if baseRisk < 0.0 {
 		baseRisk = 0.0
 	}

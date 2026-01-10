@@ -656,6 +656,83 @@ For more details, see [docs/PQC_JWT.md](docs/PQC_JWT.md).
 
 The service can scan TLS endpoints to detect post-quantum certificate support. You can generate PQC certificates for testing using the provided tools.
 
+#### Understanding NIST Security Levels and Risk Scores
+
+The TLS scanning service evaluates endpoints using **NIST quantum-security levels** and calculates a comprehensive **risk score** to assess overall security posture.
+
+##### NIST Security Levels
+
+NIST levels range from 1 (quantum-broken) to 5 (PQC-ready):
+
+- **Level 1**: Quantum-broken - Vulnerable to quantum computer attacks (e.g., RSA, ECDSA)
+- **Level 2**: Low quantum resistance
+- **Level 3**: Moderate quantum resistance (e.g., Ed25519, TLS 1.3 with classical crypto)
+- **Level 4**: High quantum resistance
+- **Level 5**: PQC-ready - Post-quantum cryptography ready (e.g., ML-KEM, Dilithium)
+
+The service evaluates multiple components:
+- **Certificate**: Signature algorithm and public key algorithm
+- **Key Exchange (KEX)**: Key exchange method (e.g., X25519, ML-KEM)
+- **Signature**: Signature algorithm used in handshake
+- **Cipher**: Encryption cipher suite
+- **HKDF**: Key derivation function
+- **Session**: Session management
+
+##### Overall NIST Level Calculation
+
+The **overall NIST level** displayed represents the **worst (minimum) level** across all components:
+
+```
+Overall NIST Level = min(certificate, kex, sig, cipher, hkdf, session)
+```
+
+**Why the minimum?** Security is only as strong as the weakest component. If the certificate is Level 1 but key exchange is Level 5, an attacker can still exploit the weak certificate.
+
+**Example:**
+- Certificate: Level 1 (ECDSA-SHA384 - quantum-vulnerable)
+- Key Exchange: Level 3 (X25519MLKEM768 - hybrid PQC)
+- Signature: Level 3
+- Cipher: Level 5
+- HKDF: Level 3
+- Session: Level 5
+
+**Overall NIST Level: 1** (because the certificate is the weakest link)
+
+##### Risk Score Calculation
+
+The **risk score** (0.0 to 1.0, where 1.0 = highest risk) uses a **weighted average** approach to better reflect overall security:
+
+**Components:**
+1. **Base Risk (40% weight)**: Uses a weighted average of all NIST levels
+   - Critical components (certificate, signature) have 2x weight
+   - Other components (kex, cipher, hkdf, session) have 1x weight
+   - Blends worst level (30%) with average (70%) to reflect that one weak component matters but doesn't dominate
+
+2. **Cipher Suite Risk (25% weight)**: Based on weakest cipher suite
+
+3. **Protocol Risk (15% weight)**: TLS 1.3 = 0.0, TLS 1.2 = 0.3, older = 0.8
+
+4. **Security Features (10% weight)**: PFS and OCSP stapling reduce risk
+
+5. **PQC Readiness (10% weight)**: PQC support significantly reduces quantum risk
+
+**Why weighted average?** While the overall NIST level correctly identifies the weakest component, the risk score reflects that having strong components (Level 3-5) in most areas reduces overall risk compared to having everything at Level 1.
+
+**Example (same endpoint as above):**
+- Certificate: Level 1
+- Other components: Level 3-5
+- Protocol: TLS 1.3
+- PFS: Enabled
+- PQC Mode: Hybrid
+
+**Risk Score: ~0.35 (35%)** - Moderate risk due to weak certificate, but mitigated by strong other components and PQC support.
+
+**Interpretation:**
+- **0.0-0.2 (0-20%)**: Low risk - Well configured, PQC-ready
+- **0.2-0.4 (20-40%)**: Moderate risk - Mostly secure with some weaknesses
+- **0.4-0.7 (40-70%)**: High risk - Significant security concerns
+- **0.7-1.0 (70-100%)**: Critical risk - Immediate action required
+
 #### Generating PQC Certificates
 
 Quick method with script:
