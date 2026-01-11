@@ -733,6 +733,44 @@ The **risk score** (0.0 to 1.0, where 1.0 = highest risk) uses a **weighted aver
 - **0.4-0.7 (40-70%)**: High risk - Significant security concerns
 - **0.7-1.0 (70-100%)**: Critical risk - Immediate action required
 
+##### Understanding "N/A" in Detailed NIST Levels
+
+When you see **"N/A"** or **"Estimated"** for Detailed NIST Security Levels, it means:
+
+1. **PQC Scan Not Available**: The endpoint does not support post-quantum cryptography extensions, or the PQC scan (OQS/OpenSSL) could not be performed.
+
+2. **Estimated Values**: The frontend will display estimated levels based on:
+   - **Signature**: Uses the certificate's NIST level
+   - **Cipher**: Uses the worst cipher suite's NIST level
+   - **Key Exchange**: Estimated based on protocol version (TLS 1.3 = Level 3, older = Level 1) and PQC readiness
+   - **HKDF/Session**: Estimated based on protocol version (TLS 1.3 = Level 3)
+
+3. **Why This Happens**: 
+   - Most endpoints don't yet support PQC extensions
+   - The detailed component-level analysis requires PQC-capable scanning
+   - Classical TLS scans only provide certificate and cipher suite information
+
+**Example Scenario:**
+```
+NIST Security Level: Level 1 (from certificate)
+Detailed NIST Levels: All N/A (PQC scan unavailable)
+Risk Score: 66%
+
+Explanation:
+- Certificate is Level 1 (ECDSA-SHA256 - quantum-vulnerable)
+- Cipher suite is Level 3 (TLS_AES_128_GCM_SHA256 - TLS 1.3)
+- Protocol is TLS 1.3 (good)
+- OCSP Stapling enabled (good)
+- But certificate weakness dominates, resulting in:
+  - Overall NIST Level = 1 (worst component)
+  - Risk Score = 66% (weighted average, but certificate has high weight)
+```
+
+**To Get Accurate Detailed Levels:**
+- The endpoint must support post-quantum cryptography extensions
+- The server must be configured with PQC algorithms (ML-KEM, Dilithium, etc.)
+- The scan must successfully connect using OQS/OpenSSL with PQC support
+
 #### Generating PQC Certificates
 
 Quick method with script:
