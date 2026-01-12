@@ -51,6 +51,7 @@ type ScanResult struct {
 	RiskScore   float64     `json:"risk_score"`
 	FirstSeen   *time.Time  `json:"first_seen,omitempty"`
 	LastSeen    *time.Time  `json:"last_seen,omitempty"`
+	ScannedAt   time.Time   `json:"scanned_at"`
 	Networks    []string    `json:"networks"`
 	Connections []string    `json:"connections"`
 }
@@ -80,15 +81,15 @@ type TLSScanResult struct {
 	Recommendations []string          `json:"recommendations,omitempty"`
 	ScannedAt       time.Time         `json:"scanned_at"`
 	// PQC-specific information from OQS/OpenSSL scan
-	KexAlgorithm    string            `json:"kex_algorithm,omitempty"`    // Key exchange algorithm (group)
-	KexPQCReady     bool              `json:"kex_pqc_ready,omitempty"`   // Whether KEX uses PQC
-	PQCMode         string            `json:"pqc_mode,omitempty"`        // "classical", "hybrid", "pure"
-	PFS             bool              `json:"pfs,omitempty"`             // Perfect Forward Secrecy
-	ALPN            string            `json:"alpn,omitempty"`            // Application-Layer Protocol Negotiation
-	OCSPStapled     bool              `json:"ocsp_stapled,omitempty"`    // OCSP stapling
-	Curve           string            `json:"curve,omitempty"`            // ECDSA curve name
-	NISTLevels      map[string]int   `json:"nist_levels,omitempty"`     // Detailed NIST levels (kex, sig, cipher, hkdf, session)
-	Default         bool              `json:"default,omitempty"`           // Whether this is a default endpoint
+	KexAlgorithm string         `json:"kex_algorithm,omitempty"` // Key exchange algorithm (group)
+	KexPQCReady  bool           `json:"kex_pqc_ready,omitempty"` // Whether KEX uses PQC
+	PQCMode      string         `json:"pqc_mode,omitempty"`      // "classical", "hybrid", "pure"
+	PFS          bool           `json:"pfs,omitempty"`           // Perfect Forward Secrecy
+	ALPN         string         `json:"alpn,omitempty"`          // Application-Layer Protocol Negotiation
+	OCSPStapled  bool           `json:"ocsp_stapled,omitempty"`  // OCSP stapling
+	Curve        string         `json:"curve,omitempty"`         // ECDSA curve name
+	NISTLevels   map[string]int `json:"nist_levels,omitempty"`   // Detailed NIST levels (kex, sig, cipher, hkdf, session)
+	Default      bool           `json:"default,omitempty"`       // Whether this is a default endpoint
 }
 
 // CertificateInfo represents TLS certificate information

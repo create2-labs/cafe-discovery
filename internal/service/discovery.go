@@ -35,6 +35,7 @@ type scanResultData struct {
 	algorithm   domain.Algorithm
 	nistLevel   domain.NISTLevel
 	keyExposed  bool
+	isEOA       bool
 	isERC4337   bool
 	publicKey   string
 	riskScore   float64
@@ -86,11 +87,21 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 	accountType, algorithm, nistLevel := s.determineAccountType(networkResults)
 	riskScore := s.calculateRiskScore(networkResults, accountType, nistLevel)
 
+	// Determine if address is EOA (all networks show EOA)
+	isEOA := true
+	for _, result := range networkResults {
+		if !result.IsEOA {
+			isEOA = false
+			break
+		}
+	}
+
 	scanData := scanResultData{
 		accountType: accountType,
 		algorithm:   algorithm,
 		nistLevel:   nistLevel,
 		keyExposed:  keyExposed,
+		isEOA:       isEOA,
 		isERC4337:   isERC4337,
 		publicKey:   recoveredPublicKey,
 		riskScore:   riskScore,
@@ -198,8 +209,10 @@ func (s *DiscoveryService) buildScanResult(address string, data scanResultData, 
 		NISTLevel:   data.nistLevel,
 		KeyExposed:  data.keyExposed,
 		PublicKey:   data.publicKey,
+		IsEOA:       data.isEOA,
 		IsERC4337:   data.isERC4337,
 		RiskScore:   data.riskScore,
+		ScannedAt:   time.Now(),
 		Networks:    networks,
 		Connections: []string{},
 	}
