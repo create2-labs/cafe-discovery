@@ -671,12 +671,19 @@ NIST levels range from 1 (quantum-broken) to 5 (PQC-ready):
 - **Level 5**: PQC-ready - Post-quantum cryptography ready (e.g., ML-KEM, Dilithium)
 
 The service evaluates multiple components:
-- **Certificate**: Signature algorithm and public key algorithm
-- **Key Exchange (KEX)**: Key exchange method (e.g., X25519, ML-KEM)
-- **Signature**: Signature algorithm used in handshake
-- **Cipher**: Encryption cipher suite
-- **HKDF**: Key derivation function
-- **Session**: Session management
+- **Certificate**: Signature algorithm and public key algorithm of the X.509 certificate
+- **Key Exchange (KEX)**: Key exchange method used during TLS handshake (e.g., X25519, ML-KEM, ECDHE)
+- **Signature**: Signature algorithm used during TLS handshake (may differ from certificate signature)
+- **Cipher**: Encryption cipher suite negotiated (e.g., TLS_AES_256_GCM_SHA384)
+- **HKDF**: Key derivation function used for key derivation
+- **Session**: Session management and resumption mechanisms
+
+**Important Distinction:**
+- **Certificate NIST Level**: Based on the certificate's signature algorithm (e.g., ECDSA-SHA256 = Level 1)
+- **Detailed NIST Levels**: Based on the actual TLS handshake and protocol components
+  - These are **independent** of the certificate (except Signature which may use the certificate)
+  - Key Exchange, Cipher, HKDF, and Session are **not related** to the certificate
+  - They reflect the actual cryptographic algorithms used during the TLS connection
 
 ##### Overall NIST Level Calculation
 
@@ -753,18 +760,26 @@ When you see **"N/A"** or **"Estimated"** for Detailed NIST Security Levels, it 
 **Example Scenario:**
 ```
 NIST Security Level: Level 1 (from certificate)
-Detailed NIST Levels: All N/A (PQC scan unavailable)
+Detailed NIST Levels: 
+  - Key Exchange: Level 3 (X25519 - TLS 1.3)
+  - Signature: Level 3 (ECDSA from certificate)
+  - Cipher: Level 5 (TLS_AES_256_GCM_SHA384)
+  - HKDF: Level 3 (TLS 1.3 key derivation)
+  - Session: Level 5 (TLS 1.3 session management)
 Risk Score: 66%
 
 Explanation:
 - Certificate is Level 1 (ECDSA-SHA256 - quantum-vulnerable)
-- Cipher suite is Level 3 (TLS_AES_128_GCM_SHA256 - TLS 1.3)
+- Key Exchange is Level 3 (X25519 - independent of certificate)
+- Cipher suite is Level 5 (TLS_AES_256_GCM_SHA384 - independent of certificate)
 - Protocol is TLS 1.3 (good)
 - OCSP Stapling enabled (good)
 - But certificate weakness dominates, resulting in:
-  - Overall NIST Level = 1 (worst component)
-  - Risk Score = 66% (weighted average, but certificate has high weight)
+  - Overall NIST Level = 1 (worst component = certificate)
+  - Risk Score = 66% (weighted average, certificate has high weight but other components reduce risk)
 ```
+
+**Key Point:** The detailed NIST levels (KEX, Cipher, HKDF, Session) are **NOT related to the certificate**. They reflect the actual TLS protocol components used during the connection. Only the **Signature** level may be related to the certificate if the certificate's signature algorithm is used during the handshake.
 
 **To Get Accurate Detailed Levels:**
 - The endpoint must support post-quantum cryptography extensions

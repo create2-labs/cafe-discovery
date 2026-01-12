@@ -31,13 +31,16 @@ type DiscoveryService struct {
 
 // scanResultData holds the data needed to build a scan result
 type scanResultData struct {
-	accountType domain.AccountType
-	algorithm   domain.Algorithm
-	nistLevel   domain.NISTLevel
-	keyExposed  bool
-	isERC4337   bool
-	publicKey   string
-	riskScore   float64
+	accountType     domain.AccountType
+	algorithm       domain.Algorithm
+	nistLevel       domain.NISTLevel
+	keyExposed      bool
+	isEOA           bool
+	isERC4337       bool
+	publicKey       string
+	transactionHash string
+	exposedNetwork  string
+	riskScore       float64
 }
 
 // NewDiscoveryService creates a new discovery service
@@ -81,19 +84,31 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		return nil, err
 	}
 
-	networkResults, networks, recoveredPublicKey := s.scanAllNetworks(ctx, normalizedAddress)
+	networkResults, networks, recoveredPublicKey, transactionHash, exposedNetwork := s.scanAllNetworks(ctx, normalizedAddress)
 	keyExposed, isERC4337 := s.extractKeyExposureInfo(networkResults)
 	accountType, algorithm, nistLevel := s.determineAccountType(networkResults)
 	riskScore := s.calculateRiskScore(networkResults, accountType, nistLevel)
 
+	// Determine if address is EOA (all networks show EOA)
+	isEOA := true
+	for _, result := range networkResults {
+		if !result.IsEOA {
+			isEOA = false
+			break
+		}
+	}
+
 	scanData := scanResultData{
-		accountType: accountType,
-		algorithm:   algorithm,
-		nistLevel:   nistLevel,
-		keyExposed:  keyExposed,
-		isERC4337:   isERC4337,
-		publicKey:   recoveredPublicKey,
-		riskScore:   riskScore,
+		accountType:     accountType,
+		algorithm:       algorithm,
+		nistLevel:       nistLevel,
+		keyExposed:      keyExposed,
+		isEOA:           isEOA,
+		isERC4337:       isERC4337,
+		publicKey:       recoveredPublicKey,
+		transactionHash: transactionHash,
+		exposedNetwork:  exposedNetwork,
+		riskScore:       riskScore,
 	}
 	result = s.buildScanResult(normalizedAddress, scanData, networks)
 
@@ -147,10 +162,12 @@ func (s *DiscoveryService) checkPlanLimits(userID uuid.UUID) error {
 }
 
 // scanAllNetworks scans the address across all configured networks
-func (s *DiscoveryService) scanAllNetworks(ctx context.Context, address string) ([]domain.NetworkResult, []string, string) {
+func (s *DiscoveryService) scanAllNetworks(ctx context.Context, address string) ([]domain.NetworkResult, []string, string, string, string) {
 	var networks []string
 	var networkResults []domain.NetworkResult
 	var recoveredPublicKey string
+	var transactionHash string
+	var exposedNetwork string
 
 	for networkName, client := range s.clients {
 		result, err := s.scanNetwork(ctx, client, networkName, address)
@@ -162,14 +179,21 @@ func (s *DiscoveryService) scanAllNetworks(ctx context.Context, address string) 
 
 		if recoveredPublicKey == "" && result.PublicKey != "" {
 			recoveredPublicKey = result.PublicKey
+			transactionHash = result.TransactionHash
+			exposedNetwork = networkName
 		}
 
 		if result.IsKeyExposed {
 			networks = append(networks, networkName)
+			// Use the first network where key is exposed for transaction hash
+			if transactionHash == "" && result.TransactionHash != "" {
+				transactionHash = result.TransactionHash
+				exposedNetwork = networkName
+			}
 		}
 	}
 
-	return networkResults, networks, recoveredPublicKey
+	return networkResults, networks, recoveredPublicKey, transactionHash, exposedNetwork
 }
 
 // extractKeyExposureInfo extracts key exposure and ERC4337 information from network results
@@ -192,16 +216,20 @@ func (s *DiscoveryService) extractKeyExposureInfo(networkResults []domain.Networ
 // buildScanResult constructs a ScanResult from the collected information
 func (s *DiscoveryService) buildScanResult(address string, data scanResultData, networks []string) *domain.ScanResult {
 	return &domain.ScanResult{
-		Address:     address,
-		Type:        data.accountType,
-		Algorithm:   data.algorithm,
-		NISTLevel:   data.nistLevel,
-		KeyExposed:  data.keyExposed,
-		PublicKey:   data.publicKey,
-		IsERC4337:   data.isERC4337,
-		RiskScore:   data.riskScore,
-		Networks:    networks,
-		Connections: []string{},
+		Address:         address,
+		Type:            data.accountType,
+		Algorithm:       data.algorithm,
+		NISTLevel:       data.nistLevel,
+		KeyExposed:      data.keyExposed,
+		PublicKey:       data.publicKey,
+		TransactionHash: data.transactionHash,
+		ExposedNetwork:  data.exposedNetwork,
+		IsEOA:           data.isEOA,
+		IsERC4337:       data.isERC4337,
+		RiskScore:       data.riskScore,
+		ScannedAt:       time.Now(),
+		Networks:        networks,
+		Connections:     []string{},
 	}
 }
 
@@ -240,7 +268,7 @@ func (s *DiscoveryService) ListScanResults(ctx context.Context, userID uuid.UUID
 
 // scanNetwork scans a single network for the given address
 func (s *DiscoveryService) scanNetwork(ctx context.Context, client *evm.Client, networkName string, address string) (*domain.NetworkResult, error) {
-	publicKey := s.tryRecoverPublicKeyFromMoralis(ctx, client, address, networkName)
+	publicKey, txHash := s.tryRecoverPublicKeyFromMoralis(ctx, client, address, networkName)
 
 	code, err := client.GetCode(ctx, address, "latest")
 	if err != nil {
@@ -264,38 +292,40 @@ func (s *DiscoveryService) scanNetwork(ctx context.Context, client *evm.Client, 
 		IsKeyExposed:     isKeyExposed,
 		TransactionCount: txCount,
 		PublicKey:        publicKey,
+		TransactionHash:  txHash,
 	}, nil
 }
 
 // tryRecoverPublicKeyFromMoralis attempts to recover the public key using Moralis transaction data
-func (s *DiscoveryService) tryRecoverPublicKeyFromMoralis(ctx context.Context, client *evm.Client, address, networkName string) string {
+// Returns the public key and the transaction hash
+func (s *DiscoveryService) tryRecoverPublicKeyFromMoralis(ctx context.Context, client *evm.Client, address, networkName string) (string, string) {
 	if s.moralisClient == nil || client.MoralisChainName == "" {
-		return ""
+		return "", ""
 	}
 
 	moralisTxs, err := s.moralisClient.GetTransactionsByAddress(address, client.MoralisChainName)
 	if err != nil || len(moralisTxs) == 0 {
-		return ""
+		return "", ""
 	}
 
 	txHash := moralisTxs[0].Hash
 	if txHash == "" {
-		return ""
+		return "", ""
 	}
 
 	log.Println("txHash", txHash, "address", address, "networkName", networkName)
 	txData, err := client.GetTransactionByHash(ctx, txHash)
 	if err != nil || txData == nil {
-		return ""
+		return "", ""
 	}
 
 	log.Println("txData", string(txData))
 	recoveredKey, _, err := s.RecoverPublicKeyFromTransactionData(ctx, client, txData, txHash)
 	if err != nil || recoveredKey == "" {
-		return ""
+		return "", ""
 	}
 
-	return recoveredKey
+	return recoveredKey, txHash
 }
 
 // checkERC4337Support checks if a contract implements ERC-4337 (only for contracts, not EOAs)

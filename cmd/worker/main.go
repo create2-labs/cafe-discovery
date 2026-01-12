@@ -53,7 +53,7 @@ func initLogging() {
 	}
 
 	zerolog.SetGlobalLevel(level)
-	
+
 	// Use console writer for better readability
 	output := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"}
 	logger := zerolog.New(output).With().Timestamp().Logger()
@@ -148,6 +148,7 @@ func main() {
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
 	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
+	redisWalletScanRepo := repository.NewRedisWalletScanRepository(redisConn)
 	userRepo := repository.NewUserRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -160,6 +161,7 @@ func main() {
 
 	// Initialize workers
 	walletWorker := worker.NewWalletWorker(discoveryService, natsConn)
+	walletAnonymousWorker := worker.NewWalletAnonymousWorker(discoveryService, redisWalletScanRepo, natsConn)
 	tlsWorker := worker.NewTLSWorker(tlsService, natsConn)
 	tlsAnonymousWorker := worker.NewTLSAnonymousWorker(tlsService, redisTLSScanRepo, natsConn)
 
@@ -170,6 +172,10 @@ func main() {
 	// Start workers
 	if err := walletWorker.Start(ctx); err != nil {
 		log.Fatalf("Failed to start wallet worker: %v", err)
+	}
+
+	if err := walletAnonymousWorker.Start(ctx); err != nil {
+		log.Fatalf("Failed to start wallet anonymous worker: %v", err)
 	}
 
 	if err := tlsWorker.Start(ctx); err != nil {
