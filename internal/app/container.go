@@ -93,6 +93,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
 	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
+	redisWalletScanRepo := repository.NewRedisWalletScanRepository(redisConn)
 	cafeWalletRepo := repository.NewCafeWalletRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -109,7 +110,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
 	// Initialize handlers
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, redisWalletScanRepo, planService)
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, tlsScanResultRepo, planService, redisTLSScanRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
@@ -196,7 +197,8 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	api.Get("/rpcs", discoveryHandler.ListRPCs)
 	api.Get("/scans", discoveryHandler.ListScans)
 	api.Get("/tls/scans", tlsHandler.ListScans)
-	api.Get("/tls/scans/anonymous", tlsHandler.ListAnonymousScans) // Route for anonymous scans from Redis
+	api.Get("/tls/scans/anonymous", tlsHandler.ListAnonymousScans)   // Route for anonymous TLS scans from Redis
+	api.Get("/scans/anonymous", discoveryHandler.ListAnonymousScans) // Route for anonymous wallet scans from Redis
 
 	// Wallet management routes
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))

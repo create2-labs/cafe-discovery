@@ -6,6 +6,7 @@ import "github.com/google/uuid"
 type WalletScanMessage struct {
 	UserID  uuid.UUID `json:"user_id"`
 	Address string    `json:"address"`
+	Token   string    `json:"token,omitempty"` // JWT token for anonymous users (to create unique Redis keys)
 }
 
 // TLSScanMessage represents a TLS scan request message
