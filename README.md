@@ -884,8 +884,9 @@ The token is a hybrid PQC JWT (base64url-encoded JWS JSON General Serialization 
 
 ### POST /discovery/scan
 
-Scans a wallet address across all configured networks. Requires authentication. The scan is processed asynchronously via NATS.
+Unified scan endpoint that automatically detects whether the request is for a wallet scan or TLS endpoint scan. Requires authentication. The scan is processed asynchronously via NATS.
 
+**For Wallet Scans:**
 Request:
 ```json
 {
@@ -898,13 +899,34 @@ Response:
 {
   "message": "scan queued successfully",
   "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  "type": "wallet",
   "status": "processing"
 }
 ```
 
+**For TLS Endpoint Scans:**
+Request:
+```json
+{
+  "url": "https://example.com"
+}
+```
+
+Response:
+```json
+{
+  "message": "scan queued successfully",
+  "endpoint": "https://example.com",
+  "type": "tls",
+  "status": "processing"
+}
+```
+
+Note: The endpoint automatically detects the scan type based on the provided field (`address` for wallets, `url` for TLS endpoints). You cannot specify both fields in the same request.
+
 ### GET /discovery/scans
 
-Returns paginated list of wallet scan results for the authenticated user.
+Returns paginated list of CBOMs (Cryptographic Bill of Materials) for wallet scans for the authenticated user.
 
 Query Parameters:
 - `limit` (optional): Number of results per page (default: 20)
@@ -923,7 +945,21 @@ Response:
       "risk_score": 0.85,
       "first_seen": "2025-03-10T15:22:00Z",
       "last_seen": "2025-10-16T08:10:00Z",
-      "networks": ["ethereum-mainnet", "polygon"]
+      "networks": ["ethereum-mainnet", "polygon"],
+      "scanned_at": "2025-01-15T10:30:00Z",
+      "cbom": {
+        "version": "1.0",
+        "type": "wallet",
+        "components": [
+          {
+            "type": "cryptographic-primitive",
+            "name": "ECDSA-secp256k1",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "key_exposed": true
+          }
+        ]
+      }
     }
   ],
   "total": 1,
@@ -933,7 +969,131 @@ Response:
 }
 ```
 
+Note: Each result is a CBOM (Cryptographic Bill of Materials) that includes both the scan data and the structured `cbom.components` array describing the cryptographic primitives.
+
+### GET /discovery/cbom/*
+
+Returns a CBOM (Cryptographic Bill of Materials) JSON record for a wallet address or TLS endpoint. Automatically detects the type based on the parameter format. Requires authentication.
+
+Path Parameters:
+- `*`: Either:
+  - Ethereum wallet address (EOA) in hex format (e.g., `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb`)
+  - TLS endpoint URL (e.g., `https://example.com` or URL-encoded `https%3A%2F%2Fexample.com`)
+
+**For Wallet Addresses:**
+
+Response:
+```json
+{
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "type": "EOA",
+  "algorithm": "ECDSA-secp256k1",
+  "nist_level": 1,
+  "key_exposed": true,
+  "risk_score": 0.85,
+  "first_seen": "2025-03-10T15:22:00Z",
+  "last_seen": "2025-10-16T08:10:00Z",
+  "networks": ["ethereum-mainnet", "polygon"],
+  "scanned_at": "2025-01-15T10:30:00Z",
+  "cbom": {
+    "version": "1.0",
+    "type": "wallet",
+    "components": [
+      {
+        "type": "cryptographic-primitive",
+        "name": "ECDSA-secp256k1",
+        "nist_level": 1,
+        "quantum_vulnerable": true,
+        "key_exposed": true
+      }
+    ]
+  }
+}
+```
+
+**For TLS Endpoints:**
+
+Response:
+```json
+{
+  "url": "https://example.com",
+  "host": "example.com",
+  "port": 443,
+  "protocol": "TLS 1.3",
+  "nist_level": 1,
+  "risk_score": 0.75,
+  "pqc_risk": "critical",
+  "pqc_mode": "classical",
+  "supported_pqc": [],
+  "recommendations": ["Upgrade to PQC certificates"],
+  "scanned_at": "2025-01-15T10:30:00Z",
+  "certificate": {
+    "subject": "CN=example.com",
+    "issuer": "CN=Let's Encrypt",
+    "signature_algorithm": "ECDSA-secp256r1",
+    "nist_level": 1,
+    "is_pqc_ready": false
+  },
+  "cipher_suites": [...],
+  "kex_algorithm": "X25519",
+  "kex_pqc_ready": false,
+  "pfs": true,
+  "ocsp_stapled": true,
+  "nist_levels": {
+    "kex": 1,
+    "sig": 1,
+    "cipher": 1
+  },
+  "cbom": {
+    "version": "1.0",
+    "type": "tls-endpoint",
+    "components": [
+      {
+        "type": "certificate",
+        "subject": "CN=example.com",
+        "nist_level": 1,
+        "quantum_vulnerable": true
+      },
+      {
+        "type": "key-exchange",
+        "algorithm": "X25519",
+        "pqc_ready": false,
+        "nist_level": 1
+      },
+      {
+        "type": "cipher-suite",
+        "name": "TLS_AES_256_GCM_SHA384",
+        "nist_level": 1
+      }
+    ]
+  }
+}
+```
+
+Examples:
+```bash
+# Wallet address (via nginx HTTPS)
+curl -k https://localhost/api/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
+  -H "Authorization: Bearer $TOKEN"
+
+# Wallet address (directly to backend)
+curl http://cafe-discovery-backend:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
+  -H "Authorization: Bearer $TOKEN"
+
+# TLS endpoint (URL-encoded in path)
+curl -k "https://localhost/api/discovery/cbom/https%3A%2F%2Fexample.com" \
+  -H "Authorization: Bearer $TOKEN"
+
+# TLS endpoint (directly to backend, URL-encoded)
+curl "http://cafe-discovery-backend:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Note: For TLS endpoints, the URL must be URL-encoded when passed as a path parameter. The endpoint automatically detects whether the parameter is a wallet address (starts with `0x`) or a URL (starts with `http://` or `https://`).
+
 ### POST /discovery/tls/scan
+
+**Deprecated**: Use the unified `/discovery/scan` endpoint instead. This endpoint is kept for backward compatibility.
 
 Scans a TLS endpoint for quantum-safe certificate support. Requires authentication. The scan is processed asynchronously via NATS.
 
@@ -957,11 +1117,149 @@ Response:
 
 ### GET /discovery/tls/scans
 
-Returns paginated list of TLS scan results for the authenticated user.
+Returns paginated list of CBOMs (Cryptographic Bill of Materials) for TLS endpoint scans for the authenticated user.
 
 Query Parameters:
 - `limit` (optional): Number of results per page (default: 20)
 - `offset` (optional): Number of results to skip (default: 0)
+
+Response:
+```json
+{
+  "results": [
+    {
+      "url": "https://example.com",
+      "host": "example.com",
+      "port": 443,
+      "protocol": "TLS 1.3",
+      "nist_level": 1,
+      "risk_score": 0.75,
+      "pqc_risk": "critical",
+      "pqc_mode": "classical",
+      "supported_pqc": [],
+      "recommendations": ["Upgrade to PQC certificates"],
+      "scanned_at": "2025-01-15T10:30:00Z",
+      "certificate": {
+        "subject": "CN=example.com",
+        "issuer": "CN=Let's Encrypt",
+        "signature_algorithm": "ECDSA-secp256r1",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 256,
+        "nist_level": 1,
+        "is_pqc_ready": false,
+        "not_before": "2025-01-01T00:00:00Z",
+        "not_after": "2025-04-01T00:00:00Z"
+      },
+      "cipher_suites": [
+        {
+          "name": "TLS_AES_256_GCM_SHA384",
+          "key_exchange": "X25519",
+          "encryption": "AES-256-GCM",
+          "mac": "SHA384",
+          "nist_level": 1,
+          "is_pqc_ready": false
+        }
+      ],
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "pfs": true,
+      "ocsp_stapled": true,
+      "nist_levels": {
+        "kex": 1,
+        "sig": 1,
+        "cipher": 1
+      },
+      "cbom": {
+        "version": "1.0",
+        "type": "tls-endpoint",
+        "components": [
+          {
+            "type": "certificate",
+            "subject": "CN=example.com",
+            "issuer": "CN=Let's Encrypt",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "pqc_ready": false
+          },
+          {
+            "type": "key-exchange",
+            "algorithm": "X25519",
+            "pqc_ready": false,
+            "nist_level": 1,
+            "quantum_vulnerable": true
+          },
+          {
+            "type": "signature-algorithm",
+            "name": "ECDSA-secp256r1",
+            "nist_level": 1,
+            "quantum_vulnerable": true
+          },
+          {
+            "type": "cipher-suite",
+            "name": "TLS_AES_256_GCM_SHA384",
+            "nist_level": 1,
+            "quantum_vulnerable": true
+          }
+        ]
+      }
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "count": 1
+}
+```
+
+Note: Each result is a CBOM (Cryptographic Bill of Materials) that includes both the scan data and the structured `cbom.components` array describing all cryptographic primitives.
+
+Example:
+```bash
+# List TLS scan results with CBOM data
+curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# Via nginx (HTTPS)
+curl -k "https://localhost/api/discovery/tls/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+### GET /discovery/tls/scans/anonymous
+
+Returns list of CBOMs for anonymous TLS scan results from Redis for the current user's token. Also includes default endpoints that are visible to everyone.
+
+Note: Requires a token in the Authorization header (even for anonymous users).
+
+Response:
+```json
+{
+  "results": [
+    {
+      "url": "https://example.com",
+      "host": "example.com",
+      "port": 443,
+      "protocol": "TLS 1.3",
+      "nist_level": 1,
+      "risk_score": 0.75,
+      "scanned_at": "2025-01-15T10:30:00Z",
+      "cbom": {
+        "version": "1.0",
+        "type": "tls-endpoint",
+        "components": [...]
+      }
+    }
+  ],
+  "total": 1,
+  "count": 1
+}
+```
+
+Example:
+```bash
+# Get anonymous TLS scan CBOMs
+curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
+  -H "Authorization: Bearer YOUR_ANONYMOUS_TOKEN" | jq .
+```
 
 ### GET /discovery/rpcs
 
@@ -1085,41 +1383,130 @@ Getting Turnstile Tokens: In a real application, the Turnstile token is generate
 1. Use the frontend to get a valid token
 2. Or temporarily disable Turnstile verification by not setting `TURNSTILE_SECRET_KEY` (development only)
 
-### 2. Test Wallet Scanning
+### 2. Test Unified Scanning
+
+The `/discovery/scan` endpoint automatically detects whether you're scanning a wallet or TLS endpoint:
 
 ```bash
-# Queue a wallet scan (requires authentication)
+# Queue a wallet scan (automatically detected from "address" field)
 curl -X POST http://localhost:8080/discovery/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"address": "0x13f735c915bba9136Db794F6b1f42566B24861B8"}'
 
-# List scan results
-curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 3. Test TLS Scanning
-
-```bash
-# Queue a TLS scan (default port 443)
-curl -X POST http://localhost:8080/discovery/tls/scan \
+# Queue a TLS endpoint scan (automatically detected from "url" field)
+curl -X POST http://localhost:8080/discovery/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://example.com"}'
 
 # Queue a TLS scan with custom port (e.g., 8443)
-curl -X POST http://localhost:8080/discovery/tls/scan \
+curl -X POST http://localhost:8080/discovery/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://localhost:8443"}'
-
-# List TLS scan results
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN"
 ```
 
-### 4. Public Endpoints
+### 3. Retrieve Scan Results (CBOMs)
+
+All scan result endpoints now return CBOMs (Cryptographic Bill of Materials) instead of raw scan data:
+
+```bash
+# List wallet scan CBOMs (paginated)
+curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# List TLS scan CBOMs (paginated)
+curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# List anonymous wallet scan CBOMs
+curl -X GET "http://localhost:8080/discovery/scans/anonymous" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# List anonymous TLS scan CBOMs
+curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Each result in the `results` array is a CBOM that includes:
+- All scan data (address/url, risk_score, nist_level, etc.)
+- A `cbom` object with `version`, `type`, and `components` array describing cryptographic primitives
+
+### 4. Retrieve CBOM (Cryptographic Bill of Materials)
+
+**All scan list endpoints now return CBOMs directly!** The endpoints `/discovery/scans` and `/discovery/tls/scans` return lists of CBOMs instead of raw scan data.
+
+#### List Wallet CBOMs
+
+Get a list of CBOMs for all your wallet scans:
+
+```bash
+# List wallet scan CBOMs (paginated)
+curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# List anonymous wallet scan CBOMs
+curl -X GET "http://localhost:8080/discovery/scans/anonymous" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Each result in the `results` array is a complete CBOM with:
+- All scan metadata (address, type, algorithm, risk_score, etc.)
+- A `cbom` object containing `version`, `type`, and `components` array
+
+#### List TLS Endpoint CBOMs
+
+Get a list of CBOMs for all your TLS endpoint scans:
+
+```bash
+# List TLS scan CBOMs (paginated)
+curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# List anonymous TLS scan CBOMs
+curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Each result in the `results` array is a complete CBOM with:
+- All scan metadata (url, host, port, protocol, risk_score, etc.)
+- A `cbom` object containing `version`, `type`, and `components` array describing all cryptographic primitives
+
+#### Get Specific CBOM by Address/URL
+
+You can also retrieve a specific CBOM using the `/discovery/cbom/*` endpoint:
+
+```bash
+# Get CBOM for a specific wallet address
+curl http://localhost:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# Get CBOM for a specific TLS endpoint (URL must be URL-encoded)
+curl "http://localhost:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Note: URLs must be URL-encoded when passed as path parameters. The endpoint automatically detects if the parameter is a wallet address (starts with `0x`) or a URL (starts with `http://` or `https://`).
+
+#### CBOM Structure
+
+All CBOMs returned by the API include:
+- **Scan metadata**: All original scan data (address/url, risk_score, nist_level, etc.)
+- **CBOM object**: A structured `cbom` object containing:
+  - `version`: CBOM format version (currently "1.0")
+  - `type`: Type of CBOM ("wallet" or "tls-endpoint")
+  - `components`: Array of cryptographic primitives with details:
+    - For wallets: cryptographic-primitive components
+    - For TLS: certificate, key-exchange, signature-algorithm, and cipher-suite components
+
+Each component includes:
+- Type and name of the cryptographic primitive
+- NIST security level
+- Quantum vulnerability status
+- PQC readiness (for TLS components)
+
+### 5. Public Endpoints
 
 ```bash
 # List configured RPC endpoints (no auth required)

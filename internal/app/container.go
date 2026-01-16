@@ -110,7 +110,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
 	// Initialize handlers
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, redisWalletScanRepo, planService)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, redisWalletScanRepo, redisTLSScanRepo, planService)
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, tlsScanResultRepo, planService, redisTLSScanRepo)
 	authHandler := handler.NewAuthHandler(authService)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
@@ -192,10 +192,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 
 	// Protected routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
-	api.Post("/scan/wallet", discoveryHandler.Scan)
-	api.Post("/tls/scan", tlsHandler.Scan) // Changed from /scan/endpoints to /tls/scan for consistency
+	api.Post("/scan", discoveryHandler.UnifiedScan) // Unified scan endpoint - automatically detects wallet or TLS endpoint
 	api.Get("/rpcs", discoveryHandler.ListRPCs)
 	api.Get("/scans", discoveryHandler.ListScans)
+	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 	api.Get("/tls/scans", tlsHandler.ListScans)
 	api.Get("/tls/scans/anonymous", tlsHandler.ListAnonymousScans)   // Route for anonymous TLS scans from Redis
 	api.Get("/scans/anonymous", discoveryHandler.ListAnonymousScans) // Route for anonymous wallet scans from Redis

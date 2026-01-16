@@ -24,6 +24,7 @@ type RedisTLSScanRepository interface {
 	Save(ctx context.Context, tokenHash string, url string, result *domain.TLSScanResult) error
 	FindByURL(ctx context.Context, tokenHash string, url string) (*domain.TLSScanResult, error)
 	ListAll(ctx context.Context, tokenHash string) ([]*domain.TLSScanResult, error)
+	Count(ctx context.Context, tokenHash string) (int, error)
 	Delete(ctx context.Context, tokenHash string, url string) error
 }
 
@@ -108,6 +109,16 @@ func (r *redisTLSScanRepository) ListAll(ctx context.Context, tokenHash string) 
 	}
 
 	return results, nil
+}
+
+// Count counts the number of anonymous TLS scan results for a specific token
+func (r *redisTLSScanRepository) Count(ctx context.Context, tokenHash string) (int, error) {
+	pattern := redisKeyPrefix + tokenHash + ":*"
+	keys, err := r.redis.Keys(ctx, pattern).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to count scan keys from Redis: %w", err)
+	}
+	return len(keys), nil
 }
 
 // Delete deletes a TLS scan result from Redis

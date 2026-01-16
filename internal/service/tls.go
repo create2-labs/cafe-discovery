@@ -238,6 +238,23 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 	return result, nil
 }
 
+// GetTLSScanByURL retrieves a TLS scan result by URL for a specific user
+func (s *TLSService) GetTLSScanByURL(ctx context.Context, userID uuid.UUID, url string) (*domain.TLSScanResult, error) {
+	// Try to find scan result for this user first
+	entity, err := s.tlsScanResultRepo.FindByUserIDAndURL(userID, url)
+	if err == nil && entity != nil {
+		return entity.ToTLSScanResult(), nil
+	}
+
+	// If not found for user, try to find default endpoint
+	entity, err = s.tlsScanResultRepo.FindDefaultByURL(url)
+	if err != nil {
+		return nil, fmt.Errorf("TLS scan result not found for URL: %w", err)
+	}
+
+	return entity.ToTLSScanResult(), nil
+}
+
 // ListTLSScanResults lists TLS scan results for a user with pagination
 // Returns both user's scans and default endpoints (default=true)
 func (s *TLSService) ListTLSScanResults(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResult, int64, error) {
