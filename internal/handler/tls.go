@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/repository"
@@ -255,7 +256,15 @@ func (h *TLSHandler) tlsScanResultToCBOM(tlsScanResult *domain.TLSScanResult) fi
 		}
 	}
 
-	// Build CBOM response
+	// Format timestamp for metadata (ISO-8601 UTC) - use scanned_at if available, otherwise current time
+	var timestamp string
+	if !tlsScanResult.ScannedAt.IsZero() {
+		timestamp = tlsScanResult.ScannedAt.Format(time.RFC3339)
+	} else {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Build CBOM response with CycloneDX v1.7 metadata and lifecycle
 	return fiber.Map{
 		"url":             tlsScanResult.URL,
 		"host":            tlsScanResult.Host,
@@ -266,7 +275,7 @@ func (h *TLSHandler) tlsScanResultToCBOM(tlsScanResult *domain.TLSScanResult) fi
 		"pqc_risk":        tlsScanResult.PQCRisk,
 		"pqc_mode":        tlsScanResult.PQCMode,
 		"supported_pqc":   tlsScanResult.SupportedPQCs,
-		"recommendations":  tlsScanResult.Recommendations,
+		"recommendations": tlsScanResult.Recommendations,
 		"scanned_at":      tlsScanResult.ScannedAt,
 		"certificate":     cert,
 		"cipher_suites":   tlsScanResult.CipherSuites,
@@ -276,7 +285,18 @@ func (h *TLSHandler) tlsScanResultToCBOM(tlsScanResult *domain.TLSScanResult) fi
 		"ocsp_stapled":    tlsScanResult.OCSPStapled,
 		"nist_levels":     tlsScanResult.NISTLevels,
 		"cbom": fiber.Map{
-			"version":    "1.0",
+			"bomFormat":  "CycloneDX",
+			"specVersion": "1.7",
+			"version":     1,
+			"metadata": fiber.Map{
+				"timestamp": timestamp,
+				"lifecycles": []fiber.Map{
+					{
+						"phase":       "discovery",
+						"description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+					},
+				},
+			},
 			"type":       "tls-endpoint",
 			"components": components,
 		},

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
@@ -459,8 +460,37 @@ func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
 	})
 }
 
-// scanResultToCBOM converts a ScanResult to a CBOM format
+// scanResultToCBOM converts a ScanResult to a CBOM format (CycloneDX v1.7 compliant)
 func (h *DiscoveryHandler) scanResultToCBOM(scanResult *domain.ScanResult) fiber.Map {
+	// Build CBOM component with NIST SP 800-57 key states
+	component := fiber.Map{
+		"type":               "cryptographic-primitive",
+		"name":               scanResult.Algorithm,
+		"nist_level":         scanResult.NISTLevel,
+		"quantum_vulnerable": scanResult.NISTLevel <= 1,
+		"key_exposed":        scanResult.KeyExposed,
+		"assetType":          "related-crypto-material",
+		"state":              "active", // NIST SP 800-57 key state
+	}
+
+	// Add custom state for quantum-vulnerable keys (non-NIST extension)
+	if scanResult.NISTLevel <= 1 {
+		component["customStates"] = []fiber.Map{
+			{
+				"name":        "quantum-vulnerable",
+				"description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks",
+			},
+		}
+	}
+
+	// Format timestamp for metadata (use scanned_at if available, otherwise current time)
+	var timestamp string
+	if !scanResult.ScannedAt.IsZero() {
+		timestamp = scanResult.ScannedAt.Format(time.RFC3339)
+	} else {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+
 	return fiber.Map{
 		"address":     scanResult.Address,
 		"type":        scanResult.Type,
@@ -473,17 +503,14 @@ func (h *DiscoveryHandler) scanResultToCBOM(scanResult *domain.ScanResult) fiber
 		"networks":    scanResult.Networks,
 		"scanned_at":  scanResult.ScannedAt,
 		"cbom": fiber.Map{
-			"version": "1.0",
-			"type":    "wallet",
-			"components": []fiber.Map{
-				{
-					"type":               "cryptographic-primitive",
-					"name":               scanResult.Algorithm,
-					"nist_level":         scanResult.NISTLevel,
-					"quantum_vulnerable": scanResult.NISTLevel <= 1,
-					"key_exposed":        scanResult.KeyExposed,
-				},
+			"bomFormat":   "CycloneDX",
+			"specVersion": "1.7",
+			"version":     1,
+			"metadata": fiber.Map{
+				"timestamp": timestamp,
 			},
+			"type":       "wallet",
+			"components": []fiber.Map{component},
 		},
 	}
 }
@@ -545,7 +572,36 @@ func (h *DiscoveryHandler) getWalletCBOM(c *fiber.Ctx, address string, userID uu
 		})
 	}
 
-	// Build CBOM response
+	// Build CBOM component with NIST SP 800-57 key states
+	component := fiber.Map{
+		"type":               "cryptographic-primitive",
+		"name":               scanResult.Algorithm,
+		"nist_level":         scanResult.NISTLevel,
+		"quantum_vulnerable": scanResult.NISTLevel <= 1,
+		"key_exposed":        scanResult.KeyExposed,
+		"assetType":          "related-crypto-material",
+		"state":              "active", // NIST SP 800-57 key state
+	}
+
+	// Add custom state for quantum-vulnerable keys (non-NIST extension)
+	if scanResult.NISTLevel <= 1 {
+		component["customStates"] = []fiber.Map{
+			{
+				"name":        "quantum-vulnerable",
+				"description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks",
+			},
+		}
+	}
+
+	// Format timestamp for metadata (use scanned_at if available, otherwise current time)
+	var timestamp string
+	if !scanResult.ScannedAt.IsZero() {
+		timestamp = scanResult.ScannedAt.Format(time.RFC3339)
+	} else {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Build CBOM response with CycloneDX v1.7 metadata
 	cbom := fiber.Map{
 		"address":     scanResult.Address,
 		"type":        scanResult.Type,
@@ -558,17 +614,14 @@ func (h *DiscoveryHandler) getWalletCBOM(c *fiber.Ctx, address string, userID uu
 		"networks":    scanResult.Networks,
 		"scanned_at":  scanResult.ScannedAt,
 		"cbom": fiber.Map{
-			"version": "1.0",
-			"type":    "wallet",
-			"components": []fiber.Map{
-				{
-					"type":               "cryptographic-primitive",
-					"name":               scanResult.Algorithm,
-					"nist_level":         scanResult.NISTLevel,
-					"quantum_vulnerable": scanResult.NISTLevel <= 1,
-					"key_exposed":        scanResult.KeyExposed,
-				},
+			"bomFormat":   "CycloneDX",
+			"specVersion": "1.7",
+			"version":     1,
+			"metadata": fiber.Map{
+				"timestamp": timestamp,
 			},
+			"type":       "wallet",
+			"components": []fiber.Map{component},
 		},
 	}
 
@@ -658,7 +711,15 @@ func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID
 		}
 	}
 
-	// Build CBOM response
+	// Format timestamp for metadata (ISO-8601 UTC) - use scanned_at if available, otherwise current time
+	var timestamp string
+	if !tlsScanResult.ScannedAt.IsZero() {
+		timestamp = tlsScanResult.ScannedAt.Format(time.RFC3339)
+	} else {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Build CBOM response with CycloneDX v1.7 metadata and lifecycle
 	cbom := fiber.Map{
 		"url":             tlsScanResult.URL,
 		"host":            tlsScanResult.Host,
@@ -679,7 +740,18 @@ func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID
 		"ocsp_stapled":    tlsScanResult.OCSPStapled,
 		"nist_levels":     tlsScanResult.NISTLevels,
 		"cbom": fiber.Map{
-			"version":    "1.0",
+			"bomFormat":   "CycloneDX",
+			"specVersion": "1.7",
+			"version":     1,
+			"metadata": fiber.Map{
+				"timestamp": timestamp,
+				"lifecycles": []fiber.Map{
+					{
+						"phase":       "discovery",
+						"description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+					},
+				},
+			},
 			"type":       "tls-endpoint",
 			"components": components,
 		},

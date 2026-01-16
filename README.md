@@ -11,6 +11,7 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 - Quantum Security Level: Assess NIST quantum-security levels
 - TLS Scanning: Scan TLS endpoints for post-quantum cryptography (PQC) certificate support
 - Post-Quantum JWT: Hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for quantum-resistant authentication
+- **CycloneDX v1.7 CBOMs**: All scan results are returned as CycloneDX v1.7-based Cryptographic Bill of Materials (CBOMs) with NIST SP 800-57 key states and lifecycle metadata. Note: CAFE extends CycloneDX with custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`) that are not part of the standard specification.
 
 ## Architecture
 
@@ -948,7 +949,12 @@ Response:
       "networks": ["ethereum-mainnet", "polygon"],
       "scanned_at": "2025-01-15T10:30:00Z",
       "cbom": {
-        "version": "1.0",
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.7",
+        "version": 1,
+        "metadata": {
+          "timestamp": "2025-01-15T10:30:00Z"
+        },
         "type": "wallet",
         "components": [
           {
@@ -956,7 +962,15 @@ Response:
             "name": "ECDSA-secp256k1",
             "nist_level": 1,
             "quantum_vulnerable": true,
-            "key_exposed": true
+            "key_exposed": true,
+            "assetType": "related-crypto-material",
+            "state": "active",
+            "customStates": [
+              {
+                "name": "quantum-vulnerable",
+                "description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks"
+              }
+            ]
           }
         ]
       }
@@ -996,7 +1010,12 @@ Response:
   "networks": ["ethereum-mainnet", "polygon"],
   "scanned_at": "2025-01-15T10:30:00Z",
   "cbom": {
-    "version": "1.0",
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.7",
+    "version": 1,
+    "metadata": {
+      "timestamp": "2025-01-15T10:30:00Z"
+    },
     "type": "wallet",
     "components": [
       {
@@ -1004,7 +1023,15 @@ Response:
         "name": "ECDSA-secp256k1",
         "nist_level": 1,
         "quantum_vulnerable": true,
-        "key_exposed": true
+        "key_exposed": true,
+        "assetType": "related-crypto-material",
+        "state": "active",
+        "customStates": [
+          {
+            "name": "quantum-vulnerable",
+            "description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks"
+          }
+        ]
       }
     ]
   }
@@ -1045,7 +1072,18 @@ Response:
     "cipher": 1
   },
   "cbom": {
-    "version": "1.0",
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.7",
+    "version": 1,
+    "metadata": {
+      "timestamp": "2025-01-15T10:30:00Z",
+      "lifecycles": [
+        {
+          "phase": "discovery",
+          "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network"
+        }
+      ]
+    },
     "type": "tls-endpoint",
     "components": [
       {
@@ -1170,7 +1208,18 @@ Response:
         "cipher": 1
       },
       "cbom": {
-        "version": "1.0",
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.7",
+        "version": 1,
+        "metadata": {
+          "timestamp": "2025-01-15T10:30:00Z",
+          "lifecycles": [
+            {
+              "phase": "discovery",
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network"
+            }
+          ]
+        },
         "type": "tls-endpoint",
         "components": [
           {
@@ -1243,7 +1292,18 @@ Response:
       "risk_score": 0.75,
       "scanned_at": "2025-01-15T10:30:00Z",
       "cbom": {
-        "version": "1.0",
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.7",
+        "version": 1,
+        "metadata": {
+          "timestamp": "2025-01-15T10:30:00Z",
+          "lifecycles": [
+            {
+              "phase": "discovery",
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network"
+            }
+          ]
+        },
         "type": "tls-endpoint",
         "components": [...]
       }
@@ -1429,9 +1489,15 @@ curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Each result in the `results` array is a CBOM that includes:
+Each result in the `results` array is a **CycloneDX v1.7-based CBOM** (extended with custom fields) that includes:
 - All scan data (address/url, risk_score, nist_level, etc.)
-- A `cbom` object with `version`, `type`, and `components` array describing cryptographic primitives
+- A `cbom` object with:
+  - `bomFormat`: `"CycloneDX"` (format identifier)
+  - `specVersion`: `"1.7"` (specification version)
+  - `version`: Document version (currently `1`)
+  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC) and `lifecycles` (for TLS)
+  - `type`: `"wallet"` or `"tls-endpoint"`
+  - `components`: Array describing cryptographic primitives with NIST SP 800-57 key states (for wallets)
 
 ### 4. Retrieve CBOM (Cryptographic Bill of Materials)
 
@@ -1451,9 +1517,15 @@ curl -X GET "http://localhost:8080/discovery/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Each result in the `results` array is a complete CBOM with:
+Each result in the `results` array is a complete **CycloneDX v1.7-based CBOM** (extended with custom fields) with:
 - All scan metadata (address, type, algorithm, risk_score, etc.)
-- A `cbom` object containing `version`, `type`, and `components` array
+- A `cbom` object containing:
+  - `bomFormat`: `"CycloneDX"` (format identifier)
+  - `specVersion`: `"1.7"` (specification version)
+  - `version`: Document version (currently `1`)
+  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC)
+  - `type`: `"wallet"`
+  - `components`: Array with cryptographic primitives including NIST SP 800-57 key states (`state: "active"`, `assetType: "related-crypto-material"`, and `customStates` for quantum-vulnerable keys)
 
 #### List TLS Endpoint CBOMs
 
@@ -1469,9 +1541,15 @@ curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Each result in the `results` array is a complete CBOM with:
+Each result in the `results` array is a complete **CycloneDX v1.7-based CBOM** (extended with custom fields) with:
 - All scan metadata (url, host, port, protocol, risk_score, etc.)
-- A `cbom` object containing `version`, `type`, and `components` array describing all cryptographic primitives
+- A `cbom` object containing:
+  - `bomFormat`: `"CycloneDX"` (format identifier)
+  - `specVersion`: `"1.7"` (specification version)
+  - `version`: Document version (currently `1`)
+  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC) and `lifecycles` array declaring the discovery phase
+  - `type`: `"tls-endpoint"`
+  - `components`: Array describing all cryptographic primitives (certificate, key-exchange, signature-algorithm, cipher-suite)
 
 #### Get Specific CBOM by Address/URL
 
@@ -1491,20 +1569,44 @@ Note: URLs must be URL-encoded when passed as path parameters. The endpoint auto
 
 #### CBOM Structure
 
-All CBOMs returned by the API include:
+All CBOMs returned by the API are **based on CycloneDX v1.7** and include:
+
+> **Note on CycloneDX Compliance**: CAFE CBOMs follow the CycloneDX v1.7 structure and include standard fields (`bomFormat`, `specVersion`, `version`, `metadata`, `components`), but are **not strictly compliant** because they extend the specification with custom fields outside the standard. These custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`, `pqc_ready`) are added to provide cryptographic discovery and post-quantum risk analysis capabilities specific to CAFE's use case.
+
 - **Scan metadata**: All original scan data (address/url, risk_score, nist_level, etc.)
 - **CBOM object**: A structured `cbom` object containing:
-  - `version`: CBOM format version (currently "1.0")
-  - `type`: Type of CBOM ("wallet" or "tls-endpoint")
+  - `bomFormat`: Always `"CycloneDX"` (CycloneDX format identifier)
+  - `specVersion`: Always `"1.7"` (CycloneDX specification version)
+  - `version`: CBOM document version (currently `1`)
+  - `metadata`: Metadata object containing:
+    - `timestamp`: ISO-8601 UTC timestamp of scan execution
+    - `lifecycles`: (TLS only) Array declaring the CBOM lifecycle phase:
+      - `phase`: `"discovery"` - Indicates this is a point-in-time discovery CBOM
+      - `description`: Explains that this represents network observations
+  - `type`: Type of CBOM (`"wallet"` or `"tls-endpoint"`)
   - `components`: Array of cryptographic primitives with details:
-    - For wallets: cryptographic-primitive components
+    - For wallets: cryptographic-primitive components with NIST SP 800-57 key states
     - For TLS: certificate, key-exchange, signature-algorithm, and cipher-suite components
 
-Each component includes:
-- Type and name of the cryptographic primitive
-- NIST security level
-- Quantum vulnerability status
-- PQC readiness (for TLS components)
+**Wallet Components** include:
+- Type and name of the cryptographic primitive (CycloneDX standard)
+- `assetType`: `"related-crypto-material"` (CycloneDX standard - indicates cryptographic material)
+- `state`: `"active"` (CycloneDX standard - NIST SP 800-57 key state)
+- `customStates`: (if quantum-vulnerable) Array with custom state (CycloneDX standard extension):
+  - `name`: `"quantum-vulnerable"`
+  - `description`: Explains vulnerability to future quantum attacks
+- **Custom fields (CAFE-specific, not in CycloneDX spec)**:
+  - `nist_level`: NIST security level (1-5)
+  - `quantum_vulnerable`: Boolean indicating quantum vulnerability
+  - `key_exposed`: Boolean indicating if the key has been exposed on-chain
+
+**TLS Components** include:
+- Type and name of the cryptographic primitive (CycloneDX standard)
+- **Custom fields (CAFE-specific, not in CycloneDX spec)**:
+  - `nist_level`: NIST security level (1-5)
+  - `quantum_vulnerable`: Boolean indicating quantum vulnerability
+  - `pqc_ready`: Boolean indicating post-quantum cryptography readiness (for applicable components)
+  - Additional TLS-specific fields: `subject`, `issuer`, `signature_algorithm`, `key_size`, `not_before`, `not_after`, etc.
 
 ### 5. Public Endpoints
 
