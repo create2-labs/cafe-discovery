@@ -244,6 +244,23 @@ func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanR
 }
 
 // ListScanResults lists scan results for a user with pagination
+// GetScanByAddress retrieves a scan result by address for a specific user
+func (s *DiscoveryService) GetScanByAddress(ctx context.Context, userID uuid.UUID, address string) (*domain.ScanResult, error) {
+	// Normalize address
+	normalizedAddress, err := s.ValidateAndNormalizeAddress(address)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get scan result from repository
+	entity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, normalizedAddress)
+	if err != nil {
+		return nil, fmt.Errorf("scan result not found: %w", err)
+	}
+
+	return entity.ToScanResult(), nil
+}
+
 func (s *DiscoveryService) ListScanResults(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.ScanResult, int64, error) {
 	// Get scan results from repository
 	entities, err := s.scanResultRepo.FindByUserID(userID, limit, offset)
