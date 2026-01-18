@@ -81,14 +81,7 @@ func (h *DiscoveryHandler) UnifiedScan(c *fiber.Ctx) error {
 
 // scanWallet handles wallet scanning (extracted from original Scan method)
 func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
-	var req ScanRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
-	}
-
-	if req.Address == "" {
+	if address == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "address is required",
 		})
@@ -167,7 +160,7 @@ func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
 
 	// Validate and normalize the Ethereum address before queuing
 	// This ensures we return an error immediately if the address is invalid
-	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(req.Address)
+	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(address)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
