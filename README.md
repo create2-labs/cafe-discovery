@@ -225,8 +225,8 @@ server:
   host: "0.0.0.0"
   port: "8080"
 
-# PostgreSQL configuration (for Docker, use service name 'postgres' or 'cafe-postgres')
-POSTGRES_HOST: "cafe-postgres"
+# PostgreSQL configuration (for Docker, use service name 'postgres')
+POSTGRES_HOST: "postgres"
 POSTGRES_PORT: "5432"
 POSTGRES_DATABASE: "cafe"
 POSTGRES_USER: "cafe"
@@ -491,7 +491,7 @@ export POSTGRES_SSLMODE=disable
 export NATS_URL="nats://localhost:4222"  
 
 # Redis configuration
-exort REDIS_URL="redis://redis:6379"
+export REDIS_URL="redis://redis:6379"
 
 
 # JWT configuration (required for authentication)
