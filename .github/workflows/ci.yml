@@ -9,25 +9,25 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.25"
+  CGO_ENABLED: "1"
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    container:
+      image: oleglod/cafe-oqs:build
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Install dependencies
-        run: go mod tidy
+      - name: Download dependencies
+        run: go mod download
 
       - name: Run Linter
-        uses: golangci/golangci-lint-action@v9
+        run: golangci-lint run ./...
 
       - name: Run unit-tests
-        run: go test -v ./...
+        run: go test ./...
+
+      - name: Build
+        run: go build ./cmd/server/main.go
