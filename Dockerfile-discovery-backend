@@ -67,6 +67,8 @@ FROM builder AS ci
 
 WORKDIR /app
 
+ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
+
 # Install CI tools (versions figées recommandées)
 RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
  && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
