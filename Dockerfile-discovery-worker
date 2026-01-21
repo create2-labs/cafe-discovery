@@ -1,7 +1,7 @@
 ##############################
 # Stage 1 — Build (Go + OQS)
 ##############################
-FROM cafe-oqs:build AS builder
+FROM oleglod/cafe-oqs:build AS builder
 
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
@@ -50,7 +50,7 @@ RUN go build -o worker ./cmd/worker/main.go
 ##############################
 # Stage 2 — Runtime 
 ##############################
-FROM cafe-oqs:runtime
+FROM oleglod/cafe-oqs:runtime
 
 WORKDIR /app
 

@@ -1,7 +1,7 @@
 ##############################
 # Stage 1 — Build (Go + OQS)
 ##############################
-FROM cafe-oqs:build AS builder
+FROM oleglod/cafe-oqs:build AS builder
 
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go manually (multi-arch)
-ENV GO_VERSION=1.25.6
+ENV GO_VERSION=1.25.4
 RUN set -eux; \
     case "$TARGETARCH" in \
       amd64)  GO_ARCH=amd64 ;; \
@@ -50,7 +50,7 @@ RUN go build -o server ./cmd/server/main.go
 ##############################
 # Stage 2 — Runtime 
 ##############################
-FROM cafe-oqs:runtime
+FROM oleglod/cafe-oqs:runtime
 
 WORKDIR /app
 

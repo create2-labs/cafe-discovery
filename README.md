@@ -212,6 +212,135 @@ This will be implemented later
 - NATS: Use NATS JetStream for persistence and high availability
 - PostgreSQL: Use a PostgreSQL cluster with read replicas
 
+## CI/CD and Release Process
+
+This project implements a strict, security-focused CI/CD pipeline that enforces quality gates and ensures all published Docker images are secure and traceable.
+
+### Overview
+
+The project produces **two Docker images**:
+- `oleglod/cafe-discovery-backend`: API server image
+- `oleglod/cafe-discovery-worker`: Background worker image
+
+Both images are built from their respective Dockerfiles (`Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`) and are always released together as a unit.
+
+### Pipeline Separation
+
+The CI/CD pipeline is strictly separated into two distinct workflows:
+
+#### 1. Pull Request CI (`.github/workflows/ci.yml`)
+
+**Trigger**: Pull requests targeting `main`
+
+**Purpose**: Quality assurance and security validation before code is merged.
+
+**Steps** (executed in `oleglod/cafe-oqs:build` container):
+1. Checkout repository
+2. Download Go dependencies (`go mod download`)
+3. Run linter (`golangci-lint run ./...`)
+4. Run unit tests (`go test ./...`)
+5. Run vulnerability scanning (`govulncheck ./...`)
+
+**Security Gates**:
+- All steps must pass for the PR to be mergeable
+- `govulncheck` failures block PR merges
+- No Docker images are built or published
+
+**Important**: This workflow does NOT build or publish Docker images. It only validates code quality and security.
+
+#### 2. Docker Release Pipeline (`.github/workflows/docker-release.yml`)
+
+**Trigger**: Push of Git tags matching `v*.*.*` (e.g., `v1.2.3`)
+
+**Purpose**: Build, scan, and publish production Docker images.
+
+**Process**:
+1. **Extract version information** from the Git tag:
+   - Full version: `vX.Y.Z` (from tag)
+   - Minor version: `vX.Y` (derived)
+   - Short commit SHA (for traceability)
+
+2. **Build both images** (multi-arch: `linux/amd64`, `linux/arm64`):
+   - `oleglod/cafe-discovery-backend`
+   - `oleglod/cafe-discovery-worker`
+
+3. **Security scanning** (Docker Scout):
+   - Scan both images for critical and high-severity vulnerabilities
+   - If **either** image fails the scan, the entire job fails
+   - **No images are published** if scanning fails
+
+4. **Publish images** (only if both scans pass):
+   - Both images are tagged identically:
+     - `vX.Y.Z` (full version from tag)
+     - `vX.Y` (minor version)
+     - `sha-<short-sha>` (commit SHA for traceability)
+     - `build` (latest build tag)
+   - All tags are multi-arch manifests
+
+**Security Gates**:
+- Docker Scout vulnerability scanning blocks publication
+- Both images must pass scanning; if one fails, nothing is published
+- All published images are traceable to a Git tag and commit SHA
+
+### Release Procedure
+
+Releases are **manual and explicit**. The CI system never creates tags automatically.
+
+**Step-by-step release process**:
+
+1. **Merge PR to `main`**:
+   - Ensure the PR has passed all CI checks (lint, tests, govulncheck)
+   - Merge the PR into `main`
+
+2. **Create Git tag** (manually, after merge):
+   ```bash
+   git checkout main
+   git pull origin main
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. **CI automatically**:
+   - Detects the tag push
+   - Builds both Docker images (multi-arch)
+   - Scans both images with Docker Scout
+   - If scans pass, publishes both images with all tags
+   - If scans fail, publishes nothing
+
+### Security and Auditability
+
+**Versioning Policy**:
+- Versions are **never auto-generated**
+- All versions come from manually created Git tags
+- Format: `vX.Y.Z` (semantic versioning)
+
+**Traceability**:
+- Every published image is tagged with:
+  - Git tag (`vX.Y.Z`)
+  - Commit SHA (`sha-<short-sha>`)
+- Images can be traced back to exact source code commits
+
+**Security Enforcement**:
+- `govulncheck` blocks PR merges (prevents vulnerable code from entering `main`)
+- Docker Scout blocks image publication (prevents vulnerable images from being published)
+- Both images are always released together (ensures consistency)
+
+**Failure Handling**:
+- If either image fails scanning, **nothing is published**
+- This ensures both services are always at the same security level
+- Failed releases require fixing vulnerabilities and re-tagging
+
+### Image Tags
+
+Both `oleglod/cafe-discovery-backend` and `oleglod/cafe-discovery-worker` receive identical tags:
+
+- `v1.2.3`: Full semantic version (from Git tag)
+- `v1.2`: Minor version (for compatibility)
+- `sha-abc1234`: Commit SHA (for traceability)
+- `build`: Latest build (points to most recent release)
+
+All tags are multi-arch manifests supporting `linux/amd64` and `linux/arm64`.
+
 ## Configuration
 
 The application can be configured using either:
