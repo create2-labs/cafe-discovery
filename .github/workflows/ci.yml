@@ -28,43 +28,29 @@ jobs:
       # ============================================================
       # BACKEND
       # ============================================================
-      - name: Build backend builder image
+      - name: Build backend CI image
         run: |
           set -euo pipefail
           docker build \
-            --target builder \
+            --target ci \
             -f Dockerfile-discovery-backend \
-            -t cafe-discovery-backend:builder .
+            -t cafe-discovery-backend:ci .
 
-      - name: Run backend CI checks (inside builder image)
+      - name: Run backend CI checks (inside CI image)
         run: |
-          set -euo pipefail
-          docker run --rm cafe-discovery-backend:builder bash -lc "
-            go version &&
-            go mod download &&
-            golangci-lint run ./... &&
-            go test ./... &&
-            govulncheck ./...
-          "
+          docker run --rm cafe-discovery-backend:ci
 
       # ============================================================
       # WORKER
       # ============================================================
-      - name: Build worker builder image
+      - name: Build worker CI image
         run: |
           set -euo pipefail
           docker build \
-            --target builder \
+            --target ci \
             -f Dockerfile-discovery-worker \
-            -t cafe-discovery-worker:builder .
+            -t cafe-discovery-worker:ci .
 
-      - name: Run worker CI checks (inside builder image)
+      - name: Run worker CI checks (inside CI image)
         run: |
-          set -euo pipefail
-          docker run --rm cafe-discovery-worker:builder bash -lc "
-            go version &&
-            go mod download &&
-            golangci-lint run ./... &&
-            go test ./... &&
-            govulncheck ./...
-          "
+          docker run --rm cafe-discovery-worker:ci
