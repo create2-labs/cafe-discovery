@@ -12,24 +12,36 @@ env:
   CGO_ENABLED: "1"
 
 jobs:
-  lint-and-test:
+  ci:
     runs-on: ubuntu-latest
-    container:
-      image: oleglod/cafe-oqs:build
+
     steps:
-      - name: go version
-        run: go version
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Run Linter
-        run: golangci-lint run ./...
+      # ---------------- Backend ----------------
+      - name: Build backend CI image
+        run: |
+          docker build \
+            -f Dockerfile-discovery-backend \
+            --target ci \
+            -t cafe-discovery-backend:ci .
 
-      - name: Run unit-tests
-        run: go test ./...
+      - name: Run backend CI checks (inside image)
+        run: |
+          docker run --rm cafe-discovery-backend:ci
 
-      - name: Run govulncheck
-        run: govulncheck ./...
+      # ---------------- Worker ----------------
+      - name: Build worker CI image
+        run: |
+          docker build \
+            -f Dockerfile-discovery-worker \
+            --target ci \
+            -t cafe-discovery-worker:ci .
+
+      - name: Run worker CI checks (inside image)
+        run: |
+          docker run --rm cafe-discovery-worker:ci
