@@ -7,39 +7,64 @@ on:
 
 permissions:
   contents: read
-  security-events: read
 
 jobs:
   ci:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
       - name: Checkout sources
         uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # Docker / Buildx
+      # ------------------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ---------------- Backend ----------------
-      - name: Build backend CI image
+      # ============================================================
+      # BACKEND
+      # ============================================================
+      - name: Build backend builder image
         run: |
+          set -euo pipefail
           docker build \
+            --target builder \
             -f Dockerfile-discovery-backend \
-            --target ci \
-            -t cafe-discovery-backend:ci .
+            -t cafe-discovery-backend:builder .
 
-      - name: Run backend CI checks (inside image)
+      - name: Run backend CI checks (inside builder image)
         run: |
-          docker run --rm cafe-discovery-backend:ci
+          set -euo pipefail
+          docker run --rm cafe-discovery-backend:builder bash -lc "
+            go version &&
+            go mod download &&
+            golangci-lint run ./... &&
+            go test ./... &&
+            govulncheck ./...
+          "
 
-      # ---------------- Worker ----------------
-      - name: Build worker CI image
+      # ============================================================
+      # WORKER
+      # ============================================================
+      - name: Build worker builder image
         run: |
+          set -euo pipefail
           docker build \
+            --target builder \
             -f Dockerfile-discovery-worker \
-            --target ci \
-            -t cafe-discovery-worker:ci .
+            -t cafe-discovery-worker:builder .
 
-      - name: Run worker CI checks (inside image)
+      - name: Run worker CI checks (inside builder image)
         run: |
-          docker run --rm cafe-discovery-worker:ci
+          set -euo pipefail
+          docker run --rm cafe-discovery-worker:builder bash -lc "
+            go version &&
+            go mod download &&
+            golangci-lint run ./... &&
+            go test ./... &&
+            govulncheck ./...
+          "

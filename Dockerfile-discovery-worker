@@ -60,18 +60,3 @@ EXPOSE 8080
 ENTRYPOINT []
 CMD ["./worker"]
 
-
-##############################
-# Stage CI — Lint / Test / Vuln
-##############################
-FROM builder AS ci
-
-WORKDIR /app
-
-# Install CI tools (versions figées recommandées)
-RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
- && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-    | sh -s -- -b /usr/local/bin v1.55.2
-
-# Default CI command
-CMD ["bash", "-lc", "go mod download && golangci-lint run ./... && go test ./... && govulncheck ./..."]
