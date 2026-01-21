@@ -505,7 +505,8 @@ func (s *TLSService) determinePQCRisk(level domain.NISTLevel, isPQC bool) string
 	return "critical"
 }
 
-// generateRecommendations generates comprehensive security recommendations based on scan results
+// generateRecommendations generates security findings based on scan results
+// These are observations about security issues, not remediation recommendations
 // Takes into account NIST levels, protocol version, PFS, OCSP, and PQC readiness
 func (s *TLSService) generateRecommendations(
 	cert domain.CertificateInfo,
@@ -519,41 +520,41 @@ func (s *TLSService) generateRecommendations(
 ) []string {
 	var recommendations []string
 
-	// 1. NIST Level recommendations (highest priority)
+	// 1. NIST Level findings (highest priority)
 	if level <= domain.NISTLevel1 {
-		recommendations = append(recommendations, "CRITICAL: Certificate uses quantum-vulnerable algorithms (NIST Level 1). Migrate to post-quantum cryptography immediately.")
+		recommendations = append(recommendations, "CRITICAL: Certificate uses quantum-vulnerable algorithms (NIST Level 1).")
 	} else if level <= domain.NISTLevel2 {
-		recommendations = append(recommendations, "WARNING: Certificate may be vulnerable to quantum attacks (NIST Level 2). Consider migrating to PQC.")
+		recommendations = append(recommendations, "WARNING: Certificate may be vulnerable to quantum attacks (NIST Level 2). This endpoint has limited protection against quantum computing threats.")
 	} else if level == domain.NISTLevel3 {
-		recommendations = append(recommendations, "INFO: Certificate provides moderate quantum resistance (NIST Level 3). Consider upgrading to NIST Level 4 or 5 for better protection.")
+		recommendations = append(recommendations, "INFO: Certificate provides moderate quantum resistance (NIST Level 3). Higher NIST levels (4 or 5) would provide better protection against quantum attacks.")
 	}
 
 	// 2. Certificate PQC readiness
 	if !cert.IsPQCReady {
-		recommendations = append(recommendations, "Upgrade certificate to use post-quantum signature algorithms (e.g., Dilithium-3, Falcon-1024) for quantum-resistant authentication.")
+		recommendations = append(recommendations, "Certificate does not use post-quantum signature algorithms.")
 	}
 
-	// 3. Protocol version recommendations
+	// 3. Protocol version findings
 	protocolUpper := strings.ToUpper(protocolVersion)
 	if !strings.Contains(protocolUpper, "1.3") {
 		if strings.Contains(protocolUpper, "1.2") {
-			recommendations = append(recommendations, "Upgrade to TLS 1.3 for improved security, better performance, and mandatory PFS.")
+			recommendations = append(recommendations, "TLS protocol version is 1.2 or older. TLS 1.3 provides improved security, better performance, and mandatory Perfect Forward Secrecy.")
 		} else {
-			recommendations = append(recommendations, "CRITICAL: TLS protocol version is outdated and insecure. Immediately upgrade to TLS 1.3.")
+			recommendations = append(recommendations, "CRITICAL: TLS protocol version is outdated and insecure. This endpoint uses an obsolete TLS version that lacks modern security features.")
 		}
 	}
 
-	// 4. PFS recommendations
+	// 4. PFS findings
 	if !hasPFS {
-		recommendations = append(recommendations, "Enable Perfect Forward Secrecy (PFS) by using ECDHE or DHE cipher suites. This protects past communications even if the private key is compromised.")
+		recommendations = append(recommendations, "Perfect Forward Secrecy (PFS) is not enabled. Past communications could be decrypted if the private key is compromised in the future.")
 	}
 
-	// 5. OCSP Stapling recommendations
+	// 5. OCSP Stapling findings
 	if !hasOCSPStapling {
-		recommendations = append(recommendations, "Enable OCSP stapling to improve performance and reduce certificate validation latency.")
+		recommendations = append(recommendations, "OCSP stapling is not enabled. This may result in slower certificate validation and increased latency.")
 	}
 
-	// 6. Cipher suite recommendations
+	// 6. Cipher suite findings
 	hasWeakCipher := false
 	worstCipherLevel := level
 	for _, cs := range suites {
@@ -566,20 +567,20 @@ func (s *TLSService) generateRecommendations(
 	}
 
 	if hasWeakCipher {
-		recommendations = append(recommendations, "Disable weak cipher suites (NIST Level 1) and prefer TLS 1.3 with PQC key exchange algorithms.")
+		recommendations = append(recommendations, "Weak cipher suites (NIST Level 1) are enabled. These cipher suites are vulnerable to quantum attacks.")
 	} else if worstCipherLevel <= domain.NISTLevel2 {
-		recommendations = append(recommendations, "Consider upgrading cipher suites to NIST Level 3 or higher for better quantum resistance.")
+		recommendations = append(recommendations, "Cipher suites use NIST Level 2 or lower. Higher NIST levels (3 or higher) would provide better quantum resistance.")
 	}
 
-	// 7. PQC readiness recommendations
+	// 7. PQC readiness findings
 	if !isPQCMode && !kexPQCReady {
 		if level >= domain.NISTLevel4 {
-			recommendations = append(recommendations, "Enable post-quantum key exchange (PQC KEX) to achieve hybrid or pure PQC mode for complete quantum protection.")
+			recommendations = append(recommendations, "Post-quantum key exchange (PQC KEX) is not enabled. This endpoint does not support hybrid or pure PQC mode for quantum protection.")
 		} else {
-			recommendations = append(recommendations, "Upgrade to post-quantum cryptography (PQC) for key exchange. Consider hybrid PQC algorithms like ML-KEM combined with classical algorithms.")
+			recommendations = append(recommendations, "Post-quantum cryptography (PQC) is not used for key exchange. This endpoint is vulnerable to 'harvest now, decrypt later' attacks using quantum computers.")
 		}
 	} else if kexPQCReady && !isPQCMode {
-		recommendations = append(recommendations, "PQC key exchange is ready. Consider enabling pure PQC mode for maximum quantum security.")
+		recommendations = append(recommendations, "PQC key exchange is available but not in pure PQC mode. The endpoint supports PQC but is not using it exclusively.")
 	}
 
 	// 8. Positive feedback for good configurations
