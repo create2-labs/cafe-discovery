@@ -15,6 +15,8 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 
 ## Architecture
 
+
+
 The application is designed to be scalabled with a focus on performances.
 
 ### Goals
