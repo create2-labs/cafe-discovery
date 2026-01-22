@@ -69,11 +69,9 @@ WORKDIR /app
 
 ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
 
-# Install CI tools (versions figées recommandées)
 RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
  && apt-get update && apt-get install -y curl \
  && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-    | sh -s -- -b /usr/local/bin v1.55.2
+    | sh -s -- -b /usr/local/bin v2.8.0
 
-# Default CI command
 CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && govulncheck ./..."]
