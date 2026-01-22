@@ -4,12 +4,11 @@
     "editor.defaultFormatter": "golang.go",
     "editor.formatOnSave": true
   },
-
-  "golangci-lint.run": "onSave",
-  "golangci-lint.args": [
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "package",
+  "go.lintFlags": [
     "--timeout=5m"
   ],
-
-  "go.lintTool": "golangci-lint",
-  "go.lintOnSave": "workspace"
+  "go.vetOnSave": "package",
+  "go.testOnSave": false
 }
