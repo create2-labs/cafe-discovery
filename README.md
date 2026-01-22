@@ -248,6 +248,104 @@ The CI/CD pipeline is strictly separated into two distinct workflows:
 
 **Important**: This workflow does NOT build or publish Docker images. It only validates code quality and security.
 
+##### Running CI Locally
+
+You can run the same CI checks locally before creating a pull request. This helps catch issues early and ensures your PR will pass CI.
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+- OQS base image built (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+
+**Method 1: Using Docker Compose (Recommended)**
+
+The `docker-compose.yml` file includes CI service definitions that build the CI images:
+
+```bash
+# Build both CI images
+docker compose build cafe-discovery-backend-ci
+docker compose build cafe-discovery-worker-ci
+
+# Run CI checks for backend
+docker compose run --rm cafe-discovery-backend-ci
+
+# Run CI checks for worker
+docker compose run --rm cafe-discovery-worker-ci
+```
+
+**Method 2: Using Docker Directly**
+
+You can also build and run the CI images directly with Docker:
+
+```bash
+# Build backend CI image
+docker build \
+  --target ci \
+  -f Dockerfile-discovery-backend \
+  -t cafe-discovery-backend:ci .
+
+# Run backend CI checks
+docker run --rm cafe-discovery-backend:ci
+
+# Build worker CI image
+docker build \
+  --target ci \
+  -f Dockerfile-discovery-worker \
+  -t cafe-discovery-worker:ci .
+
+# Run worker CI checks
+docker run --rm cafe-discovery-worker:ci
+```
+
+**Method 3: Running Individual Checks Locally (Without Docker)**
+
+If you have Go, `golangci-lint`, and `govulncheck` installed locally:
+
+```bash
+# Download dependencies
+go mod download
+
+# Run linter
+golangci-lint run ./...
+
+# Run tests
+go test ./...
+
+# Run vulnerability scanner
+govulncheck ./...
+```
+
+**What the CI Checks Do:**
+
+1. **`go mod download`**: Downloads all Go module dependencies
+2. **`golangci-lint run ./...`**: Runs static analysis and linting on all Go files
+   - Checks code style, potential bugs, security issues
+   - Uses configuration from `.golangci.yml` or `.golangci.yml-strict`
+   - Timeout: 5 minutes (configurable)
+3. **`go test ./...`**: Runs all unit tests
+   - Executes tests in all packages
+   - Reports test coverage and failures
+4. **`govulncheck ./...`**: Scans for known vulnerabilities
+   - Checks against Go vulnerability database
+   - Reports any known security issues in dependencies
+
+**Troubleshooting:**
+
+- **Build fails with "oqs:dev not found"**: Make sure you've built the OQS base image (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+- **Linter timeout**: Increase timeout in `.golangci.yml` or run with `--timeout=10m`
+- **Tests fail**: Check that all dependencies are available and tests are passing locally
+- **govulncheck fails**: Update dependencies with `go get -u ./...` and `go mod tidy`
+
+**CI Image Details:**
+
+The CI images (`ci` target) include:
+- Go 1.25.5 runtime (required to fix GO-2025-4175 and GO-2025-4155 vulnerabilities)
+- Open Quantum Safe (OQS) libraries
+- `golangci-lint` v2.8.0
+- `govulncheck` (latest)
+- All project dependencies
+
+The CI images are based on the `builder` stage, which includes the full build environment. They execute the CI checks as the default command when run.
+
 #### 2. Docker Release Pipeline (`.github/workflows/docker-release.yml`)
 
 **Trigger**: Push of Git tags matching `v*.*.*` (e.g., `v1.2.3`)
@@ -532,24 +630,66 @@ docker compose up -d cafe-discovery-worker
 - These Dockerfiles use `oqs:dev` as the base image (must be built from `cafe-infra/oqs` in Step 1)
 - Manages the build context and dependencies
 
-The services will:
-- Connect to the `cafe-infra_observability` network
-- Use service names for connections (postgres, nats, redis) as configured in `config.yaml`
-- Expose the API server on `http://localhost:8080`
-- Load configuration from `/app/config.yaml` (mounted from `./config.yaml`)
+**Docker Compose Services:**
 
-Dockerfile Structure:
+The `docker-compose.yml` file defines four services:
+
+1. **`cafe-discovery-backend`** (runtime):
+   - API server running on port `8080`
+   - Uses `runtime` target from `Dockerfile-discovery-backend`
+   - Health check: `curl http://localhost:8080/health` (every 30s)
+   - Restart policy: `unless-stopped`
+
+2. **`cafe-discovery-worker`** (runtime):
+   - Background worker processing NATS messages
+   - Health check endpoint on port `8081` (configurable via `WORKER_HEALTH_PORT`)
+   - Health check: `wget http://localhost:8081/health` (every 30s)
+   - Restart policy: `unless-stopped`
+
+3. **`cafe-discovery-backend-ci`** (build-only):
+   - CI build target for backend (not started by default)
+   - Uses `ci` target from `Dockerfile-discovery-backend`
+   - Used for CI/CD pipelines
+
+4. **`cafe-discovery-worker-ci`** (build-only):
+   - CI build target for worker (not started by default)
+   - Uses `ci` target from `Dockerfile-discovery-worker`
+   - Used for CI/CD pipelines
+
+**Configuration:**
+
+The services are configured with:
+- **Network**: Connects to external network `cafe-infra_observability` (must exist from `cafe-infra`)
+- **Volumes**: Mounts `./config.yaml` to `/app/config.yaml` (read-only)
+- **Environment Variables**: Supports environment variable overrides with defaults:
+  - `JWT_SECRET` (default: `change-me-in-production`)
+  - `MORALIS_API_KEY` (required, no default)
+  - `POSTGRES_USER` (default: `cafe`)
+  - `POSTGRES_PASSWORD` (default: `cafe`)
+  - `LOG_LEVEL` (default: `debug` for backend, `info` for worker)
+  - `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` (default: dev keys)
+- **Service Discovery**: Uses Docker service names (postgres, nats, redis) from `cafe-infra`
+- **Health Checks**: Both services include health check configurations for monitoring
+
+**Dockerfile Structure:**
 - **OQS Base Image**: Managed in [cafe-infra/oqs](../cafe-infra/oqs/) - builds `cafe-oqs:build` and `cafe-oqs:runtime`, tagged as `oqs:dev` for compatibility
 - `Dockerfile-discovery-backend`: Builds the API server using `oqs:dev` as base
+  - `runtime` target: Production-ready server image
+  - `ci` target: CI/CD image with linting and testing tools
 - `Dockerfile-discovery-worker`: Builds the worker using `oqs:dev` as base
+  - `runtime` target: Production-ready worker image
+  - `ci` target: CI/CD image with linting and testing tools
 
-Verify services are running:
+**Verify services are running:**
 ```bash
 # Check container status
 docker compose ps
 
-# Health check
+# Health check (backend)
 curl http://localhost:8080/health
+
+# Health check (worker)
+curl http://localhost:8081/health
 
 # Metrics endpoint (Prometheus format)
 curl http://localhost:8080/metrics
@@ -559,34 +699,59 @@ docker compose logs -f cafe-discovery-backend
 docker compose logs -f cafe-discovery-worker
 ```
 
-Stop services:
+**Stop services:**
 ```bash
 docker compose down
 ```
 
-#### Step 3-bis: start services independently
+#### Step 3-bis: Start Services Independently (Advanced)
 
-- Start the backend
+If you prefer to run services independently without Docker Compose, you can use `docker run` directly:
 
-```
+**Start the backend:**
+```bash
 docker run --network cafe-infra_observability --rm \
-  -v $(pwd)/$config.yaml:/app/config.yaml:ro \
+  -p 8080:8080 \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -e CONFIG_PATH=/app/config.yaml \
   -e LOG_LEVEL=debug \
-  -e JWT_SECRET=totorigolo \
-  discovery-server:dev
+  -e JWT_SECRET=your-secret-key-here \
+  -e MORALIS_API_KEY=your-api-key-here \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DATABASE=cafe \
+  -e POSTGRES_USER=cafe \
+  -e POSTGRES_PASSWORD=cafe \
+  -e NATS_URL=nats://nats:4222 \
+  -e REDIS_URL=redis://redis:6379 \
+  cafe-discovery-backend:latest
 ```
 
-- Start the worker
-
-```
+**Start the worker:**
+```bash
 docker run --network cafe-infra_observability --rm \
-  -v $(pwd)/$config.yaml:/app/config.yaml:ro \
+  -p 8081:8081 \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -e CONFIG_PATH=/app/config.yaml \
-  -e LOG_LEVEL=debug \
-  -e JWT_SECRET=totorigolo \
-  discovery-worker:dev
+  -e WORKER_HEALTH_PORT=8081 \
+  -e LOG_LEVEL=info \
+  -e JWT_SECRET=your-secret-key-here \
+  -e MORALIS_API_KEY=your-api-key-here \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DATABASE=cafe \
+  -e POSTGRES_USER=cafe \
+  -e POSTGRES_PASSWORD=cafe \
+  -e NATS_URL=nats://nats:4222 \
+  -e REDIS_URL=redis://redis:6379 \
+  cafe-discovery-worker:latest
 ```
+
+**Note:** 
+- Replace `cafe-discovery-backend:latest` and `cafe-discovery-worker:latest` with the actual image names/tags you built
+- The network `cafe-infra_observability` must exist (created by `cafe-infra`)
+- All environment variables can be overridden as needed
+- Using Docker Compose (Step 3) is recommended for easier management
 
 ### Environment Variables
 
