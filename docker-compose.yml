@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 # IMPORTANT: Before building the services with docker compose, you must first build the OQS base image:
 #   See Step 1 in README.md for instructions on building from cafe-infra/oqs
@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile-discovery-backend
+      target: runtime
     container_name: cafe-discovery-backend
     restart: unless-stopped
     ports:
@@ -18,7 +19,7 @@ services:
       # Server configuration
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8080
-      
+
       # PostgreSQL (using cafe-infra service names)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -26,27 +27,27 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-cafe}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
       - POSTGRES_SSLMODE=disable
-      
+
       # NATS (using cafe-infra service names)
       - NATS_URL=nats://nats:4222
-      
+
       # Redis (using cafe-infra service names)
       - REDIS_URL=redis://redis:6379
-      
+
       # JWT configuration (required)
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      
+
       # Moralis API (required for wallet scanning)
       - MORALIS_API_KEY=${MORALIS_API_KEY}
       - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
-      
+
       # Cloudflare Turnstile (optional, uses dev keys by default)
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-1x0000000000000000000000000000000AA}
       - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-1x00000000000000000000AA}
-      
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      
+
       # Configuration file path
       - CONFIG_PATH=/app/config.yaml
     volumes:
@@ -59,17 +60,24 @@ services:
       timeout: 5s
       retries: 5
 
+  cafe-discovery-backend-ci:
+    build:
+      context: .
+      dockerfile: Dockerfile-discovery-backend
+      target: ci
+
   # Cafe Discovery Worker
   cafe-discovery-worker:
     build:
       context: .
       dockerfile: Dockerfile-discovery-worker
+      target: runtime
     container_name: cafe-discovery-worker
     restart: unless-stopped
     environment:
       # Worker health check port
       - WORKER_HEALTH_PORT=8081
-      
+
       # PostgreSQL (using cafe-infra service names)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -77,23 +85,23 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-cafe}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
       - POSTGRES_SSLMODE=disable
-      
+
       # NATS (using cafe-infra service names)
       - NATS_URL=nats://nats:4222
-      
+
       # Redis (using cafe-infra service names)
       - REDIS_URL=redis://redis:6379
-      
+
       # JWT configuration (required)
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      
+
       # Moralis API (required for wallet scanning)
       - MORALIS_API_KEY=${MORALIS_API_KEY}
       - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
-      
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      
+
       # Configuration file path
       - CONFIG_PATH=/app/config.yaml
     volumes:
@@ -101,11 +109,25 @@ services:
     networks:
       - cafe-infra_observability
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8081/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  cafe-discovery-worker-ci:
+    build:
+      context: .
+      dockerfile: Dockerfile-discovery-worker
+      target: ci
 
 networks:
   cafe-infra_observability:

@@ -109,7 +109,7 @@ func (s *AuthService) Close() {
 
 // SignupRequest represents the signup request
 type SignupRequest struct {
-	TurnstileToken string `json:"turnstile_token"`
+	TurnstileToken  string `json:"turnstile_token"`
 	Email           string `json:"email"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirm_password"`
@@ -131,11 +131,11 @@ type AuthResponse struct {
 // verifyTurnstileToken verifies a Cloudflare Turnstile token
 func verifyTurnstileToken(token string) error {
 	secretKey := viper.GetString(config.TurnstileSecretKey)
-	
+
 	// Check if using Cloudflare development keys (always pass verification)
 	const devSecretKey = "1x0000000000000000000000000000000AA"
 	isDevMode := secretKey == "" || secretKey == devSecretKey
-	
+
 	if isDevMode {
 		if secretKey == devSecretKey {
 			log.Printf("⚠️  WARNING: Using Cloudflare Turnstile development keys. Turnstile verification is disabled in development mode.")
@@ -156,7 +156,7 @@ func verifyTurnstileToken(token string) error {
 	// Call Cloudflare Turnstile API to verify the token
 	url := "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 	data := map[string]string{
-		"secret": secretKey,
+		"secret":   secretKey,
 		"response": token,
 	}
 	jsonData, err := json.Marshal(data)
@@ -168,7 +168,12 @@ func verifyTurnstileToken(token string) error {
 	if err != nil {
 		return fmt.Errorf("failed to verify turnstile token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error but don't fail the request
+			_ = err
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

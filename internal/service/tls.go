@@ -360,9 +360,9 @@ func (s *TLSService) calculateTLSRiskScore(
 	// 1. Base risk from NIST levels (40% weight)
 	// Use weighted average of all components to better reflect overall security
 	// Critical components (certificate/signature) have more weight
-	var worstNISTLevel domain.NISTLevel = certLevel
-	var avgNISTLevel float64 = float64(certLevel)
-	var componentCount float64 = 1.0
+	worstNISTLevel := certLevel
+	avgNISTLevel := float64(certLevel)
+	componentCount := 1.0
 
 	if len(detailedNISTLevels) > 0 {
 		// Find the worst level and calculate weighted average

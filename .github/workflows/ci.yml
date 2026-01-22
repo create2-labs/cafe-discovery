@@ -1,4 +1,4 @@
-name: golang tests
+name: CI
 
 on:
   pull_request:
@@ -8,26 +8,49 @@ on:
 permissions:
   contents: read
 
-env:
-  CGO_ENABLED: "1"
-
 jobs:
-  lint-and-test:
+  ci:
     runs-on: ubuntu-latest
-    container:
-      image: oleglod/cafe-oqs:build
+
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Download dependencies
-        run: go mod download
+      # ------------------------------------------------------------
+      # Docker / Buildx
+      # ------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Run Linter
-        run: golangci-lint run ./...
+      # ============================================================
+      # BACKEND
+      # ============================================================
+      - name: Build backend CI image
+        run: |
+          set -euo pipefail
+          docker build \
+            --target ci \
+            -f Dockerfile-discovery-backend \
+            -t cafe-discovery-backend:ci .
 
-      - name: Run unit-tests
-        run: go test ./...
+      - name: Run backend CI checks (inside CI image)
+        run: |
+          docker run --rm cafe-discovery-backend:ci
 
-      - name: Build
-        run: go build ./cmd/server/main.go
+      # ============================================================
+      # WORKER
+      # ============================================================
+      - name: Build worker CI image
+        run: |
+          set -euo pipefail
+          docker build \
+            --target ci \
+            -f Dockerfile-discovery-worker \
+            -t cafe-discovery-worker:ci .
+
+      - name: Run worker CI checks (inside CI image)
+        run: |
+          docker run --rm cafe-discovery-worker:ci

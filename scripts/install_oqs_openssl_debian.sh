@@ -139,8 +139,8 @@ openssl list -kem-algorithms | grep -i kem && echo "INFO : KEM algorithms active
 
 # Install Golang
 cd 
-GO_TAR_FILE=go1.25.4.linux-amd64.tar.gz
-[ $ARCH == "aarch64" ] && GO_TAR_FILE=go1.25.4.linux-arm64.tar.gz
+GO_TAR_FILE=go1.25.5.linux-amd64.tar.gz
+[ $ARCH == "aarch64" ] && GO_TAR_FILE=go1.25.5.linux-arm64.tar.gz
 wget https://go.dev/dl/$GO_TAR_FILE
 rm -rf /usr/local/go
 tar -C /usr/local -xzf $GO_TAR_FILE

@@ -133,7 +133,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis: %v", err)
 	}
-	defer redisConn.Close()
+	defer func() {
+		if err := redisConn.Close(); err != nil {
+			log.Printf("Failed to close Redis connection: %v", err)
+		}
+	}()
 
 	// Create EVM clients for each configured blockchain
 	clients := make(map[string]*evm.Client)

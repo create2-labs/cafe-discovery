@@ -27,12 +27,6 @@ type PlanService struct {
 	rateLimitMaxScans  int           // Max scans per window for anonymous users
 }
 
-// anonymousScanRecord tracks a scan timestamp
-type anonymousScanRecord struct {
-	Timestamp time.Time
-	ScanType  string
-}
-
 // NewPlanService creates a new plan service
 func NewPlanService(planRepo repository.PlanRepository, userRepo repository.UserRepository) *PlanService {
 	return &PlanService{
@@ -237,19 +231,20 @@ func (s *PlanService) CheckScanLimit(userID uuid.UUID, scanType string, scanResu
 	}
 
 	var canScan bool
-	if scanType == "wallet" {
+	switch scanType {
+	case "wallet":
 		if usage.WalletScanLimit == 0 {
 			canScan = true // Unlimited
 		} else {
 			canScan = usage.WalletScansUsed < usage.WalletScanLimit
 		}
-	} else if scanType == "endpoint" {
+	case "endpoint":
 		if usage.EndpointScanLimit == 0 {
 			canScan = true // Unlimited
 		} else {
 			canScan = usage.EndpointScansUsed < usage.EndpointScanLimit
 		}
-	} else {
+	default:
 		return false, usage, fmt.Errorf("unknown scan type: %s", scanType)
 	}
 
