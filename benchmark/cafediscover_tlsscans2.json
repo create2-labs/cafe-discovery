@@ -1,0 +1,802 @@
+{
+  "count": 8,
+  "limit": 10,
+  "offset": 10,
+  "results": [
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WR3,O=Google Trust Services,C=US",
+            "key_size": 2048,
+            "nist_level": 1,
+            "not_after": "2026-04-23T04:05:02Z",
+            "not_before": "2026-01-23T03:12:49Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "RSA-2048",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "SHA256-RSA",
+            "subject": "CN=mainnet.optimism.io",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "SHA256-RSA",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:17Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=mainnet.optimism.io",
+        "issuer": "CN=WR3,O=Google Trust Services,C=US",
+        "signature_algorithm": "SHA256-RSA",
+        "public_key_algorithm": "RSA-2048",
+        "key_size": 2048,
+        "not_before": "2026-01-23T03:12:49Z",
+        "not_after": "2026-04-23T04:05:02Z",
+        "serial_number": "260118410236948162546584228578320802966",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "mainnet.optimism.io",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:17.541258Z",
+      "supported_pqc": [],
+      "url": "https://mainnet.optimism.io"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=E7,O=Let's Encrypt,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-04-07T16:42:41Z",
+            "not_before": "2026-01-07T16:42:42Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA384",
+            "subject": "CN=arbitrum.io",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA384",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:16Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=arbitrum.io",
+        "issuer": "CN=E7,O=Let's Encrypt,C=US",
+        "signature_algorithm": "ECDSA-SHA384",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2026-01-07T16:42:42Z",
+        "not_after": "2026-04-07T16:42:41Z",
+        "serial_number": "449532733747782187119279276803944659319056",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "arb1.arbitrum.io",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:16.836293Z",
+      "supported_pqc": [],
+      "url": "https://arb1.arbitrum.io/rpc"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WR1,O=Google Trust Services,C=US",
+            "key_size": 2048,
+            "nist_level": 1,
+            "not_after": "2026-04-22T12:29:38Z",
+            "not_before": "2026-01-22T12:29:39Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "RSA-2048",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "SHA256-RSA",
+            "subject": "CN=shark.multi-rpc.com",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "SHA256-RSA",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_256_GCM_SHA384",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:16Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=shark.multi-rpc.com",
+        "issuer": "CN=WR1,O=Google Trust Services,C=US",
+        "signature_algorithm": "SHA256-RSA",
+        "public_key_algorithm": "RSA-2048",
+        "key_size": 2048,
+        "not_before": "2026-01-22T12:29:39Z",
+        "not_after": "2026-04-22T12:29:38Z",
+        "serial_number": "20222463964530169268296584039917805286",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_256_GCM_SHA384",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "rpc.ankr.com",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:16.090996Z",
+      "supported_pqc": [],
+      "url": "https://rpc.ankr.com/eth"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-03-03T11:54:48Z",
+            "not_before": "2025-12-03T10:54:54Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=pq.cloudflareresearch.com",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:15Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=pq.cloudflareresearch.com",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-03T10:54:54Z",
+        "not_after": "2026-03-03T11:54:48Z",
+        "serial_number": "314785760537456512730716905749994984247",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "pq.cloudflareresearch.com",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:15.171583Z",
+      "supported_pqc": [],
+      "url": "https://pq.cloudflareresearch.com"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=oqstest_intermediate_ecdsap256",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-12-11T21:10:07Z",
+            "not_before": "2025-12-11T21:10:07Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=test.openquantumsafe.org",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:14Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=test.openquantumsafe.org",
+        "issuer": "CN=oqstest_intermediate_ecdsap256",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-11T21:10:07Z",
+        "not_after": "2026-12-11T21:10:07Z",
+        "serial_number": "310422333654352976430764239284085935073327451900",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "test.openquantumsafe.org",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 6003,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:14.408286Z",
+      "supported_pqc": [],
+      "url": "https://test.openquantumsafe.org:6003"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=oqstest_intermediate_ecdsap256",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-12-11T21:10:07Z",
+            "not_before": "2025-12-11T21:10:07Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=test.openquantumsafe.org",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:13Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=test.openquantumsafe.org",
+        "issuer": "CN=oqstest_intermediate_ecdsap256",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-11T21:10:07Z",
+        "not_after": "2026-12-11T21:10:07Z",
+        "serial_number": "310422333654352976430764239284085935073327451900",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "test.openquantumsafe.org",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 6002,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:13.476262Z",
+      "supported_pqc": [],
+      "url": "https://test.openquantumsafe.org:6002"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=oqstest_intermediate_ecdsap256",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-12-11T21:10:07Z",
+            "not_before": "2025-12-11T21:10:07Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=test.openquantumsafe.org",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:12Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=test.openquantumsafe.org",
+        "issuer": "CN=oqstest_intermediate_ecdsap256",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-11T21:10:07Z",
+        "not_after": "2026-12-11T21:10:07Z",
+        "serial_number": "310422333654352976430764239284085935073327451900",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "test.openquantumsafe.org",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 6001,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:12.459046Z",
+      "supported_pqc": [],
+      "url": "https://test.openquantumsafe.org:6001"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=E8,O=Let's Encrypt,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-02-07T15:37:51Z",
+            "not_before": "2025-11-09T15:37:52Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA384",
+            "subject": "CN=test.openquantumsafe.org",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA384",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:11Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=test.openquantumsafe.org",
+        "issuer": "CN=E8,O=Let's Encrypt,C=US",
+        "signature_algorithm": "ECDSA-SHA384",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-11-09T15:37:52Z",
+        "not_after": "2026-02-07T15:37:51Z",
+        "serial_number": "532648379854387757452068150239147796031103",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "test.openquantumsafe.org",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:11.399682Z",
+      "supported_pqc": [],
+      "url": "https://test.openquantumsafe.org"
+    }
+  ],
+  "total": 18
+}

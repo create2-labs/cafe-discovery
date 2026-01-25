@@ -1,0 +1,1133 @@
+[
+         {
+              "id"           : "engine_problem",
+              "ip"           : "test.openquantumsafe.org/",
+              "port"         : "6003",
+              "severity"     : "WARN",
+              "finding"      : "No engine or GOST support via engine with your /opt/homebrew/Cellar/openssl@3/3.6.0/bin/openssl"
+          }
+,         {
+              "id"           : "service",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "HTTP"
+          }
+,         {
+              "id"           : "pre_128cipher",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No 128 cipher limit bug"
+          }
+,         {
+              "id"           : "SSLv2",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "SSLv3",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "TLS1",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "TLS1_1",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "TLS1_2",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "TLS1_3",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "offered with final"
+          }
+,         {
+              "id"           : "QUIC",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "NPN",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "WARN",
+              "finding"      : "not possible for TLS 1.3-only hosts"
+          }
+,         {
+              "id"           : "ALPN",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "http/1.1"
+          }
+,         {
+              "id"           : "cipherlist_NULL",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cwe"          : "CWE-327",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_aNULL",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cwe"          : "CWE-327",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_EXPORT",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cwe"          : "CWE-327",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_LOW",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cwe"          : "CWE-327",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_3DES_IDEA",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "cwe"          : "CWE-310",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_OBSOLETED",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "cwe"          : "CWE-310",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_STRONG_NOFS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "cipherlist_STRONG_FS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "offered"
+          }
+,         {
+              "id"           : "cipher-tls1_3_x1302",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "TLSv1.3   x1302   TLS_AES_256_GCM_SHA384            ECDH/MLKEM AESGCM      256      TLS_AES_256_GCM_SHA384"
+          }
+,         {
+              "id"           : "cipher-tls1_3_x1303",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "TLSv1.3   x1303   TLS_CHACHA20_POLY1305_SHA256      ECDH/MLKEM ChaCha20    256      TLS_CHACHA20_POLY1305_SHA256"
+          }
+,         {
+              "id"           : "cipher-tls1_3_x1301",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "TLSv1.3   x1301   TLS_AES_128_GCM_SHA256            ECDH/MLKEM AESGCM      128      TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "supportedciphers_TLSv1_3",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "cipher_order",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not a server cipher order for TLS 1.3 configured"
+          }
+,         {
+              "id"           : "FS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "offered"
+          }
+,         {
+              "id"           : "FS_ciphers",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "FS_KEMs",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "X25519MLKEM768"
+          }
+,         {
+              "id"           : "FS_TLS13_sig_algs",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "ECDSA+SHA256"
+          }
+,         {
+              "id"           : "TLS_extensions",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "'server name/#0' 'supported versions/#43' 'key share/#51'"
+          }
+,         {
+              "id"           : "TLS_misses_extension_23",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "MEDIUM",
+              "finding"      : "No extended master secret extension, violates RFC 9325 & may cause connection problems"
+          }
+,         {
+              "id"           : "TLS_session_ticket",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "no -- no lifetime advertised"
+          }
+,         {
+              "id"           : "SSL_sessionID_support",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "no"
+          }
+,         {
+              "id"           : "sessionresumption_ticket",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not supported"
+          }
+,         {
+              "id"           : "sessionresumption_ID",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No Session ID, no resumption"
+          }
+,         {
+              "id"           : "early_data",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "No early data: no session SSL ID"
+          }
+,         {
+              "id"           : "TLS_timestamp",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "random"
+          }
+,         {
+              "id"           : "certificate_compression",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "none"
+          }
+,         {
+              "id"           : "clientAuth",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "none"
+          }
+,         {
+              "id"           : "cert_numbers",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "1"
+          }
+,         {
+              "id"           : "cert_signatureAlgorithm",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "ECDSA with SHA256"
+          }
+,         {
+              "id"           : "cert_keySize",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "EC 256 bits (curve P-256)"
+          }
+,         {
+              "id"           : "cert_keyUsage",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "Digital Signature"
+          }
+,         {
+              "id"           : "cert_extKeyUsage",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLS Web Server Authentication"
+          }
+,         {
+              "id"           : "cert_serialNumber",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "365FD1A0F30C66693E349AF969EDE63525BE0EFC"
+          }
+,         {
+              "id"           : "cert_serialNumberLen",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "20"
+          }
+,         {
+              "id"           : "cert_fingerprintSHA1",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "0B6EDE70A243A3E6EDBEDC002D0EB4B169159FB7"
+          }
+,         {
+              "id"           : "cert_fingerprintSHA256",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "9C668A8523E6749FF7A04E87751E6F5C469CD0EB64C91A0741EB55AC6FC9AE9C"
+          }
+,         {
+              "id"           : "cert",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "-----BEGIN CERTIFICATE-----\nMIIB/jCCAaWgAwIBAgIUNl/RoPMMZmk+NJr5ae3mNSW+DvwwCgYIKoZIzj0EAwIwKTEnMCUGA1UEAwweb3FzdGVzdF9pbnRlcm1lZGlhdGVfZWNkc2FwMjU2MB4XDTI1MTIxMTIxMTAwN1oXDTI2MTIxMTIxMTAwN1owIzEhMB8GA1UEAwwYdGVzdC5vcGVucXVhbnR1bXNhZmUub3JnMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFXR8ipwQKHKgxsuNp/P7KfQgNxM2dI215qPJfRHtilHPuHJkL6KaX8dpVKiYOM0NbXWgJ5fanRttKHY8HubP/qOBsDCBrTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDATAdBgNVHQ4EFgQUK23REajZpUOiEhYLJqrPdeEExXcwHwYDVR0jBBgwFoAUdi9tqB/RluWNI3HD6sQzhVVvurQwIwYDVR0RBBwwGoIYdGVzdC5vcGVucXVhbnR1bXNhZmUub3JnMBMGA1UdIAQMMAowCAYGZ4EMAQIBMAoGCCqGSM49BAMCA0cAMEQCIH6m0U/DDRCLSTz7ZOs7LxiYryTOC7VMKAT9wWoBA7vkAiAN2JyukECaC7QMdlvMpxNPhnWRsRSlKwFDhqn72Fy6Lw==\n-----END CERTIFICATE-----"
+          }
+,         {
+              "id"           : "cert_commonName",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "test.openquantumsafe.org"
+          }
+,         {
+              "id"           : "cert_commonName_wo_SNI",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "test.openquantumsafe.org"
+          }
+,         {
+              "id"           : "cert_subjectAltName",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "test.openquantumsafe.org"
+          }
+,         {
+              "id"           : "cert_trust",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "Ok via SAN and CN (same w/o SNI)"
+          }
+,         {
+              "id"           : "cert_chain_of_trust",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "CRITICAL",
+              "finding"      : "failed (chain incomplete)."
+          }
+,         {
+              "id"           : "cert_certificatePolicies_EV",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "no"
+          }
+,         {
+              "id"           : "cert_expirationStatus",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "319 >= 60 days"
+          }
+,         {
+              "id"           : "cert_notBefore",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "2025-12-11 21:10"
+          }
+,         {
+              "id"           : "cert_notAfter",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "2026-12-11 21:10"
+          }
+,         {
+              "id"           : "cert_extlifeSpan",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "certificate has no extended life time according to browser forum"
+          }
+,         {
+              "id"           : "cert_eTLS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "not present"
+          }
+,         {
+              "id"           : "cert_crlDistributionPoints",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "cert_ocspURL",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "cert_revocation",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "HIGH",
+              "finding"      : "Neither CRL nor OCSP URI provided"
+          }
+,         {
+              "id"           : "OCSP_stapling",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "not sure what's going on here, ''"
+          }
+,         {
+              "id"           : "cert_mustStapleExtension",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "DNS_CAArecord",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "LOW",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "certificate_transparency",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "certs_countServer",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "2"
+          }
+,         {
+              "id"           : "certs_list_ordering_problem",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "no"
+          }
+,         {
+              "id"           : "cert_caIssuers",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "oqstest_intermediate_ecdsap256"
+          }
+,         {
+              "id"           : "intermediate_cert <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "-----BEGIN CERTIFICATE-----\nMIIDmzCCAYOgAwIBAgIUSIloUzPASDzjxqHtRwE6Z7wvN3owDQYJKoZIhvcNAQELBQAwFTETMBEGA1UEAwwKb3FzdGVzdF9DQTAeFw0yNTEyMTEyMTEwMDdaFw0yNjEyMTIyMTEwMDdaMCkxJzAlBgNVBAMMHm9xc3Rlc3RfaW50ZXJtZWRpYXRlX2VjZHNhcDI1NjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNEiPsiwzKKH6eR6rsgR5wCuAaPqMN0GOE5qMW/8T6aKcDN4/ff6QiPYXoSPS19gkpNP7ddUi5aCS4l0H9OAxHWjgZkwgZYwEgYDVR0TAQH/BAgwBgEB/wIBADAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0OBBYEFHYvbagf0ZbljSNxw+rEM4VVb7q0MB8GA1UdIwQYMBaAFIGnIxlFxqHD68PdPBIbGne/LZ+GMBEGA1UdIAQKMAgwBgYEVR0gADAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwDQYJKoZIhvcNAQELBQADggIBALFhyX5irb5pR1+SYWWnTV2CRi1bQLC89xU5zYSgmyDj9+1y6oKTisdF9kEe3d2TbKsaWTN+Xl8OaoJFQgfX9ZbM4UOXBz5WvJS8XqT8dcWANjhud+8Q+LEvctmfk4ktXHV4Nn/WshQZBn4AaxnjXqjpf53Ld8ZmZfGQ+vn5RJzjojzr9i67vmFsq1AnBBqbwswFShJKHjaoOCNZxZeO5pAhFows0PaZtz6vw3Hk8hN37y6BXQtKfdsFAHOWVH55QHzBW26LxOXEADUGTJsLaOTVTxZa/J5uIKsTStIlMnz180Fs9mjl5loBQgn9lM+3ui+FNDYJ+cf78LwT72eyjCoTwfvfwhVLAJLwvpCqfoNpsWuYmjhLIHW8gxr8nrb1+MT75evKjtE/8Xd10u2TBEtq/8cUvaQZ997t8+uEds60CVNPETSIvI4ZL2xNBMFz/a40PpVCX9wNI/s7qnLBTpIwDAJDa1EmMXn/vvrCPA+kqk8ABjqfXymCdIjFp59H0JSJGglXh1agpqWQHj7RnqacLl8dlQVyfKtR9ox0HJ6gEF+SB9RxjvraouSaA9R31ZvzbUTD3uZEoZks5IveZ0SjV6mbdvyRh/Zk83PUl7zOtBGI8rFzOqE+Qv05SAVPr44n0yC608lsjBp6P2Y+9O3i1/nMF4RC5/bzHMaczg/C\n-----END CERTIFICATE-----"
+          }
+,         {
+              "id"           : "intermediate_cert_fingerprintSHA256 <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "986B66CBE6FC2C1A9C67899D6959B7ABEAECD6F66A5DEEEF9156CD3D550D915F"
+          }
+,         {
+              "id"           : "intermediate_cert_notBefore <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "2025-12-11 21:10"
+          }
+,         {
+              "id"           : "intermediate_cert_notAfter <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "2026-12-12 21:10"
+          }
+,         {
+              "id"           : "intermediate_cert_expiration <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "ok > 40 days"
+          }
+,         {
+              "id"           : "intermediate_cert_chain <#1>",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "oqstest_intermediate_ecdsap256 <-- oqstest_CA"
+          }
+,         {
+              "id"           : "intermediate_cert_badOCSP",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "intermediate certificate(s) is/are ok"
+          }
+,         {
+              "id"           : "HTTP_status_code",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "200 OK ('/')"
+          }
+,         {
+              "id"           : "HTTP_clock_skew",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "-87 seconds from localtime"
+          }
+,         {
+              "id"           : "HTTP_headerTime",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "1769375716"
+          }
+,         {
+              "id"           : "HSTS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "LOW",
+              "finding"      : "not offered"
+          }
+,         {
+              "id"           : "HPKP",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No support for HTTP Public Key Pinning"
+          }
+,         {
+              "id"           : "banner_server",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "nginx/1.27.4"
+          }
+,         {
+              "id"           : "banner_application",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No application banner found"
+          }
+,         {
+              "id"           : "cookie_count",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "0 at '/'"
+          }
+,         {
+              "id"           : "security_headers",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "MEDIUM",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "banner_reverseproxy",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "cwe"          : "CWE-200",
+              "finding"      : "--"
+          }
+,         {
+              "id"           : "heartbleed",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2014-0160",
+              "cwe"          : "CWE-119",
+              "finding"      : "not vulnerable, no heartbeat extension"
+          }
+,         {
+              "id"           : "CCS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2014-0224",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable"
+          }
+,         {
+              "id"           : "ticketbleed",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2016-9244",
+              "cwe"          : "CWE-200",
+              "finding"      : "no session ticket extension"
+          }
+,         {
+              "id"           : "opossum",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2025-49812",
+              "cwe"          : "CWE-287",
+              "finding"      : "not vulnerable"
+          }
+,         {
+              "id"           : "ROBOT",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081 CVE-2017-6168",
+              "cwe"          : "CWE-203",
+              "finding"      : "not vulnerable, no RSA key transport cipher"
+          }
+,         {
+              "id"           : "secure_renego",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cwe"          : "CWE-310",
+              "finding"      : "TLS 1.3 only server"
+          }
+,         {
+              "id"           : "secure_client_renego",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2011-1473",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, TLS 1.3 only"
+          }
+,         {
+              "id"           : "CRIME_TLS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2012-4929",
+              "cwe"          : "CWE-310",
+              "finding"      : "TLS 1.3 only server"
+          }
+,         {
+              "id"           : "BREACH",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2013-3587",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, no gzip/deflate/compress/br HTTP compression  - only supplied '/' tested"
+          }
+,         {
+              "id"           : "POODLE_SSL",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2014-3566",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, no SSLv3"
+          }
+,         {
+              "id"           : "fallback_SCSV",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "finding"      : "only TLS 1.3 supported"
+          }
+,         {
+              "id"           : "CRIME_TLS",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2016-2183 CVE-2016-6329",
+              "cwe"          : "CWE-327",
+              "finding"      : "not vulnerable"
+          }
+,         {
+              "id"           : "FREAK",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2015-0204",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable"
+          }
+,         {
+              "id"           : "DROWN",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2016-0800 CVE-2016-0703",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable on this host and port"
+          }
+,         {
+              "id"           : "DROWN_hint",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "cve"          : "CVE-2016-0800 CVE-2016-0703",
+              "cwe"          : "CWE-310",
+              "finding"      : "no RSA certificate, can't be used with SSLv2 elsewhere"
+          }
+,         {
+              "id"           : "LOGJAM",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2015-4000",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, no DH EXPORT ciphers,"
+          }
+,         {
+              "id"           : "LOGJAM-common_primes",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2015-4000",
+              "cwe"          : "CWE-310",
+              "finding"      : "no DH key with <= TLS 1.2"
+          }
+,         {
+              "id"           : "BEAST",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2011-3389",
+              "cwe"          : "CWE-20",
+              "finding"      : "not vulnerable, no SSL3 or TLS1"
+          }
+,         {
+              "id"           : "LUCKY13",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2013-0169",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, TLS 1.3 only"
+          }
+,         {
+              "id"           : "winshock",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2014-6321",
+              "cwe"          : "CWE-94",
+              "finding"      : "not vulnerable"
+          }
+,         {
+              "id"           : "RC4",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "OK",
+              "cve"          : "CVE-2013-2566 CVE-2015-2808",
+              "cwe"          : "CWE-310",
+              "finding"      : "not vulnerable, TLS 1.3 only"
+          }
+,         {
+              "id"           : "clientsimulation-android_70",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_81",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_90",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_X",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_11_12",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_13_14",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-android_15",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLSv1.3 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "clientsimulation-chrome_101_win10",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-chromium_137_win11",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLSv1.3 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "clientsimulation-firefox_100_win10",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-firefox_137_win11",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLSv1.3 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "clientsimulation-ie_8_win7",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-ie_11_win7",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-ie_11_win81",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-ie_11_winphone81",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-ie_11_win10",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-edge_15_win10",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-edge_101_win10_21h2",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-edge_133_win11_23h2",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLSv1.3 TLS_AES_128_GCM_SHA256"
+          }
+,         {
+              "id"           : "clientsimulation-safari_184_ios_184",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-safari_154_osx_1231",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-safari_184_osx_154",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-java_7u25",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-java_80442",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-java_1102",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-java_1703",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-java_2106",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-go_1178",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-libressl_336",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-openssl_102e",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-openssl_111d",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-openssl_315",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-openssl_350",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "TLSv1.3 TLS_AES_256_GCM_SHA384"
+          }
+,         {
+              "id"           : "clientsimulation-apple_mail_16_0",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "clientsimulation-thunderbird_91_9",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "No connection"
+          }
+,         {
+              "id"           : "rating_spec",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "SSL Labs's 'SSL Server Rating Guide' (version 2009r from 2025-05-16)"
+          }
+,         {
+              "id"           : "rating_doc",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
+          }
+,         {
+              "id"           : "protocol_support_score",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "100"
+          }
+,         {
+              "id"           : "protocol_support_score_weighted",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "30"
+          }
+,         {
+              "id"           : "key_exchange_score",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "100"
+          }
+,         {
+              "id"           : "key_exchange_score_weighted",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "30"
+          }
+,         {
+              "id"           : "cipher_strength_score",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "90"
+          }
+,         {
+              "id"           : "cipher_strength_score_weighted",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "36"
+          }
+,         {
+              "id"           : "final_score",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "96"
+          }
+,         {
+              "id"           : "overall_grade",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "MEDIUM",
+              "finding"      : "B"
+          }
+,         {
+              "id"           : "grade_cap_reason_1",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "Grade capped to B. Issues with chain of trust (chain incomplete)"
+          }
+,         {
+              "id"           : "scanTime",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6003",
+              "severity"     : "INFO",
+              "finding"      : "80"
+          }
+]

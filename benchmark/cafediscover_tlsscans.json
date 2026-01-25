@@ -1,0 +1,1002 @@
+{
+  "count": 10,
+  "limit": 10,
+  "offset": 0,
+  "results": [
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-02-24T02:18:20Z",
+            "not_before": "2025-11-26T01:18:53Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=lineascan.build",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:25Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=lineascan.build",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-11-26T01:18:53Z",
+        "not_after": "2026-02-24T02:18:20Z",
+        "serial_number": "243768648218274135388275834940161686669",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "goerli.lineascan.build",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:25.616707Z",
+      "supported_pqc": [],
+      "url": "https://goerli.lineascan.build"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-02-24T02:18:20Z",
+            "not_before": "2025-11-26T01:18:53Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=lineascan.build",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:24Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=lineascan.build",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-11-26T01:18:53Z",
+        "not_after": "2026-02-24T02:18:20Z",
+        "serial_number": "243768648218274135388275834940161686669",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "lineascan.build",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:24.827229Z",
+      "supported_pqc": [],
+      "url": "https://lineascan.build"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WR1,O=Google Trust Services,C=US",
+            "key_size": 2048,
+            "nist_level": 1,
+            "not_after": "2026-04-22T12:35:58Z",
+            "not_before": "2026-01-22T12:35:59Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "RSA-2048",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "SHA256-RSA",
+            "subject": "CN=enterprise.onerpc.com",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "SHA256-RSA",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_256_GCM_SHA384",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:23Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=enterprise.onerpc.com",
+        "issuer": "CN=WR1,O=Google Trust Services,C=US",
+        "signature_algorithm": "SHA256-RSA",
+        "public_key_algorithm": "RSA-2048",
+        "key_size": 2048,
+        "not_before": "2026-01-22T12:35:59Z",
+        "not_after": "2026-04-22T12:35:58Z",
+        "serial_number": "2718160473619072235910566466747309304",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_256_GCM_SHA384",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "polygon-rpc.com",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:23.991746Z",
+      "supported_pqc": [],
+      "url": "https://polygon-rpc.com"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=E7,O=Let's Encrypt,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-04-12T21:26:05Z",
+            "not_before": "2026-01-12T21:26:06Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA384",
+            "subject": "CN=mainnet.mode.network",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA384",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:23Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=mainnet.mode.network",
+        "issuer": "CN=E7,O=Let's Encrypt,C=US",
+        "signature_algorithm": "ECDSA-SHA384",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2026-01-12T21:26:06Z",
+        "not_after": "2026-04-12T21:26:05Z",
+        "serial_number": "575312408977170285968612445802373954522748",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "mainnet.mode.network",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:23.130692Z",
+      "supported_pqc": [],
+      "url": "https://mainnet.mode.network"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=R13,O=Let's Encrypt,C=US",
+            "key_size": 2048,
+            "nist_level": 1,
+            "not_after": "2026-02-15T17:22:08Z",
+            "not_before": "2025-11-17T17:22:09Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "RSA-2048",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "SHA256-RSA",
+            "subject": "CN=rpc.blast.io",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "SHA256-RSA",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:22Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=rpc.blast.io",
+        "issuer": "CN=R13,O=Let's Encrypt,C=US",
+        "signature_algorithm": "SHA256-RSA",
+        "public_key_algorithm": "RSA-2048",
+        "key_size": 2048,
+        "not_before": "2025-11-17T17:22:09Z",
+        "not_after": "2026-02-15T17:22:08Z",
+        "serial_number": "444410090904747245066550645076045627416027",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "rpc.blast.io",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:22.310701Z",
+      "supported_pqc": [],
+      "url": "https://rpc.blast.io"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WR3,O=Google Trust Services,C=US",
+            "key_size": 2048,
+            "nist_level": 1,
+            "not_after": "2026-03-24T12:13:57Z",
+            "not_before": "2025-12-24T11:20:03Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "RSA-2048",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "SHA256-RSA",
+            "subject": "CN=rpc.taiko.xyz",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "SHA256-RSA",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:21Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=rpc.taiko.xyz",
+        "issuer": "CN=WR3,O=Google Trust Services,C=US",
+        "signature_algorithm": "SHA256-RSA",
+        "public_key_algorithm": "RSA-2048",
+        "key_size": 2048,
+        "not_before": "2025-12-24T11:20:03Z",
+        "not_after": "2026-03-24T12:13:57Z",
+        "serial_number": "148154326537551224984898190145679576078",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "rpc.taiko.xyz",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:21.33228Z",
+      "supported_pqc": [],
+      "url": "https://rpc.taiko.xyz"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-03-11T21:45:24Z",
+            "not_before": "2025-12-11T20:45:26Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=scroll.io",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:20Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=scroll.io",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-11T20:45:26Z",
+        "not_after": "2026-03-11T21:45:24Z",
+        "serial_number": "210920754232995294402321887759708530402",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "rpc.scroll.io",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "critical",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm",
+        "Legacy TLS versions (1.0, 1.1) are still offered"
+      ],
+      "risk_score": 0.65,
+      "scanned_at": "2026-01-23T22:59:20.488776Z",
+      "supported_pqc": [],
+      "url": "https://rpc.scroll.io"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-03-14T05:30:21Z",
+            "not_before": "2025-12-14T04:30:23Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=rpc.linea.build",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:19Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=rpc.linea.build",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-12-14T04:30:23Z",
+        "not_after": "2026-03-14T05:30:21Z",
+        "serial_number": "140017617731218311314816653922344774386",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "rpc.linea.build",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:19.741298Z",
+      "supported_pqc": [],
+      "url": "https://rpc.linea.build"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=E8,O=Let's Encrypt,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-04-12T00:55:24Z",
+            "not_before": "2026-01-12T00:55:25Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA384",
+            "subject": "CN=zkevm-rpc.com",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA384",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:18Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=zkevm-rpc.com",
+        "issuer": "CN=E8,O=Let's Encrypt,C=US",
+        "signature_algorithm": "ECDSA-SHA384",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2026-01-12T00:55:25Z",
+        "not_after": "2026-04-12T00:55:24Z",
+        "serial_number": "515823150599828820491795500204900573798907",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "zkevm-rpc.com",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": false,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:18.951038Z",
+      "supported_pqc": [],
+      "url": "https://zkevm-rpc.com"
+    },
+    {
+      "cbom": {
+        "bomFormat": "CycloneDX",
+        "components": [
+          {
+            "issuer": "CN=WE1,O=Google Trust Services,C=US",
+            "key_size": 0,
+            "nist_level": 1,
+            "not_after": "2026-02-28T07:44:09Z",
+            "not_before": "2025-11-30T06:44:13Z",
+            "pqc_ready": false,
+            "public_key_algorithm": "ECDSA",
+            "quantum_vulnerable": true,
+            "signature_algorithm": "ECDSA-SHA256",
+            "subject": "CN=base.org",
+            "type": "certificate"
+          },
+          {
+            "algorithm": "X25519",
+            "nist_level": 1,
+            "pqc_ready": false,
+            "quantum_vulnerable": true,
+            "type": "key-exchange"
+          },
+          {
+            "name": "ECDSA-SHA256",
+            "nist_level": 1,
+            "quantum_vulnerable": true,
+            "type": "signature-algorithm"
+          },
+          {
+            "encryption": "AEAD",
+            "key_exchange": "TLS 1.3",
+            "mac": "AEAD",
+            "name": "TLS_AES_128_GCM_SHA256",
+            "nist_level": 3,
+            "pqc_ready": false,
+            "quantum_vulnerable": false,
+            "type": "cipher-suite"
+          }
+        ],
+        "metadata": {
+          "lifecycles": [
+            {
+              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network",
+              "phase": "discovery"
+            }
+          ],
+          "timestamp": "2026-01-23T22:59:18Z"
+        },
+        "specVersion": "1.7",
+        "type": "tls-endpoint",
+        "version": 1
+      },
+      "certificate": {
+        "subject": "CN=base.org",
+        "issuer": "CN=WE1,O=Google Trust Services,C=US",
+        "signature_algorithm": "ECDSA-SHA256",
+        "public_key_algorithm": "ECDSA",
+        "key_size": 0,
+        "not_before": "2025-11-30T06:44:13Z",
+        "not_after": "2026-02-28T07:44:09Z",
+        "serial_number": "222055500081673515072178318363967506960",
+        "nist_level": 1,
+        "is_pqc_ready": false
+      },
+      "cipher_suites": [
+        {
+          "id": 0,
+          "name": "TLS_AES_128_GCM_SHA256",
+          "key_exchange": "TLS 1.3",
+          "encryption": "AEAD",
+          "mac": "AEAD",
+          "nist_level": 3,
+          "is_pqc_ready": false
+        }
+      ],
+      "host": "mainnet.base.org",
+      "kex_algorithm": "X25519",
+      "kex_pqc_ready": false,
+      "nist_level": 1,
+      "nist_levels": {
+        "kex": 1
+      },
+      "ocsp_stapled": true,
+      "pfs": true,
+      "port": 443,
+      "pqc_mode": "classical",
+      "pqc_risk": "warning",
+      "protocol": "TLS1.3",
+      "recommendations": [
+        "No post-quantum key exchange detected",
+        "Certificate uses classical signature algorithm"
+      ],
+      "risk_score": 0.57,
+      "scanned_at": "2026-01-23T22:59:18.244313Z",
+      "supported_pqc": [],
+      "url": "https://mainnet.base.org"
+    }
+  ],
+  "total": 18
+}
