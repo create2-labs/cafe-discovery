@@ -1,9 +1,12 @@
-name: Docker Release
+name: Docker Build on Label
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  issues:
+    types:
+      - labeled
+  pull_request:
+    types:
+      - labeled
 
 permissions:
   contents: read
@@ -13,8 +16,15 @@ env:
   DOCKER_BUILDKIT: "1"
 
 jobs:
-  build-scan-publish:
+  build-on-label:
     runs-on: ubuntu-latest
+    # Only run if a specific label is added (e.g., "build" or "deploy")
+    # You can customize this condition based on your label naming convention
+    if: |
+      (github.event.action == 'labeled' && 
+       (contains(github.event.label.name, 'build') || 
+        contains(github.event.label.name, 'deploy') ||
+        contains(github.event.label.name, 'release')))
 
     steps:
       # ------------------------------------------------------------
@@ -40,15 +50,37 @@ jobs:
       # ------------------------------------------------------------
       # Version extraction
       # ------------------------------------------------------------
-      - name: Extract version from Git tag
+      - name: Extract version from Git tag or commit
         id: version
         run: |
-          # Extract version from tag (triggered by tag push)
-          TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#v}
-          APP_VERSION="$TAG"
-          MINOR_VERSION=$(echo "$VERSION" | cut -d. -f1,2)
-          MINOR_TAG="v$MINOR_VERSION"
+          # Fetch all tags
+          git fetch --tags --force || true
+          
+          # Try to get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [[ -n "$LATEST_TAG" ]]; then
+            # Use the latest tag if available
+            TAG="$LATEST_TAG"
+            VERSION=${TAG#v}
+            APP_VERSION="$TAG"
+          else
+            # No tag found, use dev-<sha>
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            APP_VERSION="dev-$SHORT_SHA"
+            TAG=""
+            VERSION=""
+          fi
+
+          # Calculate minor version if we have a full version
+          if [[ -n "$VERSION" ]]; then
+            MINOR_VERSION=$(echo "$VERSION" | cut -d. -f1,2)
+            MINOR_TAG="v$MINOR_VERSION"
+          else
+            MINOR_VERSION=""
+            MINOR_TAG=""
+          fi
+
           SHORT_SHA=$(git rev-parse --short HEAD)
 
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
