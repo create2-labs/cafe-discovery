@@ -203,12 +203,16 @@ static int level_from_kex_group(const char *group, const char *tlsv) {
   if (strstr(group, "secp521") || strstr(group, "P-521"))
     lvl = lvl > 5 ? lvl : 5;
 
-  // PQC ML-KEM
-  if (strstr(group, "MLKEM512") || strstr(group, "mlkem512"))
+  // PQC ML-KEM / Kyber (Kyber is the original name, ML-KEM is the NIST
+  // standard)
+  if (strstr(group, "MLKEM512") || strstr(group, "mlkem512") ||
+      strstr(group, "Kyber512") || strstr(group, "kyber512"))
     lvl = lvl > 1 ? lvl : 1;
-  if (strstr(group, "MLKEM768") || strstr(group, "mlkem768"))
+  if (strstr(group, "MLKEM768") || strstr(group, "mlkem768") ||
+      strstr(group, "Kyber768") || strstr(group, "kyber768"))
     lvl = lvl > 3 ? lvl : 3;
-  if (strstr(group, "MLKEM1024") || strstr(group, "mlkem1024"))
+  if (strstr(group, "MLKEM1024") || strstr(group, "mlkem1024") ||
+      strstr(group, "Kyber1024") || strstr(group, "kyber1024"))
     lvl = lvl > 5 ? lvl : 5;
 
   // PQC Frodo
@@ -289,11 +293,49 @@ static int level_from_cert_auth(const char *pk_type, int pk_bits,
   return 0;
 }
 
+/* ========== Helper: Check if group name indicates hybrid ========== */
+static bool is_hybrid_group_name(const char *name) {
+  if (!name || !*name)
+    return false;
+  // Check for hybrid patterns: classical + PQC in same name
+  bool has_classical = false;
+  bool has_pqc = false;
+
+  // Classical components
+  if (strstr(name, "X25519") || strstr(name, "x25519") ||
+      strstr(name, "X448") || strstr(name, "x448") || strstr(name, "secp256") ||
+      strstr(name, "P-256") || strstr(name, "P256") ||
+      strstr(name, "secp384") || strstr(name, "P-384") ||
+      strstr(name, "secp521") || strstr(name, "P-521"))
+    has_classical = true;
+
+  // PQC components (ML-KEM, Kyber, Frodo, BIKE)
+  if (strstr(name, "MLKEM") || strstr(name, "mlkem") || strstr(name, "Kyber") ||
+      strstr(name, "kyber") || strstr(name, "frodo") || strstr(name, "bike") ||
+      strstr(name, "BIKE") || strstr(name, "bikel"))
+    has_pqc = true;
+
+  return has_classical && has_pqc;
+}
+
 /* ========== PQC mode detection (classical / hybrid / pure) ========== */
-static const char *detect_pqc_mode(const char *group, const char *tlsv) {
+static const char *detect_pqc_mode(const char *group,
+                                   const char *requested_group,
+                                   const char *tlsv) {
   // En TLS < 1.3 → forcément classical
   if (!tlsv || strncmp(tlsv, "TLSv1.3", 7) != 0)
     return "classical";
+
+  // If we requested a hybrid group and handshake succeeded, infer hybrid mode
+  // CRITICAL: If handshake succeeded with hybrid group request, it MUST be
+  // hybrid This handles the case where OpenSSL API returns only the classical
+  // component
+  if (requested_group && is_hybrid_group_name(requested_group)) {
+    // Handshake succeeded with hybrid group request = hybrid KEM was negotiated
+    // We don't need to check if group matches - if handshake succeeded, it's
+    // hybrid
+    return "hybrid";
+  }
 
   if (!group || !*group)
     return "classical";
@@ -305,8 +347,9 @@ static const char *detect_pqc_mode(const char *group, const char *tlsv) {
   if (strstr(group, "X25519") || strstr(group, "x25519"))
     has_classical = true;
   if (strstr(group, "X448") || strstr(group, "x448"))
-    has_classical = true; // ← AJOUT
-  if (strstr(group, "secp256") || strstr(group, "P-256"))
+    has_classical = true;
+  if (strstr(group, "secp256") || strstr(group, "P-256") ||
+      strstr(group, "P256"))
     has_classical = true;
   if (strstr(group, "secp384") || strstr(group, "P-384"))
     has_classical = true;
@@ -315,13 +358,14 @@ static const char *detect_pqc_mode(const char *group, const char *tlsv) {
   if (strstr(group, "brainpool"))
     has_classical = true;
   if (strstr(group, "bp256") || strstr(group, "bp384") ||
-      strstr(group, "bp512")) // ← AJOUT
+      strstr(group, "bp512"))
     has_classical = true;
   if (strstr(group, "ffdhe"))
     has_classical = true;
 
   /* PQC KEM (Kyber/ML-KEM, Frodo, BIKE…) */
-  if (strstr(group, "MLKEM") || strstr(group, "mlkem"))
+  if (strstr(group, "MLKEM") || strstr(group, "mlkem") ||
+      strstr(group, "Kyber") || strstr(group, "kyber"))
     has_pqc = true;
   if (strstr(group, "frodo"))
     has_pqc = true;
@@ -336,6 +380,49 @@ static const char *detect_pqc_mode(const char *group, const char *tlsv) {
   return "classical";
 }
 
+/* ========== Extract offered groups from server ========== */
+/**
+ * Extract all groups offered by the server (from supported_groups extension)
+ * Returns a comma-separated list of group names
+ */
+static void extract_offered_groups(SSL *ssl, char *out, size_t out_sz) {
+  out[0] = '\0';
+  if (!ssl)
+    return;
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+  // Iterate through shared groups (groups that server supports)
+  // SSL_get_shared_group returns groups in order of preference
+  int idx = 0;
+  bool first = true;
+  while (idx < 64) { // Reasonable limit
+    int nid = SSL_get_shared_group(ssl, idx);
+    if (nid <= 0)
+      break;
+
+    const char *sn = OBJ_nid2sn(nid);
+    if (sn) {
+      if (!first) {
+        size_t len = strlen(out);
+        if (len + 2 < out_sz) {
+          out[len] = ',';
+          out[len + 1] = '\0';
+        }
+      }
+      size_t len = strlen(out);
+      size_t sn_len = strlen(sn);
+      if (len + sn_len + 1 < out_sz) {
+        strncat(out, sn, out_sz - len - 1);
+        first = false;
+      } else {
+        break;
+      }
+    }
+    idx++;
+  }
+#endif
+}
+
 /* ========== TLS dial & info ========== */
 static SSL *dial(const char *host, const char *port, const char *grp,
                  SSL_CTX **out_ctx, BIO **out_bio, char *err, size_t esz,
@@ -348,21 +435,30 @@ static SSL *dial(const char *host, const char *port, const char *grp,
     snprintf(err, esz, "SSL_CTX_new failed");
     return NULL;
   }
-  SSL *ssl = SSL_new(ctx);
-  if (!ssl) {
-    snprintf(err, esz, "SSL_new failed");
+  char target[256];
+  snprintf(target, sizeof(target), "%s:%s", host, port);
+  BIO *bio = BIO_new_ssl_connect(ctx);
+  if (!bio) {
+    snprintf(err, esz, "BIO_new_ssl_connect failed");
     SSL_CTX_free(ctx);
     return NULL;
   }
 
+  // CRITICAL: Get the SSL from the BIO first, THEN configure it
+  // BIO_new_ssl_connect() creates its own SSL, so we must configure that one
+  SSL *ssl = NULL;
+  BIO_get_ssl(bio, &ssl);
+  if (!ssl) {
+    snprintf(err, esz, "BIO_get_ssl failed");
+    BIO_free_all(bio);
+    SSL_CTX_free(ctx);
+    return NULL;
+  }
+
+  // Now configure the SSL that will actually be used in the handshake
   if (grp && *grp)
     SSL_set1_groups_list(ssl, grp);
   SSL_set_tlsext_host_name(ssl, host);
-
-  char target[256];
-  snprintf(target, sizeof(target), "%s:%s", host, port);
-  BIO *bio = BIO_new_ssl_connect(ctx);
-  BIO_get_ssl(bio, &ssl);
   SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
   BIO_set_conn_hostname(bio, target);
 
@@ -371,6 +467,15 @@ static SSL *dial(const char *host, const char *port, const char *grp,
     char em[128];
     ERR_error_string_n(e, em, 128);
     snprintf(err, esz, "connect: %s", em);
+    BIO_free_all(bio);
+    SSL_CTX_free(ctx);
+    return NULL;
+  }
+  if (BIO_do_handshake(bio) <= 0) {
+    unsigned long e = ERR_get_error();
+    char em[256];
+    ERR_error_string_n(e, em, sizeof(em));
+    snprintf(err, esz, "handshake: %s", em);
     BIO_free_all(bio);
     SSL_CTX_free(ctx);
     return NULL;
@@ -416,6 +521,7 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
 
   // negotiated group (classiques). For hybrids, fallback to grp (requested)
   char group[128] = "";
+  char kex_alg[128] = ""; // Full KEX algorithm name (may be hybrid)
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
   // Try SSL_get_negotiated_group first (TLS 1.3)
   int nid = SSL_get_negotiated_group(ssl);
@@ -446,9 +552,47 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
       snprintf(group, sizeof(group), "secp384r1");
   }
 #endif
-  // Final fallback: use requested group if provided
+  // For hybrid KEMs: if we requested a hybrid group and handshake succeeded,
+  // use the requested group name even if API only returned classical component
+  // CRITICAL: If handshake succeeded with hybrid group request, it's hybrid
+  if (grp && *grp && is_hybrid_group_name(grp)) {
+    // Handshake succeeded with hybrid group request = hybrid KEM negotiated
+    // Use the full hybrid name as kex_alg
+    snprintf(kex_alg, sizeof(kex_alg), "%s", grp);
+
+    // Extract classical component for group field (for compatibility)
+    if (!group[0] ||
+        (strstr(grp, "X25519") &&
+         (strstr(group, "X25519") || strstr(group, "x25519"))) ||
+        (strstr(grp, "P256") &&
+         (strstr(group, "secp256") || strstr(group, "P-256") ||
+          strstr(group, "P256"))) ||
+        (strstr(grp, "P384") &&
+         (strstr(group, "secp384") || strstr(group, "P-384"))) ||
+        (strstr(grp, "P521") &&
+         (strstr(group, "secp521") || strstr(group, "P-521")))) {
+      // Group matches or is empty - extract classical component
+      if (strstr(grp, "X25519"))
+        snprintf(group, sizeof(group), "X25519");
+      else if (strstr(grp, "P256"))
+        snprintf(group, sizeof(group), "secp256r1");
+      else if (strstr(grp, "P384"))
+        snprintf(group, sizeof(group), "secp384r1");
+      else if (strstr(grp, "P521"))
+        snprintf(group, sizeof(group), "secp521r1");
+    }
+    // Keep existing group if it doesn't match (shouldn't happen, but safe)
+  }
+  // Final fallback: use requested group if provided and no group detected
   if (!group[0] && grp && *grp)
     snprintf(group, sizeof(group), "%s", grp);
+  // Set kex_alg to group if not already set
+  if (!kex_alg[0] && group[0])
+    snprintf(kex_alg, sizeof(kex_alg), "%s", group);
+
+  // Extract offered groups from server (supported_groups extension)
+  char offered_groups[512] = "";
+  extract_offered_groups(ssl, offered_groups, sizeof(offered_groups));
 
   // Cert data
   X509 *crt = SSL_get1_peer_certificate(ssl);
@@ -479,7 +623,11 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
   }
 
   /* ---- Levels per-component ---- */
-  int lvl_kex = level_from_kex_group(group[0] ? group : NULL, tlsv);
+  // Use kex_alg for KEX level calculation (may contain full hybrid name)
+  // Fallback to group if kex_alg is not set
+  const char *kex_name_for_level =
+      kex_alg[0] ? kex_alg : (group[0] ? group : NULL);
+  int lvl_kex = level_from_kex_group(kex_name_for_level, tlsv);
   int lvl_cipher = level_from_cipher(cipher);
   int lvl_hkdf = level_from_hkdf(cipher, tlsv);
   int lvl_sig = level_from_cert_auth(pk_type, pk_bits, ec_group, sig_sn);
@@ -498,31 +646,51 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
   }
 
   // PQC bool: true si KEX implique un KEM PQC
+  // Check both group and kex_alg (kex_alg may contain full hybrid name)
   bool pqc = false;
-  if (lvl_kex >= 1 && group[0]) {
-    if (strstr(group, "MLKEM") || strstr(group, "mlkem") ||
-        strstr(group, "frodo") || strstr(group, "bike") ||
-        strstr(group, "BIKE") || strstr(group, "bikel")) {
+  const char *check_name = kex_alg[0] ? kex_alg : (group[0] ? group : NULL);
+  if (lvl_kex >= 1 && check_name) {
+    if (strstr(check_name, "MLKEM") || strstr(check_name, "mlkem") ||
+        strstr(check_name, "Kyber") || strstr(check_name, "kyber") ||
+        strstr(check_name, "frodo") || strstr(check_name, "bike") ||
+        strstr(check_name, "BIKE") || strstr(check_name, "bikel")) {
       pqc = true;
     }
   }
 
-  const char *pqc_mode = detect_pqc_mode(group[0] ? group : NULL, tlsv);
+  // Detect PQC mode (must be done before using pqc_mode in pqc check)
+  const char *pqc_mode = detect_pqc_mode(group[0] ? group : NULL, grp, tlsv);
+
+  // Also check if PQC mode indicates PQC usage
+  if (!pqc && pqc_mode &&
+      (strcmp(pqc_mode, "hybrid") == 0 || strcmp(pqc_mode, "pure") == 0)) {
+    pqc = true;
+  }
 
   /* ---- JSON ---- */
   char *h = json_escape(host), *p = json_escape(port),
        *tv = json_escape(tlsv ? tlsv : "unknown"),
        *gr = json_escape(group[0] ? group : "none"),
+       *ka = json_escape(kex_alg[0] ? kex_alg : (group[0] ? group : "none")),
        *cy = json_escape(cipher ? cipher : "unknown"),
        *sub = json_escape(subject), *iss = json_escape(issuer),
        *nb = json_escape(not_before), *na = json_escape(not_after),
        *sig = json_escape(sig_sn), *pkt = json_escape(pk_type),
        *ecg = json_escape(ec_group);
 
+  char *offered_grps = json_escape(offered_groups[0] ? offered_groups : "");
+
   jb_appendf(&jb, "{");
   jb_appendf(&jb, "\"host\":\"%s\",\"port\":\"%s\",", h, p);
   jb_appendf(&jb, "\"tls_version\":\"%s\",\"group\":\"%s\",", tv, gr);
+  jb_appendf(&jb, "\"kex_alg\":\"%s\",", ka);
+  jb_appendf(&jb, "\"offered_groups\":\"%s\",", offered_grps);
   jb_appendf(&jb, "\"pqc\":%s,", pqc ? "true" : "false");
+  jb_appendf(&jb, "\"kex_pqc_ready\":%s,",
+             (pqc || (pqc_mode && (strcmp(pqc_mode, "hybrid") == 0 ||
+                                   strcmp(pqc_mode, "pure") == 0)))
+                 ? "true"
+                 : "false");
   jb_appendf(&jb, "\"pqc_mode\":\"%s\",", pqc_mode);
   jb_appendf(&jb, "\"cipher_suite\":\"%s\",", cy);
   jb_appendf(&jb, "\"cert_subject\":\"%s\",\"cert_issuer\":\"%s\",", sub, iss);
@@ -547,6 +715,8 @@ char *get_pqc_info(const char *host, const char *port, const char *grp,
   free(p);
   free(tv);
   free(gr);
+  free(ka);
+  free(offered_grps);
   free(cy);
   free(sub);
   free(iss);
