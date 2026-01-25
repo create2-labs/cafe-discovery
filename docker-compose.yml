@@ -1,5 +1,3 @@
-version: "3.8"
-
 # IMPORTANT: Before building the services with docker compose, you must first build the OQS base image:
 #   See Step 1 in README.md for instructions on building from cafe-infra/oqs
 #   The image must be tagged as oqs:dev for compatibility
