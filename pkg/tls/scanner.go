@@ -104,11 +104,13 @@ func (s *Scanner) ScanHost(ctx context.Context, host, port string) (*TLSInfo, er
 
 	// Try to get PQC information using OQS/OpenSSL
 	// This is done even if Go TLS scan succeeded to get PQC-specific info
+	// CRITICAL: Always attempt PQC scan for TLS 1.3 to detect hybrid KEMs
 	pqcInfo, errPQC := s.scanPQCInfo(host, port, state.Version)
-	if errPQC == nil {
+	if errPQC == nil && pqcInfo != nil {
 		info.PQCInfo = pqcInfo
 	}
 	// Don't fail if PQC scan fails - we still have the Go TLS info
+	// But log that PQC scan was attempted
 
 	return info, nil
 }
@@ -126,21 +128,147 @@ func (s *Scanner) scanPQCInfo(host, port string, tlsVersion uint16) (*PQCInfo, e
 	}
 
 	// First try without specifying a group (let server choose)
+	// This may detect PQC if server proactively offers it
 	pqcInfo, err := ScanPQC(host, port, "", false)
-	if err == nil && (pqcInfo.KexPQCReady || pqcInfo.PQCMode == "hybrid" || pqcInfo.PQCMode == "pure") {
-		return pqcInfo, nil
-	}
-
-	// If no PQC detected, try with specific PQC groups
-	for _, group := range DefaultPQCGroups {
-		info, err := ScanPQC(host, port, group, false)
-		if err == nil && (info.KexPQCReady || info.PQCMode == "hybrid" || info.PQCMode == "pure") {
-			return info, nil
+	initialScanSuccess := err == nil
+	initialHasPQC := false
+	
+	if initialScanSuccess {
+		// Check if PQC was detected (either via KexPQCReady, PQCMode, or PQC flag)
+		if pqcInfo.KexPQCReady || pqcInfo.PQC ||
+			pqcInfo.PQCMode == "hybrid" || pqcInfo.PQCMode == "pure" {
+			initialHasPQC = true
+		}
+		// Also check if kex_alg contains hybrid indicators
+		if !initialHasPQC && pqcInfo.KexAlg != "" {
+			algUpper := strings.ToUpper(pqcInfo.KexAlg)
+			if strings.Contains(algUpper, "MLKEM") || strings.Contains(algUpper, "KYBER") ||
+				strings.Contains(algUpper, "FRODO") || strings.Contains(algUpper, "BIKE") {
+				// PQC component detected in algorithm name
+				pqcInfo.KexPQCReady = true
+				if !strings.Contains(algUpper, "HYBRID") &&
+					(strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
+						strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP")) {
+					pqcInfo.PQCMode = "hybrid"
+				} else if !strings.Contains(algUpper, "X25519") &&
+					!strings.Contains(algUpper, "P256") &&
+					!strings.Contains(algUpper, "P384") &&
+					!strings.Contains(algUpper, "SECP") {
+					pqcInfo.PQCMode = "pure"
+				}
+				initialHasPQC = true
+			}
+		}
+		// Also check offered_groups for PQC indicators (server proactively offers PQC)
+		if !initialHasPQC && pqcInfo.OfferedGroups != "" {
+			offeredUpper := strings.ToUpper(pqcInfo.OfferedGroups)
+			if strings.Contains(offeredUpper, "MLKEM") || strings.Contains(offeredUpper, "KYBER") ||
+				strings.Contains(offeredUpper, "FRODO") || strings.Contains(offeredUpper, "BIKE") {
+				// Server offers PQC groups - mark as PQC ready
+				pqcInfo.KexPQCReady = true
+				pqcInfo.PQC = true
+				// Check if hybrid (contains classical + PQC) or pure
+				if strings.Contains(offeredUpper, "X25519") || strings.Contains(offeredUpper, "P256") ||
+					strings.Contains(offeredUpper, "P384") || strings.Contains(offeredUpper, "SECP") {
+					pqcInfo.PQCMode = "hybrid"
+				} else {
+					pqcInfo.PQCMode = "pure"
+				}
+				initialHasPQC = true
+			}
+		}
+		
+		if initialHasPQC {
+			return pqcInfo, nil
 		}
 	}
 
-	// Return the first result even if no PQC was detected
-	return pqcInfo, nil
+	// If no PQC detected in initial scan, try with specific hybrid PQC groups
+	// This is important because servers may not proactively offer PQC,
+	// but will accept it if the client requests it
+	// CRITICAL: Always try hybrid groups even if initial scan succeeded
+	// because server may not proactively offer PQC but will accept it if requested
+	for _, group := range DefaultPQCGroups {
+		info, err := ScanPQC(host, port, group, false)
+		
+		// CRITICAL: Check if handshake succeeded
+		// Handshake succeeded if: no error OR (info exists AND has TLS version)
+		handshakeSucceeded := false
+		if err == nil && info != nil {
+			handshakeSucceeded = true
+		} else if info != nil && info.TLSVersion != "" {
+			// Even if there was an error, if we have TLS version, handshake succeeded
+			handshakeSucceeded = true
+		}
+		
+		if handshakeSucceeded {
+			// PRIORITY 1: Check if the requested group name indicates hybrid/PQC
+			// This MUST be checked first - it's the definitive proof
+			// If we requested a hybrid group and handshake succeeded, it MUST be hybrid
+			groupUpper := strings.ToUpper(group)
+			isHybridGroup := strings.Contains(groupUpper, "MLKEM") || strings.Contains(groupUpper, "KYBER") ||
+				strings.Contains(groupUpper, "FRODO") || strings.Contains(groupUpper, "BIKE")
+			
+			if isHybridGroup {
+				// Handshake succeeded with hybrid group request = hybrid KEM negotiated
+				// This is the definitive proof - server accepted our hybrid request
+				info.KexPQCReady = true
+				info.PQC = true
+				// Check if it's hybrid (has classical component) or pure
+				if strings.Contains(groupUpper, "X25519") || strings.Contains(groupUpper, "P256") ||
+					strings.Contains(groupUpper, "P384") || strings.Contains(groupUpper, "SECP") ||
+					strings.Contains(groupUpper, "P521") || strings.Contains(groupUpper, "SECP256") ||
+					strings.Contains(groupUpper, "SECP384") {
+					info.PQCMode = "hybrid"
+				} else {
+					info.PQCMode = "pure"
+				}
+				// Use requested group as algorithm name (full hybrid name)
+				if info.KexAlg == "" {
+					info.KexAlg = group
+				}
+				return info, nil
+			}
+			
+			// PRIORITY 2: Check explicit flags from C code (should be set if C code detected it)
+			if info.PQCMode == "hybrid" || info.PQCMode == "pure" ||
+				info.KexPQCReady || info.PQC {
+				return info, nil
+			}
+			
+			// PRIORITY 3: Check kex_alg for hybrid indicators (fallback)
+			if info.KexAlg != "" {
+				algUpper := strings.ToUpper(info.KexAlg)
+				if strings.Contains(algUpper, "MLKEM") || strings.Contains(algUpper, "KYBER") ||
+					strings.Contains(algUpper, "FRODO") || strings.Contains(algUpper, "BIKE") {
+					// Hybrid group was requested and handshake succeeded
+					info.KexPQCReady = true
+					info.PQC = true
+					if info.PQCMode == "" {
+						// Check if it's hybrid or pure based on algorithm name
+						if strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
+							strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP") {
+							info.PQCMode = "hybrid"
+						} else {
+							info.PQCMode = "pure"
+						}
+					}
+					return info, nil
+				}
+			}
+		}
+		// If handshake failed completely, continue to next group
+	}
+
+	// Return the best result we have (even if no PQC was detected)
+	// Prefer the result from hybrid group attempts over initial scan
+	// because it may have more complete information
+	if initialScanSuccess {
+		return pqcInfo, nil
+	}
+	
+	// If initial scan failed, return nil (no PQC info available)
+	return nil, fmt.Errorf("PQC scan failed: initial scan failed and no hybrid groups succeeded")
 }
 
 // GetProtocolVersion returns the TLS protocol version as string

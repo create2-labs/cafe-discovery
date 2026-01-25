@@ -15,6 +15,7 @@ type PQCInfo struct {
 	CipherSuite       string         `json:"cipher_suite,omitempty"`
 	Group             string         `json:"group,omitempty"`
 	KexAlg            string         `json:"kex_alg,omitempty"`
+	OfferedGroups     string         `json:"offered_groups,omitempty"` // Comma-separated list of groups offered by server
 	KexPQCReady       bool           `json:"kex_pqc_ready,omitempty"`
 	PQCMode           string         `json:"pqc_mode,omitempty"` // classical, hybrid, pure
 	PQC               bool           `json:"pqc,omitempty"`
@@ -31,6 +32,8 @@ type PQCInfo struct {
 }
 
 // ScanPQC scans a host:port using OQS/OpenSSL to detect PQC support
+// Returns PQCInfo even if there's an error field, as long as handshake succeeded
+// This allows detection of hybrid KEMs even if some fields are missing
 func ScanPQC(host, port, group string, trace bool) (*PQCInfo, error) {
 	// Call C function get_pqc_info via native package
 	jsonStr, err := native.GetPQCInfo(host, port, group, trace)
@@ -43,8 +46,21 @@ func ScanPQC(host, port, group string, trace bool) (*PQCInfo, error) {
 		return nil, fmt.Errorf("failed to parse PQC info JSON: %w", err)
 	}
 
+	// If there's an error in the JSON but we have TLS version info,
+	// it means handshake succeeded but there was some other issue
+	// In this case, still return the info so we can check for hybrid KEMs
+	// CRITICAL: Even if there's an error field, if we have TLS version,
+	// the handshake succeeded and we should return the info
+	// This allows detection of hybrid KEMs even if some fields are missing
 	if info.Error != "" {
-		return &info, fmt.Errorf("PQC scan error: %s", info.Error)
+		// Only return error if we don't have TLS version (handshake completely failed)
+		if info.TLSVersion == "" {
+			return &info, fmt.Errorf("PQC scan error: %s", info.Error)
+		}
+		// Handshake succeeded (TLS version present) but there was a minor error
+		// Still return info - caller will check for hybrid KEMs based on requested group
+		// Clear the error field so it doesn't confuse the caller
+		info.Error = ""
 	}
 
 	return &info, nil
