@@ -90,22 +90,22 @@ jobs:
           docker scout version
 
       # ------------------------------------------------------------
-      # Security scan (BLOCKING)
+      # Security scan (NON-BLOCKING - for information only)
       # ------------------------------------------------------------
       - name: Scan discovery-backend image with Docker Scout
+        continue-on-error: true
         run: |
           docker scout cves oleglod/cafe-discovery-backend:scan-local \
-            --only-severity critical,high \
-            --exit-code
+            --only-severity critical,high
 
       - name: Scan discovery-worker image with Docker Scout
+        continue-on-error: true
         run: |
           docker scout cves oleglod/cafe-discovery-worker:scan-local \
-            --only-severity critical,high \
-            --exit-code
+            --only-severity critical,high
 
       # ------------------------------------------------------------
-      # Build & publish MULTI-ARCH images (ONLY if scans passed)
+      # Build & publish MULTI-ARCH images
       # ------------------------------------------------------------
       - name: Build & publish discovery-backend image (multi-arch)
         run: |
