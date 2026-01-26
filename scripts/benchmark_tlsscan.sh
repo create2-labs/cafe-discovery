@@ -29,15 +29,23 @@ fi
 
 
 curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN" | jq . > cafediscover_tlsscans.json
+  -H "Authorization: Bearer $TOKEN" | jq . > cafediscovery_tlsscan.json
+                                             
+curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=10" \
+  -H "Authorization: Bearer $TOKEN" | jq . >> cafediscovery_tlsscan.json
 
 jq -r '.results[].url' cafediscover_tlsscans.json
 
 for url in $(jq -r '.results[].url' cafediscover_tlsscans.json); do
   echo "Scanning $url"
-  OUTPUT_FILE="${url#https://}.txt"
-  echo "Output file: $OUTPUT_FILE"
-  $TESTSSL $url | tee $OUTPUT_FILE
+#  $TESTSSL $url | tee $OUTPUT_FILE
+#√ cafe-discovery % ~/dev/github/testssl.sh/testssl.sh  -4 --ip one --json https://mainnet.base.org
+
+  $TESTSSL \
+    -4 \
+    --ip one \
+    --json \
+    $url
 done
 
 cd - 
