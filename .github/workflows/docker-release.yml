@@ -47,18 +47,14 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#v}
           APP_VERSION="$TAG"
-          MINOR_VERSION=$(echo "$VERSION" | cut -d. -f1,2)
-          MINOR_TAG="v$MINOR_VERSION"
           SHORT_SHA=$(git rev-parse --short HEAD)
 
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
           echo "full_version=$TAG" >> $GITHUB_OUTPUT
-          echo "minor_version=$MINOR_TAG" >> $GITHUB_OUTPUT
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
 
           echo "App version (for /version endpoint): $APP_VERSION"
           echo "Release version: $TAG"
-          echo "Minor version: $MINOR_TAG"
           echo "Commit SHA: $SHORT_SHA"
 
       # ------------------------------------------------------------
