@@ -244,7 +244,7 @@ func runMigrations(db postgresdb.PostgreSQLConnection) error {
 	}
 
 	_, err = ensurePlanExists(planRepo, domain.PlanTypePremium, &domain.Plan{
-		Name:              "Premium Plan",
+		Name:              "CAFEIN Premium Plan",
 		Type:              domain.PlanTypePremium,
 		WalletScanLimit:   0, // Unlimited
 		EndpointScanLimit: 0, // Unlimited

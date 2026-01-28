@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go manually (multi-arch)
-ENV GO_VERSION=1.25.5
+ENV GO_VERSION=1.25.6
 RUN set -eux; \
     case "$TARGETARCH" in \
     amd64)  GO_ARCH=amd64 ;; \
@@ -52,12 +52,59 @@ RUN go build -o server ./cmd/server/main.go
 ##############################
 FROM oleglod/cafe-oqs:runtime AS runtime
 
+# Build argument for version (injected by GitHub Actions)
+ARG APP_VERSION
+ARG TARGETARCH
+
+# Set version label (OCI standard)
+LABEL org.opencontainers.image.version="${APP_VERSION}"
+
 WORKDIR /app
 
+# Install NGINX (lightweight, production-ready)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r nginx || true \
+    && useradd -r -g nginx -s /sbin/nologin -d /var/cache/nginx nginx || true \
+    && mkdir -p /var/log/nginx /var/cache/nginx /usr/share/nginx/html \
+    && chown -R nginx:nginx /var/log/nginx /var/cache/nginx /usr/share/nginx/html
+
+# Copy application binary
 COPY --from=builder /app/server /app/server
 
+# Copy NGINX configuration
+COPY nginx-version.conf /etc/nginx/nginx.conf
+
+# Create version.json at build time
+# If APP_VERSION is not set (dev mode), try to get <branch>-<sha> from git, otherwise use "dev"
+RUN if [ -z "$APP_VERSION" ]; then \
+      if command -v git >/dev/null 2>&1 && [ -d .git ]; then \
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/[^a-zA-Z0-9]/-/g' || echo "dev") && \
+        SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "") && \
+        VERSION="${BRANCH}-${SHORT_SHA:-unknown}"; \
+      else \
+        VERSION="dev"; \
+      fi; \
+    else \
+      VERSION="$APP_VERSION"; \
+    fi && \
+    echo "{\"version\": \"$VERSION\"}" > /usr/share/nginx/html/version.json && \
+    chmod 644 /usr/share/nginx/html/version.json && \
+    chown nginx:nginx /usr/share/nginx/html/version.json
+
+# Copy entrypoint script
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Expose only the application port (8080)
+# NGINX port 8082 is NOT exposed via EXPOSE or docker-compose ports
+# It listens on 0.0.0.0:8082 for Docker network access (other containers)
+# But is blocked publicly by cafe-infra/nginx (no proxy rule)
 EXPOSE 8080
-ENTRYPOINT ["./server"]
+
+# Use entrypoint script to start both services
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 
 ##############################

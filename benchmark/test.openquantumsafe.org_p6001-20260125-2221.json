@@ -1,0 +1,23 @@
+[
+         {
+              "id"           : "engine_problem",
+              "ip"           : "test.openquantumsafe.org/",
+              "port"         : "6001",
+              "severity"     : "WARN",
+              "finding"      : "No engine or GOST support via engine with your /opt/homebrew/Cellar/openssl@3/3.6.0/bin/openssl"
+          }
+,         {
+              "id"           : "optimal_proto",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6001",
+              "severity"     : "WARN",
+              "finding"      : "/opt/homebrew/Cellar/openssl@3/3.6.0/bin/openssl cannot connect to 158.177.245.197:6001. Recommended using --openssl=/usr/bin/openssl"
+          }
+,         {
+              "id"           : "scanTime",
+              "ip"           : "test.openquantumsafe.org/158.177.245.197",
+              "port"         : "6001",
+              "severity"     : "WARN",
+              "finding"      : "Scan interrupted"
+          }
+]
