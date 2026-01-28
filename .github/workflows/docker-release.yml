@@ -114,9 +114,8 @@ jobs:
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.minor_version }} \
             -t oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }} \
-            -t oleglod/cafe-discovery-backend:build \
+            -t oleglod/cafe-discovery-backend:latest \
             --push .
 
       - name: Build & publish discovery-worker image (multi-arch)
@@ -125,7 +124,6 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.minor_version }} \
             -t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }} \
-            -t oleglod/cafe-discovery-worker:build \
+            -t oleglod/cafe-discovery-worker:latest \
             --push .
