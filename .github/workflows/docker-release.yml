@@ -47,18 +47,14 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#v}
           APP_VERSION="$TAG"
-          MINOR_VERSION=$(echo "$VERSION" | cut -d. -f1,2)
-          MINOR_TAG="v$MINOR_VERSION"
           SHORT_SHA=$(git rev-parse --short HEAD)
 
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
           echo "full_version=$TAG" >> $GITHUB_OUTPUT
-          echo "minor_version=$MINOR_TAG" >> $GITHUB_OUTPUT
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
 
           echo "App version (for /version endpoint): $APP_VERSION"
           echo "Release version: $TAG"
-          echo "Minor version: $MINOR_TAG"
           echo "Commit SHA: $SHORT_SHA"
 
       # ------------------------------------------------------------
@@ -114,9 +110,8 @@ jobs:
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.minor_version }} \
             -t oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }} \
-            -t oleglod/cafe-discovery-backend:build \
+            -t oleglod/cafe-discovery-backend:latest \
             --push .
 
       - name: Build & publish discovery-worker image (multi-arch)
@@ -125,7 +120,6 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.minor_version }} \
             -t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }} \
-            -t oleglod/cafe-discovery-worker:build \
+            -t oleglod/cafe-discovery-worker:latest \
             --push .

@@ -12,6 +12,8 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 - TLS Scanning: Scan TLS endpoints for post-quantum cryptography (PQC) certificate support
 - Post-Quantum JWT: Hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for quantum-resistant authentication
 - **CycloneDX v1.7 CBOMs**: All scan results are returned as CycloneDX v1.7-based Cryptographic Bill of Materials (CBOMs) with NIST SP 800-57 key states and lifecycle metadata. Note: CAFE extends CycloneDX with custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`) that are not part of the standard specification.
+- **Subscription Plans**: Free and Premium (CAFEIN) plans with usage limits
+- **Versioning**: Automatic version tracking via `/version` endpoint and Docker image tags
 
 ## Architecture
 
@@ -350,7 +352,11 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 **Trigger**: Push of Git tags matching `v*.*.*` (e.g., `v1.2.3`)
 
-**Purpose**: Build, scan, and publish production Docker images.
+**Purpose**: Build, scan, and publish production Docker images to GitHub Container Registry (GHCR).
+
+**Registry**: Images are published to `ghcr.io/create2-labs/`:
+- `ghcr.io/create2-labs/cafe-discovery-backend:${VERSION}`
+- `ghcr.io/create2-labs/cafe-discovery-worker:${VERSION}`
 
 **Process**:
 1. **Extract version information** from the Git tag:
@@ -368,12 +374,13 @@ The CI images are based on the `builder` stage, which includes the full build en
    - **No images are published** if scanning fails
 
 4. **Publish images** (only if both scans pass):
-   - Both images are tagged identically:
+   - Both images are published to GHCR with identical tags:
      - `vX.Y.Z` (full version from tag)
      - `vX.Y` (minor version)
      - `sha-<short-sha>` (commit SHA for traceability)
-     - `build` (latest build tag)
-   - All tags are multi-arch manifests
+     - `latest` (points to most recent release)
+   - All tags are multi-arch manifests (linux/amd64, linux/arm64)
+   - Images include version metadata via `APP_VERSION` build argument
 
 **Security Gates**:
 - Docker Scout vulnerability scanning blocks publication
@@ -430,14 +437,31 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
 
 ### Image Tags
 
-Both `oleglod/cafe-discovery-backend` and `oleglod/cafe-discovery-worker` receive identical tags:
+Both `ghcr.io/create2-labs/cafe-discovery-backend` and `ghcr.io/create2-labs/cafe-discovery-worker` receive identical tags:
 
 - `v1.2.3`: Full semantic version (from Git tag)
 - `v1.2`: Minor version (for compatibility)
 - `sha-abc1234`: Commit SHA (for traceability)
-- `build`: Latest build (points to most recent release)
+- `latest`: Latest release (points to most recent release)
 
 All tags are multi-arch manifests supporting `linux/amd64` and `linux/arm64`.
+
+### Version Endpoint
+
+The backend exposes a `/version` endpoint that returns the application version:
+
+```bash
+curl http://localhost:8080/version
+```
+
+Response:
+```json
+{
+  "version": "v1.2.3"
+}
+```
+
+The version is extracted from the `APP_VERSION` build argument during Docker image build, which is set from Git tags in CI/CD pipelines.
 
 ## Configuration
 
@@ -606,55 +630,64 @@ For information, the infrastructure is as follow:
 
 From the `cafe-discovery` directory:
 
+**Development environment:**
 ```bash
 # Set required environment variables (optional - can also be set in config.yaml)
 export JWT_SECRET=your-secret-key-here
 export MORALIS_API_KEY=your_api_key_here
 
-# Build the images using Docker Compose
-docker compose build
-
-# Start both server and worker
-docker compose up -d
-
-# Or build and start in one command
-docker compose up -d --build
+# Build and start services
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 # Or start individually
-docker compose up -d cafe-discovery-backend
-docker compose up -d cafe-discovery-worker
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discovery-backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discovery-worker
 ```
 
-**Important**: The images are built using Docker Compose, which automatically:
-- Builds the Docker images using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
-- These Dockerfiles use `oqs:dev` as the base image (must be built from `cafe-infra/oqs` in Step 1)
-- Manages the build context and dependencies
+**Production environment:**
+```bash
+# Set required environment variables
+export JWT_SECRET=your-secret-key-here
+export MORALIS_API_KEY=your_api_key_here
+export DISCOVERY_VERSION=v1.0.0  # Use versioned image tag
 
-**Docker Compose Services:**
+# Start services with versioned images
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
 
-The `docker-compose.yml` file defines four services:
+**Docker Compose Configuration:**
 
-1. **`cafe-discovery-backend`** (runtime):
-   - API server running on port `8080`
+The project uses a multi-file Docker Compose setup:
+
+- **`docker-compose.yml`**: Base configuration (common to all environments)
+  - Contains service definitions, networks, volumes
+  - No build contexts, no exposed ports
+  - Uses environment variables for configuration
+
+- **`docker-compose.dev.yml`**: Development overrides
+  - Adds build contexts for local development
+  - Exposes port `8080` for backend API access
+  - Builds images locally using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
+
+- **`docker-compose.prod.yml`**: Production overrides
+  - Uses versioned images from GHCR: `ghcr.io/create2-labs/cafe-discovery-backend:${DISCOVERY_VERSION}`
+  - Uses versioned images from GHCR: `ghcr.io/create2-labs/cafe-discovery-worker:${DISCOVERY_VERSION}`
+  - No build contexts, no exposed ports (accessed via NGINX only)
+
+**Services:**
+
+1. **`cafe-discovery-backend`**:
+   - API server (default port `8080` internally)
    - Uses `runtime` target from `Dockerfile-discovery-backend`
    - Health check: `curl http://localhost:8080/health` (every 30s)
    - Restart policy: `unless-stopped`
+   - Exposes `/version` endpoint for version information
 
-2. **`cafe-discovery-worker`** (runtime):
+2. **`cafe-discovery-worker`**:
    - Background worker processing NATS messages
    - Health check endpoint on port `8081` (configurable via `WORKER_HEALTH_PORT`)
    - Health check: `wget http://localhost:8081/health` (every 30s)
    - Restart policy: `unless-stopped`
-
-3. **`cafe-discovery-backend-ci`** (build-only):
-   - CI build target for backend (not started by default)
-   - Uses `ci` target from `Dockerfile-discovery-backend`
-   - Used for CI/CD pipelines
-
-4. **`cafe-discovery-worker-ci`** (build-only):
-   - CI build target for worker (not started by default)
-   - Uses `ci` target from `Dockerfile-discovery-worker`
-   - Used for CI/CD pipelines
 
 **Configuration:**
 
@@ -1638,6 +1671,21 @@ Response:
 }
 ```
 
+### GET /version
+
+Get the backend version information.
+
+**Authentication**: Not required
+
+**Response**:
+```json
+{
+  "version": "v1.2.3"
+}
+```
+
+The version is extracted from the `APP_VERSION` build argument during Docker image build, or from Git tags in CI/CD pipelines.
+
 ### GET /health
 
 Health check endpoint. No authentication required.
@@ -1673,6 +1721,101 @@ cafe_discovery_wallet_scan_duration_seconds_bucket{scan_type="wallet",le="0.01"}
 ```
 
 Note: This endpoint is used by Prometheus (or other monitoring systems) to scrape metrics. The infrastructure stack in `cafe-infra` includes Prometheus configured to scrape this endpoint.
+
+## Subscription Plans
+
+The service supports subscription plans with usage limits for wallet and TLS endpoint scans.
+
+### Available Plans
+
+1. **Free Plan**:
+   - Wallet scans: 5 per time period
+   - TLS endpoint scans: 5 per time period
+   - Price: Free
+   - Status: Active
+
+2. **CAFEIN Premium Plan**:
+   - Wallet scans: Unlimited
+   - TLS endpoint scans: Unlimited
+   - Price: $29.99/month
+   - Status: Coming soon (currently inactive)
+
+### Plan Management Endpoints
+
+#### GET /plans
+
+Get all available subscription plans.
+
+**Authentication**: Required (JWT token)
+
+**Response**:
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Free Plan",
+    "type": "FREE",
+    "wallet_scan_limit": 5,
+    "endpoint_scan_limit": 5,
+    "price": 0,
+    "is_active": true
+  },
+  {
+    "id": "uuid",
+    "name": "CAFEIN Premium Plan",
+    "type": "PREMIUM",
+    "wallet_scan_limit": 0,
+    "endpoint_scan_limit": 0,
+    "price": 29.99,
+    "is_active": false
+  }
+]
+```
+
+**Note**: `wallet_scan_limit` and `endpoint_scan_limit` of `0` indicate unlimited scans.
+
+#### GET /plans/current
+
+Get the current user's subscription plan.
+
+**Authentication**: Required (JWT token)
+
+**Response**:
+```json
+{
+  "id": "uuid",
+  "name": "Free Plan",
+  "type": "FREE",
+  "wallet_scan_limit": 5,
+  "endpoint_scan_limit": 5,
+  "price": 0,
+  "is_active": true
+}
+```
+
+#### GET /plans/usage
+
+Get current usage statistics for the authenticated user.
+
+**Authentication**: Required (JWT token)
+
+**Response**:
+```json
+{
+  "wallet_scans_used": 3,
+  "wallet_scans_limit": 5,
+  "endpoint_scans_used": 2,
+  "endpoint_scans_limit": 5,
+  "wallet_scans_remaining": 2,
+  "endpoint_scans_remaining": 3
+}
+```
+
+### Plan Enforcement
+
+- **Authenticated users**: Plan limits are enforced based on the user's assigned plan
+- **Anonymous users**: Limited to 5 scans per hour (same as Free Plan) via rate limiting
+- **Unlimited plans**: Plans with `wallet_scan_limit` or `endpoint_scan_limit` of `0` have no restrictions
 
 ### Worker Health Check
 
