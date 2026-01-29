@@ -3,7 +3,7 @@ name: Docker Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -101,12 +101,12 @@ jobs:
             --only-severity critical,high
 
       # ------------------------------------------------------------
-      # Build & publish MULTI-ARCH images
+      # Build & publish images (amd64 only)
       # ------------------------------------------------------------
-      - name: Build & publish discovery-backend image (multi-arch)
+      - name: Build & publish discovery-backend image
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
@@ -114,10 +114,10 @@ jobs:
             -t oleglod/cafe-discovery-backend:latest \
             --push .
 
-      - name: Build & publish discovery-worker image (multi-arch)
+      - name: Build & publish discovery-worker image
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
             -t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }} \

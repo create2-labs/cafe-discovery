@@ -364,7 +364,7 @@ The CI images are based on the `builder` stage, which includes the full build en
    - Minor version: `vX.Y` (derived)
    - Short commit SHA (for traceability)
 
-2. **Build both images** (multi-arch: `linux/amd64`, `linux/arm64`):
+2. **Build both images** (linux/amd64 only):
    - `oleglod/cafe-discovery-backend`
    - `oleglod/cafe-discovery-worker`
 
@@ -379,7 +379,7 @@ The CI images are based on the `builder` stage, which includes the full build en
      - `vX.Y` (minor version)
      - `sha-<short-sha>` (commit SHA for traceability)
      - `latest` (points to most recent release)
-   - All tags are multi-arch manifests (linux/amd64, linux/arm64)
+   - All tags are linux/amd64
    - Images include version metadata via `APP_VERSION` build argument
 
 **Security Gates**:
@@ -407,7 +407,7 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
 
 3. **CI automatically**:
    - Detects the tag push
-   - Builds both Docker images (multi-arch)
+   - Builds both Docker images (amd64)
    - Scans both images with Docker Scout
    - If scans pass, publishes both images with all tags
    - If scans fail, publishes nothing
@@ -444,7 +444,7 @@ Both `ghcr.io/create2-labs/cafe-discovery-backend` and `ghcr.io/create2-labs/caf
 - `sha-abc1234`: Commit SHA (for traceability)
 - `latest`: Latest release (points to most recent release)
 
-All tags are multi-arch manifests supporting `linux/amd64` and `linux/arm64`.
+All tags are built for `linux/amd64` only.
 
 ### Version Endpoint
 

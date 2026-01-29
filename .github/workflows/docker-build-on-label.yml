@@ -55,10 +55,10 @@ jobs:
         run: |
           # Fetch all tags
           git fetch --tags --force || true
-          
+
           # Try to get the latest tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
+
           if [[ -n "$LATEST_TAG" ]]; then
             # Use the latest tag if available
             TAG="$LATEST_TAG"
@@ -137,12 +137,12 @@ jobs:
             --exit-code
 
       # ------------------------------------------------------------
-      # Build & publish MULTI-ARCH images (ONLY if scans passed)
+      # Build & publish images (amd64 only, ONLY if scans passed)
       # ------------------------------------------------------------
-      - name: Build & publish discovery-backend image (multi-arch)
+      - name: Build & publish discovery-backend image
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
@@ -151,10 +151,10 @@ jobs:
             -t oleglod/cafe-discovery-backend:build \
             --push .
 
-      - name: Build & publish discovery-worker image (multi-arch)
+      - name: Build & publish discovery-worker image
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.minor_version }} \
