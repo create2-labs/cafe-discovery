@@ -43,9 +43,7 @@ jobs:
       - name: Extract version from Git tag
         id: version
         run: |
-          # Extract version from tag (triggered by tag push)
           TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#v}
           APP_VERSION="$TAG"
           SHORT_SHA=$(git rev-parse --short HEAD)
 
@@ -64,6 +62,8 @@ jobs:
         run: |
           docker build \
             --platform linux/amd64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:scan-local .
@@ -72,6 +72,8 @@ jobs:
         run: |
           docker build \
             --platform linux/amd64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:scan-local .
 
@@ -86,7 +88,7 @@ jobs:
           docker scout version
 
       # ------------------------------------------------------------
-      # Security scan (NON-BLOCKING - for information only)
+      # Security scan (NON-BLOCKING)
       # ------------------------------------------------------------
       - name: Scan discovery-backend image with Docker Scout
         continue-on-error: true
@@ -107,6 +109,8 @@ jobs:
         run: |
           docker buildx build \
             --platform linux/amd64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
@@ -118,6 +122,8 @@ jobs:
         run: |
           docker buildx build \
             --platform linux/amd64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-worker \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
             -t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }} \
