@@ -156,10 +156,10 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		// Enhanced PQC detection: check multiple indicators
 		// Priority: 1) kex_pqc_ready flag, 2) pqc flag, 3) pqc_mode, 4) algorithm name analysis
 		result.KexPQCReady = info.PQCInfo.KexPQCReady || info.PQCInfo.PQC
-		
+
 		// Set PQC mode - prefer from scan, but infer if needed
 		result.PQCMode = info.PQCInfo.PQCMode
-		
+
 		// If mode is not set but we have an algorithm name, analyze it
 		if result.PQCMode == "" && result.KexAlgorithm != "" {
 			algUpper := strings.ToUpper(result.KexAlgorithm)
@@ -181,12 +181,12 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 				result.PQCMode = "classical"
 			}
 		}
-		
+
 		// If KexPQCReady is still false but mode indicates PQC, set it to true
 		if !result.KexPQCReady && (result.PQCMode == "hybrid" || result.PQCMode == "pure") {
 			result.KexPQCReady = true
 		}
-		
+
 		// Final check: if algorithm name contains PQC indicators, ensure flags are set
 		if result.KexAlgorithm != "" {
 			algUpper := strings.ToUpper(result.KexAlgorithm)
@@ -289,12 +289,12 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 	} else {
 		// TLS 1.3: Check for PQC KEM using multiple indicators
 		hasPQCKEM := false
-		
+
 		// Check 1: Explicit flags from scan
 		if result.KexPQCReady || result.PQCMode == "hybrid" || result.PQCMode == "pure" {
 			hasPQCKEM = true
 		}
-		
+
 		// Check 2: Algorithm name contains PQC indicators (even if flags weren't set)
 		if !hasPQCKEM && result.KexAlgorithm != "" {
 			algUpper := strings.ToUpper(result.KexAlgorithm)
@@ -313,7 +313,7 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 				}
 			}
 		}
-		
+
 		// Check 3: PQCInfo flags (fallback)
 		if !hasPQCKEM && info.PQCInfo != nil {
 			if info.PQCInfo.PQC || info.PQCInfo.KexPQCReady {
@@ -321,7 +321,7 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 				result.KexPQCReady = true
 			}
 		}
-		
+
 		if hasPQCKEM {
 			// TLS 1.3 with hybrid or pure PQC KEM → safe (HN-DL mitigated)
 			result.PQCRisk = "safe"
@@ -602,7 +602,7 @@ func (s *TLSService) calculateTLSRiskScore(
 	// 5. PQC readiness risk reduction (10% weight)
 	// PQC support significantly reduces quantum risk
 	// For TLS 1.3, this is critical for quantum attack surface assessment
-	pqcRisk := 0.5 // Default: moderate quantum risk
+	var pqcRisk float64
 	if isPQCMode {
 		// Pure or hybrid PQC mode: minimal quantum risk
 		// Hybrid provides protection against harvest-now-decrypt-later attacks
@@ -635,21 +635,6 @@ func (s *TLSService) calculateTLSRiskScore(
 	}
 
 	return riskScore
-}
-
-// determinePQCRisk determines the PQC risk category
-// This is a legacy function - the actual risk is now determined in ScanTLS
-// based on protocol version and PQC KEM detection
-func (s *TLSService) determinePQCRisk(level domain.NISTLevel, isPQC bool) string {
-	// Legacy logic - kept for backward compatibility
-	// Actual risk determination now happens in ScanTLS with full context
-	if isPQC || level >= domain.NISTLevel5 {
-		return "safe"
-	}
-	if level >= domain.NISTLevel3 {
-		return "warning"
-	}
-	return "critical"
 }
 
 // generateRecommendations generates security findings based on scan results
@@ -762,7 +747,7 @@ func (s *TLSService) generatePQCRecommendations(protocolUpper string, isPQCMode 
 		// TLS 1.3 specific PQC findings
 		// Only recommend enabling PQC if it's truly not present
 		hasPQCKEM := (isPQCMode == "hybrid" || isPQCMode == "pure") || kexPQCReady
-		
+
 		if !hasPQCKEM {
 			recommendations = append(recommendations, "CRITICAL: Post-quantum cryptography (PQC) is not used for key exchange in TLS 1.3. This endpoint is vulnerable to 'harvest now, decrypt later' (HN-DL) attacks. Even if traffic is encrypted today, it can be decrypted in the future when quantum computers become available. Enable hybrid PQC KEMs (e.g., X25519MLKEM768) to protect against this threat.")
 		} else {
