@@ -1,3 +1,5 @@
+# Local use only. Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Staging/production are deployed from cafe-deploy.
 services:
   cafe-discovery-backend:
     build:
