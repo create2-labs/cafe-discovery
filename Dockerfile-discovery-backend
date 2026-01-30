@@ -1,7 +1,7 @@
 ##############################
 # Stage 1 — Build (Go + OQS)
 ##############################
-FROM oleglod/cafe-oqs:build AS builder
+FROM oleglod/cafe-crypto-backend:build-oqs AS builder
 
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
@@ -48,9 +48,26 @@ RUN go build -o server ./cmd/server/main.go
 
 
 ##############################
-# Stage 2 — Runtime 
+# Stage CI — Lint / Test / Vuln (use: docker build --target ci)
 ##############################
-FROM oleglod/cafe-oqs:runtime AS runtime
+FROM builder AS ci
+
+WORKDIR /app
+
+ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
+
+RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
+    && apt-get update && apt-get install -y curl \
+    && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+    | sh -s -- -b /usr/local/bin v2.8.0
+
+CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && /root/go/bin/govulncheck ./..."]
+
+
+##############################
+# Stage 2 — Runtime (default stage: last = image used without --target)
+##############################
+FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
 
 # Build argument for version (injected by GitHub Actions)
 ARG APP_VERSION
@@ -105,20 +122,3 @@ EXPOSE 8080
 
 # Use entrypoint script to start both services
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-
-
-##############################
-# Stage CI — Lint / Test / Vuln
-##############################
-FROM builder AS ci
-
-WORKDIR /app
-
-ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
-
-RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
-    && apt-get update && apt-get install -y curl \
-    && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-    | sh -s -- -b /usr/local/bin v2.8.0
-
-CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && /root/go/bin/govulncheck ./..."]

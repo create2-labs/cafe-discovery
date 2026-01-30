@@ -8,7 +8,6 @@ docs/
 README.md
 
 # Docker files (don't need in image)
-docker/
 Dockerfile*
 docker-compose.yml
 .dockerignore

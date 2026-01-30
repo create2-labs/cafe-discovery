@@ -1,3 +1,5 @@
+# Local use only. Staging/production are deployed from cafe-deploy.
+# Base Compose file: run with docker-compose.dev.yml for local dev (build + ports).
 services:
   cafe-discovery-backend:
     container_name: cafe-discovery-backend
@@ -13,7 +15,7 @@ services:
       - POSTGRES_SSLMODE=disable
       - NATS_URL=nats://nats:4222
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:-change-me-}
       - MORALIS_API_KEY=${MORALIS_API_KEY}
       - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-1x0000000000000000000000000000000AA}
@@ -43,7 +45,7 @@ services:
       - POSTGRES_SSLMODE=disable
       - NATS_URL=nats://nats:4222
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:-change-me-}
       - MORALIS_API_KEY=${MORALIS_API_KEY}
       - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
       - LOG_LEVEL=${LOG_LEVEL:-info}

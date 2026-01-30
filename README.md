@@ -2,6 +2,8 @@
 
 A Discovery service for identifying cryptographic exposures and quantum vulnerabilities on the Ethereum network and related infrastructure.
 
+> **Deployment:** This repository is **DEV/BUILD only**. Staging and production are deployed only from [cafe-deploy](https://github.com/create2-labs/cafe-deploy). Use the Docker Compose files here for local development and testing only.
+
 ## Features
 
 - Wallet Scanning: Scan wallets across multiple EVM-compatible networks
@@ -117,10 +119,9 @@ cafe-discovery/
 │   ├── PQC_CERTIFICATES.md # PQC certificate generation guide
 │   └── PQC_JWT.md         # PQC JWT implementation guide
 ├── scripts/               # Build and utility scripts
-│   └── install_oqs_openssl_debian.sh  # OQS installation script (legacy, see cafe-infra/oqs)
-├── Dockerfile-discovery-backend  # API server image (uses oqs:dev)
-├── Dockerfile-discovery-worker   # Worker image (uses oqs:dev)
-├── docker-compose.yml     # Docker Compose configuration to manage backend and nats worker
+├── Dockerfile-discovery-backend  # API server image (uses cafe-crypto-backend:build-oqs)
+├── Dockerfile-discovery-worker   # Worker image (uses cafe-crypto-backend:build-oqs)
+├── docker-compose.yml     # Docker Compose configuration (local dev; staging/prod via cafe-deploy)
 └── config.yaml            # Configuration file
 ```
 
@@ -128,25 +129,25 @@ cafe-discovery/
 
 The project uses a multi-stage Docker build approach with a shared base image:
 
-1. OQS Base Image (managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)):
-   - Build instructions: See [cafe-infra/oqs/README.md](https://github.com/kantika-tech/cafe-infra/oqs/README.md)
-   - Generated images: `cafe-oqs:build` and `cafe-oqs:runtime`
+1. OQS base images (built in [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend)):
+   - Build: run `scripts/build.sh` in cafe-crypto-backend (see [cafe-crypto-backend/README.md](https://github.com/create2-labs/cafe-crypto-backend))
+   - Images: `oleglod/cafe-crypto-backend:build-oqs` and `oleglod/cafe-crypto-backend:runtime-oqs`
 
 2. `Dockerfile-discovery-backend`:
    - Builds the API server binary
-   - Uses `oqs:dev` as base image (must be built from cafe-infra)
+   - Uses `oleglod/cafe-crypto-backend:build-oqs` as base image
    - Creates a slim runtime image with only necessary dependencies
    - Output: `cafe-discovery-backend` service
 
 3. `Dockerfile-discovery-worker`:
    - Builds the worker binary
-   - Uses `oqs:dev` as base image (must be built from cafe-infra)
+   - Uses `oleglod/cafe-crypto-backend:build-oqs` as base image
    - Creates a slim runtime image with only necessary dependencies
    - Output: `cafe-discovery-worker` service
 
-Build Order:
-1. First, build the OQS base image from `cafe-infra` (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
-2. Then, build the services using Docker Compose: `docker compose build` (or `docker compose up --build`)
+Build order:
+1. Build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images)).
+2. Then build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`).
 
 ### Data Flow
 
@@ -198,21 +199,11 @@ Notes:
 - Authenticated TLS scans are stored in PostgreSQL for permanent access
 
 
-### Deployment Considerations
-
-#### Development
+### Local Development
 
 - Infrastructure services (PostgreSQL, NATS, Redis) are managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
-- Run API server and worker as separate processes
-
-#### Production
-
-This will be implemented later 
-
-- Backend: Deploy multiple instances behind a load balancer
-- Workers: Deploy multiple instances for horizontal scalability
-- NATS: Use NATS JetStream for persistence and high availability
-- PostgreSQL: Use a PostgreSQL cluster with read replicas
+- Run API server and worker as separate processes or via Docker Compose (local only)
+- Staging/production deployment is done from [cafe-deploy](https://github.com/create2-labs/cafe-deploy)
 
 ## CI/CD and Release Process
 
@@ -256,7 +247,7 @@ You can run the same CI checks locally before creating a pull request. This help
 
 **Prerequisites:**
 - Docker and Docker Compose installed
-- OQS base image built (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+- OQS base images built (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images))
 
 **Method 1: Using Docker Compose (Recommended)**
 
@@ -332,7 +323,7 @@ govulncheck ./...
 
 **Troubleshooting:**
 
-- **Build fails with "oqs:dev not found"**: Make sure you've built the OQS base image (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+- **Build fails with "cafe-crypto-backend:build-oqs not found"**: Pull or build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images))
 - **Linter timeout**: Increase timeout in `.golangci.yml` or run with `--timeout=10m`
 - **Tests fail**: Check that all dependencies are available and tests are passing locally
 - **govulncheck fails**: Update dependencies with `go get -u ./...` and `go mod tidy`
@@ -352,7 +343,7 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 **Trigger**: Push of Git tags matching `v*.*.*` (e.g., `v1.2.3`)
 
-**Purpose**: Build, scan, and publish production Docker images to GitHub Container Registry (GHCR).
+**Purpose**: Build, scan, and publish Docker images to GitHub Container Registry (GHCR) for use by cafe-deploy.
 
 **Registry**: Images are published to `ghcr.io/create2-labs/`:
 - `ghcr.io/create2-labs/cafe-discovery-backend:${VERSION}`
@@ -463,10 +454,22 @@ Response:
 
 The version is extracted from the `APP_VERSION` build argument during Docker image build, which is set from Git tags in CI/CD pipelines.
 
+#### Version flow (end-to-end)
+
+The version displayed to users is consistent from build to frontend:
+
+1. **GitHub Action** (on tag): `docker-release.yml` sets `APP_VERSION` from the Git tag (e.g. `v1.2.3`) and passes it as `--build-arg APP_VERSION=...` to the backend image build.
+2. **Dockerfile**: At build time, writes `{"version": "<APP_VERSION>"}` to `/usr/share/nginx/html/version.json` inside the image.
+3. **Backend container**: NGINX (`nginx-version.conf`) listens on port **8082** and serves `GET /version` by returning that `version.json`. The main API runs on port 8080; only the version endpoint is on 8082 (Docker network only, not exposed by docker-compose).
+4. **Infra** (cafe-deploy): The main NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8082/version`.
+5. **Frontend** (cafe-frontend): `platformService.getBackendVersion()` calls `api.get('/version')` (i.e. `/api/version`), receives `{"version": "vX.Y.Z"}`, and displays the discovery backend version to the user.
+
+The response format **must** remain `{"version": "..."}`; the frontend and infra rely on it. See `nginx-version.conf` for the NGINX config and comments.
+
 ## Configuration
 
 The application can be configured using either:
-1. `config.yaml` file (recommended for Docker deployments)
+1. `config.yaml` file (recommended for local Docker runs)
 2. Environment variables (override config.yaml values). This will ease the usage of k8s, later.
 
 ### Configuration File (`config.yaml`)
@@ -493,7 +496,7 @@ NATS_URL: "nats://nats:4222"
 REDIS_URL: "redis://redis:6379"
 
 # JWT configuration (required for authentication)
-JWT_SECRET: "change-me-in-production"
+JWT_SECRET: "change-me-for-local"
 
 # Moralis API configuration
 MORALIS_API_KEY: ""
@@ -522,7 +525,7 @@ blockchains:
 
 Note: 
 - Environment variables always override values from `config.yaml` 
-- For Docker deployments, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
+- For local Docker Compose, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
 - The `CONFIG_PATH` environment variable can be used to specify a custom config file path (default: `config.yaml`)
 
 ## Prerequisites
@@ -582,33 +585,29 @@ You can also use environment variables to override any value from the config fil
 
 Backend and worker are managed by Docker Compose
 
-### Step 1: Build OQS Base Image
+### Step 1: Build OQS base images
 
-Before building the discovery services, you must first build the OQS base image from the `cafe-infra` repository:
+Before building the discovery services, you must have the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend):
 
 ```bash
-# Navigate to cafe-infra
-cd ../cafe-infra/oqs
+# Option A: Build from cafe-crypto-backend
+cd ../cafe-crypto-backend
+./scripts/build.sh
+cd ../cafe-discovery
 
-# Build the OQS images (builds both cafe-oqs:build and cafe-oqs:runtime)
-./build.sh
-
-# Tag the build image as oqs:dev for compatibility with cafe-discovery Dockerfiles
-docker tag cafe-oqs:build oqs:dev
-
-# Return to cafe-discovery
-cd ../../cafe-discovery
+# Option B: Pull from Docker Hub
+docker pull oleglod/cafe-crypto-backend:build-oqs
+docker pull oleglod/cafe-crypto-backend:runtime-oqs
 ```
 
-This creates the base images containing:
-- `cafe-oqs:build`: Build environment with Open Quantum Safe (OQS) library (liboqs), OpenSSL with oqs-provider, and Go runtime
-- `cafe-oqs:runtime`: Minimal runtime image with OQS support
-- `oqs:dev`: Tagged alias of `cafe-oqs:build` for compatibility
+This provides the base images:
+- `oleglod/cafe-crypto-backend:build-oqs`: Build environment with Open Quantum Safe (OQS) library (liboqs), OpenSSL with oqs-provider, and Go runtime
+- `oleglod/cafe-crypto-backend:runtime-oqs`: Minimal runtime image with OQS support
 
 **Note**: 
-- The OQS Dockerfile has been moved from `cafe-discovery` to `cafe-infra/oqs`
+- The OQS Docker images are built and published from `cafe-crypto-backend`
 - This step only needs to be done once, or when you need to update the OQS libraries
-- For detailed OQS build instructions, see [cafe-infra/oqs/README.md](../cafe-infra/oqs/README.md)
+- For detailed OQS build instructions, see [cafe-crypto-backend/README.md](../cafe-crypto-backend/README.md)
 
 ### Step 2: Start Infrastructure Services
 
@@ -630,13 +629,13 @@ For information, the infrastructure is as follow:
 
 From the `cafe-discovery` directory:
 
-**Development environment:**
+**Local development (Docker Compose):**
 ```bash
 # Set required environment variables (optional - can also be set in config.yaml)
 export JWT_SECRET=your-secret-key-here
 export MORALIS_API_KEY=your_api_key_here
 
-# Build and start services
+# Build and start services (local use only; staging/prod are deployed from cafe-deploy)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 # Or start individually
@@ -644,35 +643,19 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discov
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discovery-worker
 ```
 
-**Production environment:**
-```bash
-# Set required environment variables
-export JWT_SECRET=your-secret-key-here
-export MORALIS_API_KEY=your_api_key_here
-export DISCOVERY_VERSION=v1.0.0  # Use versioned image tag
+**Docker Compose Configuration (local use only):**
 
-# Start services with versioned images
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
+The project uses a two-file Docker Compose setup for local development:
 
-**Docker Compose Configuration:**
-
-The project uses a multi-file Docker Compose setup:
-
-- **`docker-compose.yml`**: Base configuration (common to all environments)
+- **`docker-compose.yml`**: Base configuration
   - Contains service definitions, networks, volumes
   - No build contexts, no exposed ports
   - Uses environment variables for configuration
 
-- **`docker-compose.dev.yml`**: Development overrides
+- **`docker-compose.dev.yml`**: Local development overrides
   - Adds build contexts for local development
   - Exposes port `8080` for backend API access
   - Builds images locally using `Dockerfile-discovery-backend` and `Dockerfile-discovery-worker`
-
-- **`docker-compose.prod.yml`**: Production overrides
-  - Uses versioned images from GHCR: `ghcr.io/create2-labs/cafe-discovery-backend:${DISCOVERY_VERSION}`
-  - Uses versioned images from GHCR: `ghcr.io/create2-labs/cafe-discovery-worker:${DISCOVERY_VERSION}`
-  - No build contexts, no exposed ports (accessed via NGINX only)
 
 **Services:**
 
@@ -695,7 +678,7 @@ The services are configured with:
 - **Network**: Connects to external network `cafe-infra_observability` (must exist from `cafe-infra`)
 - **Volumes**: Mounts `./config.yaml` to `/app/config.yaml` (read-only)
 - **Environment Variables**: Supports environment variable overrides with defaults:
-  - `JWT_SECRET` (default: `change-me-in-production`)
+  - `JWT_SECRET` (default: `change-me-for-local`)
   - `MORALIS_API_KEY` (required, no default)
   - `POSTGRES_USER` (default: `cafe`)
   - `POSTGRES_PASSWORD` (default: `cafe`)
@@ -707,10 +690,10 @@ The services are configured with:
 **Dockerfile Structure:**
 - **OQS Base Image**: Managed in [cafe-infra/oqs](../cafe-infra/oqs/) - builds `cafe-oqs:build` and `cafe-oqs:runtime`, tagged as `oqs:dev` for compatibility
 - `Dockerfile-discovery-backend`: Builds the API server using `oqs:dev` as base
-  - `runtime` target: Production-ready server image
+  - `runtime` target: Server image (used by cafe-deploy for staging/prod)
   - `ci` target: CI/CD image with linting and testing tools
-- `Dockerfile-discovery-worker`: Builds the worker using `oqs:dev` as base
-  - `runtime` target: Production-ready worker image
+- `Dockerfile-discovery-worker`: Builds the worker using `oleglod/cafe-crypto-backend:build-oqs` as base
+  - `runtime` target: Worker image (used by cafe-deploy for staging/prod)
   - `ci` target: CI/CD image with linting and testing tools
 
 **Verify services are running:**
@@ -839,7 +822,7 @@ export MORALIS_API_URL=https://deep-index.moralis.io
 # Development keys (default):
 #   Site Key: 1x00000000000000000000AA
 #   Secret Key: 1x0000000000000000000000000000000AA
-# For production, get your keys from https://developers.cloudflare.com/turnstile/
+# For staging/production (cafe-deploy), get your keys from https://developers.cloudflare.com/turnstile/
 # Note: The service will log a warning when using development keys
 export TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA  # Dev key (default)
 export TURNSTILE_SITE_KEY=1x00000000000000000000AA  # Dev key (default)
@@ -854,8 +837,8 @@ export CORS_ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS"
 
 Using config.yaml vs Environment Variables:
 
-- For Docker deployments: Use `config.yaml` with Docker service names (postgres, nats, redis)
-- For production: Use environment variables or a secrets management system
+- For local Docker Compose: Use `config.yaml` with Docker service names (postgres, nats, redis)
+- For staging/production (cafe-deploy): Use environment variables or a secrets management system
 
 ### Démarrer en mode debug
 
@@ -968,7 +951,7 @@ Important:
 
 ⚠️ Important Security Notes:
 
-1. Key Storage: Server private keys are stored in memory. In production:
+1. Key Storage: Server private keys are stored in memory. For staging/production:
    - Consider using a Hardware Security Module (HSM)
    - Implement key rotation policies
    - Use secure key management services
@@ -1141,7 +1124,7 @@ Available PQC Algorithms:
 ./scripts/generate-pqc-cert.sh dilithium3 365 localhost
 ```
 
-2. Run a test HTTPS server (see `docker/test-server.go` for example)
+2. Run a test HTTPS server (e.g. using [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) runtime image with OpenSSL OQS, or a local server with PQC support)
 
 3. Scan with the API:
 ```bash
@@ -1182,7 +1165,7 @@ Request:
 }
 ```
 
-Note: The `turnstile_token` is generated by the Cloudflare Turnstile widget on the frontend. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For production, configure production keys from your Cloudflare dashboard.
+Note: The `turnstile_token` is generated by the Cloudflare Turnstile widget on the frontend. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For staging/production (cafe-deploy), configure production keys from your Cloudflare dashboard.
 
 ### POST /auth/signin
 
@@ -1197,7 +1180,7 @@ Request:
 }
 ```
 
-Note: The `turnstile_token` is generated by the Cloudflare Turnstile widget on the frontend. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For production, configure production keys from your Cloudflare dashboard.
+Note: The `turnstile_token` is generated by the Cloudflare Turnstile widget on the frontend. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For staging/production (cafe-deploy), configure production keys from your Cloudflare dashboard.
 
 Response:
 ```json
@@ -1852,7 +1835,7 @@ Returns HTTP 503 status code when NATS is disconnected or workers are not runnin
 
 ### 1. Register and Authenticate
 
-Note: The signup and signin endpoints require a Cloudflare Turnstile token. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For production, configure production keys from your Cloudflare dashboard.
+Note: The signup and signin endpoints require a Cloudflare Turnstile token. By default, the service uses Cloudflare's free development keys which always pass verification. The service will log a warning when using development keys. For staging/production (cafe-deploy), configure production keys from your Cloudflare dashboard.
 
 ```bash
 # Register a new user (requires turnstile_token from frontend widget)
@@ -2193,7 +2176,7 @@ Both API-initiated scans and worker-processed scans are instrumented, as workers
 
 The infrastructure stack in `cafe-infra` includes Prometheus configured to scrape the `/metrics` endpoint. 
 
-For Docker deployments, Prometheus in `cafe-infra` is already configured to scrape the discovery service. The configuration uses the Docker service name:
+For local Docker Compose, Prometheus in `cafe-infra` is already configured to scrape the discovery service. The configuration uses the Docker service name:
 
 ```yaml
 scrape_configs:
@@ -2219,7 +2202,7 @@ scrape_configs:
 Note: 
 - If Prometheus runs in Docker (via `cafe-infra`), use `host.docker.internal:8080` on Mac/Windows to access the host machine
 - On Linux, you may need to use `172.17.0.1:8080` or configure Docker networking
-- For production deployments, use the appropriate service discovery mechanism (DNS, Kubernetes service discovery, etc.)
+- For staging/production (deployed from cafe-deploy), use the appropriate service discovery there.
 
 After updating the Prometheus configuration, restart Prometheus:
 ```bash
@@ -2278,7 +2261,7 @@ Note: This utility requires a valid Moralis API key to fetch transaction data. T
 - Use environment variables for all API keys
 - Never hardcode credentials in source code
 - Use `.env` files (and add them to `.gitignore`) for local development
-- Use secret management services in production
+- Use secret management for staging/production (cafe-deploy)
 
 ## Stopping Discovery services
 

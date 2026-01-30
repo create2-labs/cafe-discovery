@@ -1,6 +1,0 @@
-services:
-  cafe-discovery-backend:
-    image: ghcr.io/create2-labs/cafe-discovery-backend:${DISCOVERY_VERSION}
-
-  cafe-discovery-worker:
-    image: ghcr.io/create2-labs/cafe-discovery-worker:${DISCOVERY_VERSION}

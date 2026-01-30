@@ -4,9 +4,11 @@
 
 ## TL;DR
 
+For a Docker environment with OpenSSL and OQS, use the [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) images:
+
 ```
-docker build --no-cache -t openssl-oqs -f Dockerfile-oqs-slim .
-docker run -it --rm openssl-oqs  bash
+docker run -it --rm oleglod/cafe-crypto-backend:runtime-oqs bash
+# or build from cafe-crypto-backend repo first: ./scripts/build.sh
 ```
 
 Dans le container tester avec 
@@ -318,7 +320,7 @@ These two layers integrate seamlessly with OpenSSL — giving immediate access t
 
 * [MacOS (Apple Silicon / Intel)](./install_oqs_openssl_mac.sh)
 * [Linux (Ubuntu/Debian)](./install_oqs_openssl_debian.sh)
-* [Docker](./Dockerfile-oqs-slim)
+* **Docker**: use [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) images: `oleglod/cafe-crypto-backend:runtime-oqs` (or `:build-oqs` for full build env). Run `./scripts/build.sh` in cafe-crypto-backend to build locally.
 
 ---
 
