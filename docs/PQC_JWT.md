@@ -47,7 +47,7 @@ sudo ldconfig
 
 #### Docker
 
-If you're using Docker, you can use a base image with OQS pre-installed. See the `docker/` directory for examples.
+If you're using Docker, use the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (`oleglod/cafe-crypto-backend:build-oqs` and `oleglod/cafe-crypto-backend:runtime-oqs`).
 
 ## Configuration
 

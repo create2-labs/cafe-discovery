@@ -119,10 +119,9 @@ cafe-discovery/
 │   ├── PQC_CERTIFICATES.md # PQC certificate generation guide
 │   └── PQC_JWT.md         # PQC JWT implementation guide
 ├── scripts/               # Build and utility scripts
-│   └── install_oqs_openssl_debian.sh  # OQS installation script (legacy, see cafe-crypto-backend)
 ├── Dockerfile-discovery-backend  # API server image (uses cafe-crypto-backend:build-oqs)
 ├── Dockerfile-discovery-worker   # Worker image (uses cafe-crypto-backend:build-oqs)
-├── docker-compose.yml     # Docker Compose configuration to manage backend and nats worker
+├── docker-compose.yml     # Docker Compose configuration (local dev; staging/prod via cafe-deploy)
 └── config.yaml            # Configuration file
 ```
 
@@ -130,9 +129,9 @@ cafe-discovery/
 
 The project uses a multi-stage Docker build approach with a shared base image:
 
-1. OQS Base Image (managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)):
-   - Build instructions: See [cafe-crypto-backend/README.md](https://github.com/create2-labs/cafe-crypto-backend)
-   - Generated images: `oleglod/cafe-crypto-backend:build-oqs` and `oleglod/cafe-crypto-backend:runtime-oqs`
+1. OQS base images (built in [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend)):
+   - Build: run `scripts/build.sh` in cafe-crypto-backend (see [cafe-crypto-backend/README.md](https://github.com/create2-labs/cafe-crypto-backend))
+   - Images: `oleglod/cafe-crypto-backend:build-oqs` and `oleglod/cafe-crypto-backend:runtime-oqs`
 
 2. `Dockerfile-discovery-backend`:
    - Builds the API server binary
@@ -146,9 +145,9 @@ The project uses a multi-stage Docker build approach with a shared base image:
    - Creates a slim runtime image with only necessary dependencies
    - Output: `cafe-discovery-worker` service
 
-Build Order:
-1. First, build the OQS base image from `cafe-infra` (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
-2. Then, build the services using Docker Compose: `docker compose build` (or `docker compose up --build`)
+Build order:
+1. Build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images)).
+2. Then build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`).
 
 ### Data Flow
 
@@ -248,7 +247,7 @@ You can run the same CI checks locally before creating a pull request. This help
 
 **Prerequisites:**
 - Docker and Docker Compose installed
-- OQS base image built (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+- OQS base images built (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images))
 
 **Method 1: Using Docker Compose (Recommended)**
 
@@ -324,7 +323,7 @@ govulncheck ./...
 
 **Troubleshooting:**
 
-- **Build fails with "cafe-crypto-backend:build-oqs not found"**: Pull or build the OQS base image (see [Step 1: Build OQS Base Image](#step-1-build-oqs-base-image))
+- **Build fails with "cafe-crypto-backend:build-oqs not found"**: Pull or build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images))
 - **Linter timeout**: Increase timeout in `.golangci.yml` or run with `--timeout=10m`
 - **Tests fail**: Check that all dependencies are available and tests are passing locally
 - **govulncheck fails**: Update dependencies with `go get -u ./...` and `go mod tidy`
@@ -574,9 +573,9 @@ You can also use environment variables to override any value from the config fil
 
 Backend and worker are managed by Docker Compose
 
-### Step 1: Build OQS Base Image
+### Step 1: Build OQS base images
 
-Before building the discovery services, you must have the OQS base images (from `cafe-crypto-backend`):
+Before building the discovery services, you must have the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend):
 
 ```bash
 # Option A: Build from cafe-crypto-backend
@@ -1113,7 +1112,7 @@ Available PQC Algorithms:
 ./scripts/generate-pqc-cert.sh dilithium3 365 localhost
 ```
 
-2. Run a test HTTPS server (see `docker/test-server.go` for example)
+2. Run a test HTTPS server (e.g. using [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) runtime image with OpenSSL OQS, or a local server with PQC support)
 
 3. Scan with the API:
 ```bash
