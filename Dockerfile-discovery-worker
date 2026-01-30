@@ -48,21 +48,7 @@ RUN go build -o worker ./cmd/worker/main.go
 
 
 ##############################
-# Stage 2 — Runtime 
-##############################
-FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
-
-WORKDIR /app
-
-COPY --from=builder /app/worker /app/worker
-
-EXPOSE 8080
-ENTRYPOINT []
-CMD ["./worker"]
-
-
-##############################
-# Stage CI — Lint / Test / Vuln
+# Stage CI — Lint / Test / Vuln (use: docker build --target ci)
 ##############################
 FROM builder AS ci
 
@@ -74,3 +60,17 @@ RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
     | sh -s -- -b /usr/local/bin v2.8.0
 
 CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && /root/go/bin/govulncheck ./..."]
+
+
+##############################
+# Stage 2 — Runtime (default stage: last = image used without --target)
+##############################
+FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/worker /app/worker
+
+EXPOSE 8080
+ENTRYPOINT []
+CMD ["./worker"]

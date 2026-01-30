@@ -454,6 +454,18 @@ Response:
 
 The version is extracted from the `APP_VERSION` build argument during Docker image build, which is set from Git tags in CI/CD pipelines.
 
+#### Version flow (end-to-end)
+
+The version displayed to users is consistent from build to frontend:
+
+1. **GitHub Action** (on tag): `docker-release.yml` sets `APP_VERSION` from the Git tag (e.g. `v1.2.3`) and passes it as `--build-arg APP_VERSION=...` to the backend image build.
+2. **Dockerfile**: At build time, writes `{"version": "<APP_VERSION>"}` to `/usr/share/nginx/html/version.json` inside the image.
+3. **Backend container**: NGINX (`nginx-version.conf`) listens on port **8082** and serves `GET /version` by returning that `version.json`. The main API runs on port 8080; only the version endpoint is on 8082 (Docker network only, not exposed by docker-compose).
+4. **Infra** (cafe-deploy): The main NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8082/version`.
+5. **Frontend** (cafe-frontend): `platformService.getBackendVersion()` calls `api.get('/version')` (i.e. `/api/version`), receives `{"version": "vX.Y.Z"}`, and displays the discovery backend version to the user.
+
+The response format **must** remain `{"version": "..."}`; the frontend and infra rely on it. See `nginx-version.conf` for the NGINX config and comments.
+
 ## Configuration
 
 The application can be configured using either:
