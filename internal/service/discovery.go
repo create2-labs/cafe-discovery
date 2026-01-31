@@ -553,6 +553,17 @@ func (s *DiscoveryService) RecoverPublicKeyFromTransactionData(ctx context.Conte
 	fields := s.extractTransactionFields(txJSON)
 	isEIP1559 := s.isEIP1559Transaction(txJSON, fields)
 	chainID := s.parseChainID(fields.chainIDHex)
+	if chainID == nil {
+		// Tx JSON may omit chainId (e.g. some RPCs); get from network to avoid nil signer panic
+		var errChain error
+		chainID, errChain = client.ChainID(ctx)
+		if errChain != nil {
+			return "", "", fmt.Errorf("transaction missing chainId and could not get from RPC: %w", errChain)
+		}
+		if chainID == nil {
+			return "", "", fmt.Errorf("transaction missing chainId and RPC returned empty chain ID")
+		}
+	}
 
 	v, err := s.calculateV(txJSON, isEIP1559, chainID)
 	if err != nil {

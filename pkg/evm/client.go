@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -269,6 +270,24 @@ func (c *Client) GetTransactionByHash(ctx context.Context, txHash string) (json.
 		return nil, fmt.Errorf("failed to get transaction: %w", err)
 	}
 	return result, nil
+}
+
+// ChainID returns the chain ID of the network via eth_chainId (e.g. when tx JSON has no chainId)
+func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
+	result, err := c.Call(ctx, "eth_chainId", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chain ID: %w", err)
+	}
+	var hexStr string
+	if err := json.Unmarshal(result, &hexStr); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal chain ID: %w", err)
+	}
+	if hexStr == "" || hexStr == "0x" {
+		return nil, fmt.Errorf("empty chain ID from RPC")
+	}
+	chainID := new(big.Int)
+	chainID.SetString(hexStr, 0)
+	return chainID, nil
 }
 
 // padHex pads a hex string to the specified length (without 0x prefix)
