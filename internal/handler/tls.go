@@ -49,6 +49,25 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
+	// Reject unauthenticated / anonymous first (fail fast, no need to validate URL)
+	userIDValue := c.Locals("user_id")
+	if userIDValue == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "user not authenticated",
+		})
+	}
+	userID, ok := userIDValue.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "invalid user ID format",
+		})
+	}
+	if userID == uuid.Nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "sign in required to run scans",
+		})
+	}
+
 	if req.URL == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "url is required",
@@ -86,21 +105,6 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user ID from JWT context (set by middleware)
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
-	}
-
 	// Check plan limits before queuing the scan
 	// This ensures we return an error immediately to the frontend if limits are reached
 	if h.planService != nil {
@@ -117,31 +121,13 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		}
 	}
 
-	// Publish scan request to NATS for async processing
-	// Anonymous users (uuid.Nil) go to a different queue for Redis storage
+	// Publish scan request to NATS for async processing (authenticated users only)
 	scanMsg := nats.TLSScanMessage{
 		UserID:   userID,
 		Endpoint: req.URL,
 	}
 
-	var subject string
-	if userID == uuid.Nil {
-		// Anonymous users: use Redis queue
-		// Extract token from Authorization header for anonymous users to create unique Redis keys
-		authHeader := c.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 && parts[0] == "Bearer" {
-				scanMsg.Token = parts[1]
-			}
-		}
-		subject = nats.SubjectTLSScanAnonymous
-	} else {
-		// Authenticated users: use PostgreSQL queue
-		subject = nats.SubjectTLSScan
-	}
-
-	if err := nats.PublishJSON(h.natsConn, subject, scanMsg); err != nil {
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectTLSScan, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",
 		})
@@ -285,7 +271,7 @@ func (h *TLSHandler) tlsScanResultToCBOM(tlsScanResult *domain.TLSScanResult) fi
 		"ocsp_stapled":    tlsScanResult.OCSPStapled,
 		"nist_levels":     tlsScanResult.NISTLevels,
 		"cbom": fiber.Map{
-			"bomFormat":  "CycloneDX",
+			"bomFormat":   "CycloneDX",
 			"specVersion": "1.7",
 			"version":     1,
 			"metadata": fiber.Map{
