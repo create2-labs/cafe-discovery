@@ -17,6 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	schemeHTTP  = "http://"
+	schemeHTTPS = "https://"
+)
+
 // DiscoveryHandler handles discovery-related HTTP requests
 type DiscoveryHandler struct {
 	discoveryService    *service.DiscoveryService
@@ -71,70 +76,74 @@ func (h *DiscoveryHandler) getUserIDAndAnonymousStatus(c *fiber.Ctx) (uuid.UUID,
 	return userID, isAnonymous, nil
 }
 
-// checkScanLimits validates scan limits for both anonymous and authenticated users
-func (h *DiscoveryHandler) checkScanLimits(c *fiber.Ctx, userID uuid.UUID, isAnonymous bool, scanType string, redisRepo interface {
+// redisCountRepo is used to check anonymous scan count (wallet or TLS Redis repo).
+type redisCountRepo interface {
 	Count(context.Context, string) (int, error)
-}) error {
+}
+
+// checkScanLimits validates scan limits for both anonymous and authenticated users
+func (h *DiscoveryHandler) checkScanLimits(c *fiber.Ctx, userID uuid.UUID, isAnonymous bool, scanType string, redisRepo redisCountRepo) error {
 	if isAnonymous {
-		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing authorization header for anonymous scan",
-			})
-		}
-
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid authorization header format",
-			})
-		}
-
-		token := parts[1]
-		tokenHash := repository.HashToken(token)
-
-		// Check anonymous scan limit
-		count, err := redisRepo.Count(c.Context(), tokenHash)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("failed to check scan limit: %v", err),
-			})
-		}
-
-		maxScans := repository.GetMaxAnonymousWalletScans()
-		if count >= maxScans {
-			scanTypeName := "wallet"
-			if scanType == "endpoint" {
-				scanTypeName = "TLS"
-			}
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": fmt.Sprintf("anonymous %s scan limit reached (%d/%d). Please sign in to continue", scanTypeName, count, maxScans),
-			})
-		}
-	} else {
-		// For authenticated users, check plan limits
-		if h.planService != nil {
-			canScan, usage, err := h.planService.CheckScanLimit(userID, scanType, nil, nil)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": fmt.Sprintf("failed to check plan limits: %v", err),
-				})
-			}
-			if !canScan {
-				var errorMsg string
-				if scanType == "wallet" {
-					errorMsg = fmt.Sprintf("wallet scan limit reached (%d/%d). Please upgrade your plan to continue", usage.WalletScansUsed, usage.WalletScanLimit)
-				} else {
-					errorMsg = fmt.Sprintf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
-				}
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": errorMsg,
-				})
-			}
-		}
+		return h.checkAnonymousScanLimits(c, redisRepo, scanType)
 	}
+	return h.checkAuthenticatedScanLimits(c, userID, scanType)
+}
 
+func (h *DiscoveryHandler) checkAnonymousScanLimits(c *fiber.Ctx, redisRepo redisCountRepo, scanType string) error {
+	authHeader := c.Get("Authorization")
+	if authHeader == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "missing authorization header for anonymous scan",
+		})
+	}
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "invalid authorization header format",
+		})
+	}
+	tokenHash := repository.HashToken(parts[1])
+	count, err := redisRepo.Count(c.Context(), tokenHash)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to check scan limit: %v", err),
+		})
+	}
+	maxScans := repository.GetMaxAnonymousWalletScans()
+	if count >= maxScans {
+		scanTypeName := "wallet"
+		if scanType == "endpoint" {
+			scanTypeName = "TLS"
+		}
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": fmt.Sprintf("anonymous %s scan limit reached (%d/%d). Please sign in to continue", scanTypeName, count, maxScans),
+		})
+	}
 	return nil
+}
+
+func (h *DiscoveryHandler) checkAuthenticatedScanLimits(c *fiber.Ctx, userID uuid.UUID, scanType string) error {
+	if h.planService == nil {
+		return nil
+	}
+	canScan, usage, err := h.planService.CheckScanLimit(userID, scanType, nil, nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to check plan limits: %v", err),
+		})
+	}
+	if !canScan {
+		errorMsg := scanLimitErrorMessage(scanType, usage)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": errorMsg})
+	}
+	return nil
+}
+
+func scanLimitErrorMessage(scanType string, usage *service.PlanUsage) string {
+	if scanType == "wallet" {
+		return fmt.Sprintf("wallet scan limit reached (%d/%d). Please upgrade your plan to continue", usage.WalletScansUsed, usage.WalletScanLimit)
+	}
+	return fmt.Sprintf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
 }
 
 // UnifiedScan handles POST /discovery/scan
@@ -172,19 +181,24 @@ func (h *DiscoveryHandler) UnifiedScan(c *fiber.Ctx) error {
 
 // scanWallet handles wallet scanning (extracted from original Scan method)
 func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
+	// Reject anonymous first (fail fast, no need to validate address)
+	userID, isAnonymous, err := h.getUserIDAndAnonymousStatus(c)
+	if err != nil {
+		return err
+	}
+	if isAnonymous {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "sign in required to run scans",
+		})
+	}
+
 	if address == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "address is required",
 		})
 	}
 
-	// Get user ID and determine if anonymous
-	userID, isAnonymous, err := h.getUserIDAndAnonymousStatus(c)
-	if err != nil {
-		return err
-	}
-
-	// Check scan limits (anonymous or authenticated)
+	// Check scan limits (authenticated users only)
 	if err := h.checkScanLimits(c, userID, isAnonymous, "wallet", h.redisWalletScanRepo); err != nil {
 		return err
 	}
@@ -238,8 +252,19 @@ func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
 
 // scanTLS handles TLS endpoint scanning (uses TLSHandler logic)
 func (h *DiscoveryHandler) scanTLS(c *fiber.Ctx, endpointURL string) error {
+	// Reject anonymous first (fail fast, no need to validate URL)
+	userID, isAnonymous, err := h.getUserIDAndAnonymousStatus(c)
+	if err != nil {
+		return err
+	}
+	if isAnonymous {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "sign in required to run scans",
+		})
+	}
+
 	// Validate URL format (should start with https:// or http://)
-	if !strings.HasPrefix(endpointURL, "https://") && !strings.HasPrefix(endpointURL, "http://") {
+	if !strings.HasPrefix(endpointURL, schemeHTTPS) && !strings.HasPrefix(endpointURL, schemeHTTP) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "url must use http:// or https:// protocol",
 		})
@@ -267,38 +292,17 @@ func (h *DiscoveryHandler) scanTLS(c *fiber.Ctx, endpointURL string) error {
 		})
 	}
 
-	// Get user ID and determine if anonymous
-	userID, isAnonymous, err := h.getUserIDAndAnonymousStatus(c)
-	if err != nil {
-		return err
-	}
-
-	// Check scan limits (anonymous or authenticated)
+	// Check scan limits (authenticated users only)
 	if err := h.checkScanLimits(c, userID, isAnonymous, "endpoint", h.redisTLSScanRepo); err != nil {
 		return err
 	}
 
-	// Publish TLS scan request to NATS for async processing
+	// Publish TLS scan request to NATS for async processing (authenticated only)
 	scanMsg := nats.TLSScanMessage{
 		UserID:   userID,
 		Endpoint: endpointURL,
 	}
-
-	var subject string
-	if isAnonymous {
-		// Anonymous users: use Redis queue
-		authHeader := c.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 && parts[0] == "Bearer" {
-				scanMsg.Token = parts[1]
-			}
-		}
-		subject = nats.SubjectTLSScanAnonymous
-	} else {
-		// Authenticated users: use PostgreSQL queue
-		subject = nats.SubjectTLSScan
-	}
+	subject := nats.SubjectTLSScan
 
 	if err := nats.PublishJSON(h.natsConn, subject, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -505,13 +509,13 @@ func (h *DiscoveryHandler) GetCBOM(c *fiber.Ctx) error {
 	if strings.HasPrefix(param, "0x") {
 		// It's a wallet address
 		return h.getWalletCBOM(c, param, userID)
-	} else if strings.HasPrefix(param, "http://") || strings.HasPrefix(param, "https://") {
+	} else if strings.HasPrefix(param, schemeHTTP) || strings.HasPrefix(param, schemeHTTPS) {
 		// It's a TLS endpoint URL
 		return h.getTLSCBOM(c, param, userID)
 	} else {
 		// Try to decode as URL-encoded (for URLs passed as path parameter)
 		decodedParam, err := url.QueryUnescape(param)
-		if err == nil && (strings.HasPrefix(decodedParam, "http://") || strings.HasPrefix(decodedParam, "https://")) {
+		if err == nil && (strings.HasPrefix(decodedParam, schemeHTTP) || strings.HasPrefix(decodedParam, schemeHTTPS)) {
 			return h.getTLSCBOM(c, decodedParam, userID)
 		}
 		// If it doesn't start with 0x, try to treat it as a wallet address anyway
@@ -596,7 +600,7 @@ func (h *DiscoveryHandler) getWalletCBOM(c *fiber.Ctx, address string, userID uu
 // getTLSCBOM retrieves CBOM for a TLS endpoint
 func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID) error {
 	// Validate URL format
-	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
+	if !strings.HasPrefix(url, schemeHTTPS) && !strings.HasPrefix(url, schemeHTTP) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "url must use http:// or https:// protocol",
 		})

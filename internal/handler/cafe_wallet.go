@@ -4,8 +4,9 @@ import (
 	"cafe-discovery/internal/service"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
+
+const errPubKeyHashRequired = "pub_key_hash is required"
 
 // CafeWalletHandler handles cafe wallet-related HTTP requests
 type CafeWalletHandler struct {
@@ -21,19 +22,9 @@ func NewCafeWalletHandler(walletService *service.CafeWalletService) *CafeWalletH
 
 // CreateWallet handles POST /wallets
 func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
-	// Get user ID from JWT context
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	var req service.CreateWalletRequest
@@ -60,25 +51,15 @@ func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
 
 // GetWallet handles GET /wallets/:pubKeyHash
 func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
-	// Get user ID from JWT context
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	pubKeyHash := c.Params("pubKeyHash")
 	if pubKeyHash == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "pub_key_hash is required",
+			"error": errPubKeyHashRequired,
 		})
 	}
 
@@ -99,19 +80,9 @@ func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
 
 // GetAllWallets handles GET /wallets
 func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
-	// Get user ID from JWT context
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	wallets, err := h.walletService.GetAllWallets(userID)
@@ -129,25 +100,15 @@ func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
 
 // UpdateWallet handles PUT /wallets/:pubKeyHash
 func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
-	// Get user ID from JWT context
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	pubKeyHash := c.Params("pubKeyHash")
 	if pubKeyHash == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "pub_key_hash is required",
+			"error": errPubKeyHashRequired,
 		})
 	}
 
@@ -175,25 +136,15 @@ func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
 
 // DeleteWallet handles DELETE /wallets/:pubKeyHash
 func (h *CafeWalletHandler) DeleteWallet(c *fiber.Ctx) error {
-	// Get user ID from JWT context
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	pubKeyHash := c.Params("pubKeyHash")
 	if pubKeyHash == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "pub_key_hash is required",
+			"error": errPubKeyHashRequired,
 		})
 	}
 
@@ -210,4 +161,3 @@ func (h *CafeWalletHandler) DeleteWallet(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
-

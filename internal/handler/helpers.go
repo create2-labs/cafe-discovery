@@ -5,7 +5,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// getUserIDFromContext extracts and validates the user ID from the JWT context
+// getUserIDFromContext extracts and validates the user ID from the JWT context.
+// Returns uuid.Nil when the user is anonymous (JWT with user_id = nil UUID).
 func getUserIDFromContext(c *fiber.Ctx) (uuid.UUID, error) {
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
@@ -21,6 +22,22 @@ func getUserIDFromContext(c *fiber.Ctx) (uuid.UUID, error) {
 		})
 	}
 
+	return userID, nil
+}
+
+// requireAuthenticatedUserID extracts user ID from JWT context and rejects anonymous users.
+// Use for routes that must only allow signed-in users (e.g. wallets, persisted data).
+// Anonymous tokens (user_id = uuid.Nil) get 403 Forbidden to avoid sharing data between anonymous sessions.
+func requireAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, error) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if userID == uuid.Nil {
+		return uuid.Nil, c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "sign in required for this action",
+		})
+	}
 	return userID, nil
 }
 
