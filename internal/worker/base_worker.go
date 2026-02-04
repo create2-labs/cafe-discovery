@@ -65,12 +65,15 @@ func (w *BaseWorker) GetName() string {
 	return w.name
 }
 
-// handleMessage processes a NATS message
+// handleMessage processes a NATS message asynchronously so slow handlers (e.g. TLS scan)
+// do not block the NATS subscription and the next message can be delivered immediately.
 func (w *BaseWorker) handleMessage(msg *natslib.Msg) {
-	if err := w.handler(msg); err != nil {
-		log.Printf("Error processing message in %s worker: %v", w.name, err)
-		// In a production system, you might want to publish to a dead letter queue
-	}
+	go func() {
+		if err := w.handler(msg); err != nil {
+			log.Printf("Error processing message in %s worker: %v", w.name, err)
+			// In a production system, you might want to publish to a dead letter queue
+		}
+	}()
 }
 
 // UnmarshalMessage is a helper function to unmarshal JSON messages

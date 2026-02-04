@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -366,9 +367,8 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 	if s.tlsScanResultRepo != nil && (isDefault || (userID != nil && *userID != uuid.Nil)) {
 		tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
 		if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
-			// Log error but don't fail the request - scan was successful
-			// In production, you might want to use a logger here
-			_ = err
+			log.Printf("Failed to save TLS scan result to database (url=%s): %v", targetURL, err)
+			// Don't fail the request - scan was successful; user may retry or check DB connectivity
 		}
 	}
 

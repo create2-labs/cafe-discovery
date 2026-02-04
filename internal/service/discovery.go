@@ -237,9 +237,8 @@ func (s *DiscoveryService) buildScanResult(address string, data scanResultData, 
 func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanResult) {
 	scanResultEntity := domain.FromScanResult(userID, result)
 	if err := s.scanResultRepo.Create(scanResultEntity); err != nil {
-		// Log error but don't fail the request - scan was successful
-		// In production, you might want to use a logger here
-		_ = err
+		log.Printf("Failed to save wallet scan result to database (address=%s): %v", result.Address, err)
+		// Don't fail the request - scan was successful; user may retry or check DB connectivity
 	}
 }
 
