@@ -10,15 +10,20 @@ import (
 	natslib "github.com/nats-io/nats.go"
 )
 
+// maxConcurrentWalletScans limits how many wallet scans run at once (each does RPC calls to multiple networks).
+const maxConcurrentWalletScans = 5
+
 // WalletWorker processes wallet scan messages from NATS
 type WalletWorker struct {
 	discoveryService *service.DiscoveryService
 	base             *BaseWorker
+	sem              chan struct{} // semaphore to limit concurrent scans
 }
 
 // NewWalletWorker creates a new wallet worker
 func NewWalletWorker(discoveryService *service.DiscoveryService, natsConn nats.Connection) *WalletWorker {
-	w := &WalletWorker{discoveryService: discoveryService}
+	sem := make(chan struct{}, maxConcurrentWalletScans)
+	w := &WalletWorker{discoveryService: discoveryService, sem: sem}
 	handler := w.createMessageHandler()
 	w.base = NewBaseWorker(natsConn, nats.SubjectWalletScan, "Wallet", handler)
 	return w
@@ -42,6 +47,10 @@ func (w *WalletWorker) createMessageHandler() MessageHandler {
 			log.Printf("Failed to unmarshal wallet scan message: %v", err)
 			return err
 		}
+
+		// Limit concurrent scans so we don't exhaust RPC connections or overload providers
+		w.sem <- struct{}{}
+		defer func() { <-w.sem }()
 
 		log.Printf("Processing wallet scan for user %s, address %s", scanMsg.UserID, scanMsg.Address)
 

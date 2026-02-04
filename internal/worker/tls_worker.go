@@ -10,15 +10,20 @@ import (
 	natslib "github.com/nats-io/nats.go"
 )
 
+// maxConcurrentTLSScans limits how many TLS scans run at once (each does network I/O + optional OpenSSL).
+const maxConcurrentTLSScans = 5
+
 // TLSWorker processes TLS scan messages from NATS
 type TLSWorker struct {
 	tlsService *service.TLSService
 	base       *BaseWorker
+	sem        chan struct{} // semaphore to limit concurrent scans
 }
 
 // NewTLSWorker creates a new TLS worker
 func NewTLSWorker(tlsService *service.TLSService, natsConn nats.Connection) *TLSWorker {
-	w := &TLSWorker{tlsService: tlsService}
+	sem := make(chan struct{}, maxConcurrentTLSScans)
+	w := &TLSWorker{tlsService: tlsService, sem: sem}
 	handler := func(msg *natslib.Msg) error {
 		return w.processTLSScan(msg)
 	}
@@ -43,6 +48,10 @@ func (w *TLSWorker) processTLSScan(msg *natslib.Msg) error {
 		log.Printf("Failed to unmarshal TLS scan message: %v", err)
 		return err
 	}
+
+	// Limit concurrent scans so we don't exhaust connections or overload targets
+	w.sem <- struct{}{}
+	defer func() { <-w.sem }()
 
 	log.Printf("Processing TLS scan for user %s, endpoint %s", scanMsg.UserID, scanMsg.Endpoint)
 

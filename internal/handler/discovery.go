@@ -212,30 +212,12 @@ func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
 		})
 	}
 
-	// Publish scan request to NATS for async processing
+	// Publish scan request to NATS for async processing (authenticated users only; anonymous get 403 above)
 	scanMsg := nats.WalletScanMessage{
 		UserID:  userID,
 		Address: normalizedAddress,
 	}
-
-	var subject string
-	if isAnonymous {
-		// Anonymous users: use Redis queue
-		// Extract token from Authorization header for anonymous users to create unique Redis keys
-		authHeader := c.Get("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 && parts[0] == "Bearer" {
-				scanMsg.Token = parts[1]
-			}
-		}
-		subject = nats.SubjectWalletScanAnonymous
-	} else {
-		// Authenticated users: use PostgreSQL queue
-		subject = nats.SubjectWalletScan
-	}
-
-	if err := nats.PublishJSON(h.natsConn, subject, scanMsg); err != nil {
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectWalletScan, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",
 		})

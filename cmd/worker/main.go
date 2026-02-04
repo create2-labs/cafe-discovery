@@ -18,7 +18,6 @@ import (
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
-	redisconn "cafe-discovery/pkg/redis"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -128,17 +127,6 @@ func main() {
 	}
 	defer natsConn.Close()
 
-	// Initialize Redis connection
-	redisConn, err := redisconn.New()
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis: %v", err)
-	}
-	defer func() {
-		if err := redisConn.Close(); err != nil {
-			log.Printf("Failed to close Redis connection: %v", err)
-		}
-	}()
-
 	// Create EVM clients for each configured blockchain
 	clients := make(map[string]*evm.Client)
 	for _, blockchain := range cfgChain.Blockchains {
@@ -151,8 +139,6 @@ func main() {
 	// Initialize repositories
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
-	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
-	redisWalletScanRepo := repository.NewRedisWalletScanRepository(redisConn)
 	userRepo := repository.NewUserRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -163,11 +149,9 @@ func main() {
 	discoveryService := service.NewDiscoveryService(clients, moralisClient, scanResultRepo, planService)
 	tlsService := service.NewTLSService(tlsScanResultRepo, planService)
 
-	// Initialize workers
+	// Initialize workers (only authenticated scans; anonymous have read-only access, no scan workers)
 	walletWorker := worker.NewWalletWorker(discoveryService, natsConn)
-	walletAnonymousWorker := worker.NewWalletAnonymousWorker(discoveryService, redisWalletScanRepo, natsConn)
 	tlsWorker := worker.NewTLSWorker(tlsService, natsConn)
-	tlsAnonymousWorker := worker.NewTLSAnonymousWorker(tlsService, redisTLSScanRepo, natsConn)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -178,16 +162,8 @@ func main() {
 		log.Fatalf("Failed to start wallet worker: %v", err)
 	}
 
-	if err := walletAnonymousWorker.Start(ctx); err != nil {
-		log.Fatalf("Failed to start wallet anonymous worker: %v", err)
-	}
-
 	if err := tlsWorker.Start(ctx); err != nil {
 		log.Fatalf("Failed to start TLS worker: %v", err)
-	}
-
-	if err := tlsAnonymousWorker.Start(ctx); err != nil {
-		log.Fatalf("Failed to start TLS anonymous worker: %v", err)
 	}
 
 	log.Println("Workers started successfully")
@@ -207,12 +183,11 @@ func main() {
 		// Check workers status
 		walletWorkerRunning := walletWorker.IsRunning()
 		tlsWorkerRunning := tlsWorker.IsRunning()
-		tlsAnonymousWorkerRunning := tlsAnonymousWorker.IsRunning()
 
 		// Determine overall health status
 		status := "ok"
 		httpStatus := 200
-		if !natsConnected || !walletWorkerRunning || !tlsWorkerRunning || !tlsAnonymousWorkerRunning {
+		if !natsConnected || !walletWorkerRunning || !tlsWorkerRunning {
 			status = "degraded"
 			httpStatus = 503
 		}
@@ -231,9 +206,6 @@ func main() {
 					},
 					"tls": fiber.Map{
 						"running": tlsWorkerRunning,
-					},
-					"tls_anonymous": fiber.Map{
-						"running": tlsAnonymousWorkerRunning,
 					},
 				},
 			},
