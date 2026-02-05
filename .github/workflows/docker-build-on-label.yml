@@ -124,12 +124,12 @@ jobs:
             --exit-code
 
       # ------------------------------------------------------------
-      # Build & publish images (amd64 only, with CACHE)
+      # Build & publish images (multi-arch: amd64, arm64, with CACHE)
       # ------------------------------------------------------------
       - name: Build & publish discovery-backend image
         run: |
           docker buildx build \
-            --platform linux/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
@@ -143,7 +143,7 @@ jobs:
       - name: Build & publish discovery-worker image
         run: |
           docker buildx build \
-            --platform linux/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-worker \

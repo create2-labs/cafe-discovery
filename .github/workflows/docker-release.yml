@@ -103,12 +103,12 @@ jobs:
             --only-severity critical,high
 
       # ------------------------------------------------------------
-      # Build & publish images (amd64 only)
+      # Build & publish images (multi-arch: amd64, arm64)
       # ------------------------------------------------------------
       - name: Build & publish discovery-backend image
         run: |
           docker buildx build \
-            --platform linux/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
@@ -121,7 +121,7 @@ jobs:
       - name: Build & publish discovery-worker image
         run: |
           docker buildx build \
-            --platform linux/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-worker \
