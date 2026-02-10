@@ -14,7 +14,7 @@ jobs:
 
     steps:
       # ------------------------------------------------------------
-      # Checkout
+      # Checkout (images built with --target ci only; not pushed)
       # ------------------------------------------------------------
       - name: Checkout sources
         uses: actions/checkout@v4

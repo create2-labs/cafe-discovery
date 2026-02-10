@@ -331,7 +331,7 @@ govulncheck ./...
 **CI Image Details:**
 
 The CI images (`ci` target) include:
-- Go 1.25.5 runtime (required to fix GO-2025-4175 and GO-2025-4155 vulnerabilities)
+- Go 1.25.7+ runtime (required to fix GO-2025-4175, GO-2025-4155, and GO-2026-4337 vulnerabilities)
 - Open Quantum Safe (OQS) libraries
 - `golangci-lint` v2.8.0
 - `govulncheck` (latest)

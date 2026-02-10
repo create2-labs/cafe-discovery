@@ -1,0 +1,173 @@
+# RC workflow: build once per trigger (label on PR or workflow_dispatch).
+# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend & worker.
+# Release workflow promotes from sha-<short_sha> without rebuilding.
+# Fork PRs are refused (guard below).
+
+name: Docker RC
+
+on:
+  pull_request_target:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Target version for optional RC tag (e.g. 1.0.0 or v1.0.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "1"
+  DOCKER_BUILDKIT: "1"
+
+jobs:
+  build-and-push:
+    # Refuse fork PRs: only internal PRs can trigger build+push with secrets
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------
+      # Checkout (PR head commit for pull_request_target, else default ref)
+      # ------------------------------------------------------------
+      - name: Checkout PR head
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Checkout default ref
+        if: github.event_name != 'pull_request_target'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ------------------------------------------------------------
+      # Docker / Buildx setup
+      # ------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ------------------------------------------------------------
+      # Version extraction: short_sha always; optional rc_tag from input or label; app_version for build-arg
+      # ------------------------------------------------------------
+      - name: Extract version and SHA
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+          # Optional RC tag: from workflow_dispatch input or from PR label (rc-vX.Y.Z / build-vX.Y.Z)
+          RC_TAG=""
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.target_version }}" ]]; then
+            V="${{ inputs.target_version }}"
+            V="${V#v}"
+            RC_TAG="v${V}-rc${{ github.run_id }}"
+          elif [[ "${{ github.event_name }}" == "pull_request_target" && -n "${{ github.event.label.name }}" ]]; then
+            LABEL="${{ github.event.label.name }}"
+            if [[ "$LABEL" =~ ^(rc|build)-v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+              V="${BASH_REMATCH[2]}"
+              RC_TAG="v${V}-rc${{ github.run_id }}"
+            fi
+          fi
+          echo "rc_tag=$RC_TAG" >> $GITHUB_OUTPUT
+
+          # APP_VERSION for backend build-arg (exposed in /version endpoint)
+          if [[ -n "$RC_TAG" ]]; then
+            APP_VERSION="$RC_TAG"
+          else
+            APP_VERSION="dev-$SHORT_SHA"
+          fi
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+
+          echo "short_sha=$SHORT_SHA"
+          echo "rc_tag=${RC_TAG:-<none>}"
+          echo "app_version=$APP_VERSION"
+
+      # ------------------------------------------------------------
+      # Build local amd64 for scan (no GHA cache; do not push)
+      # ------------------------------------------------------------
+      - name: Build for scan (backend, amd64)
+        run: |
+          docker buildx build \
+            --load \
+            --platform linux/amd64 \
+            --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
+            -f Dockerfile-discovery-backend \
+            -t oleglod/cafe-discovery-backend:scan-local \
+            .
+
+      - name: Build for scan (worker, amd64)
+        run: |
+          docker buildx build \
+            --load \
+            --platform linux/amd64 \
+            -f Dockerfile-discovery-worker \
+            -t oleglod/cafe-discovery-worker:scan-local \
+            .
+
+      # ------------------------------------------------------------
+      # Docker Scout (blocking or not per preference)
+      # ------------------------------------------------------------
+      - name: Install Docker Scout CLI
+        run: |
+          mkdir -p ~/.docker/cli-plugins
+          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh
+          echo "$HOME/.docker/cli-plugins" >> $GITHUB_PATH
+          docker scout version
+
+      - name: Scan discovery-backend with Docker Scout
+        continue-on-error: true
+        run: |
+          docker scout cves oleglod/cafe-discovery-backend:scan-local \
+            --only-severity critical,high
+
+      - name: Scan discovery-worker with Docker Scout
+        continue-on-error: true
+        run: |
+          docker scout cves oleglod/cafe-discovery-worker:scan-local \
+            --only-severity critical,high
+
+      # ------------------------------------------------------------
+      # Build & push multi-arch (once): sha-<short_sha> always; optional rc tag
+      # Never push vX.Y.Z or latest here (release promotes those)
+      # ------------------------------------------------------------
+      - name: Build & push discovery-backend (multi-arch)
+        run: |
+          TAGS="-t oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}"
+          if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
+            TAGS="$TAGS -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.rc_tag }}"
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            -f Dockerfile-discovery-backend \
+            $TAGS \
+            --push .
+
+      - name: Build & push discovery-worker (multi-arch)
+        run: |
+          TAGS="-t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}"
+          if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
+            TAGS="$TAGS -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.rc_tag }}"
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            -f Dockerfile-discovery-worker \
+            $TAGS \
+            --push .

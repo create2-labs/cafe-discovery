@@ -1,3 +1,8 @@
+# Release workflow: promote RC images only (no build).
+# Expects RC images sha-<SHORT_SHA> for backend and worker to exist.
+# SHORT_SHA is derived from the commit pointed to by the tag (robust for annotated tags).
+# Promotion uses docker buildx imagetools create so digests stay identical.
+
 name: Docker Release
 
 on:
@@ -13,12 +18,12 @@ env:
   DOCKER_BUILDKIT: "1"
 
 jobs:
-  build-scan-publish:
+  promote:
     runs-on: ubuntu-latest
 
     steps:
       # ------------------------------------------------------------
-      # Checkout
+      # Checkout (for tag and git history)
       # ------------------------------------------------------------
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -26,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------
-      # Docker / Buildx setup
+      # Docker Buildx (for imagetools)
       # ------------------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -38,94 +43,71 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # ------------------------------------------------------------
-      # Version extraction
+      # Version: from tag; SHA from commit pointed to by tag (robust for annotated tags)
       # ------------------------------------------------------------
-      - name: Extract version from Git tag
+      - name: Extract version and SHA from tag
         id: version
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          APP_VERSION="$TAG"
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          FULL_SHA=$(git rev-list -n 1 "$TAG")
+          SHORT_SHA=$(echo "$FULL_SHA" | cut -c1-7)
 
-          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
           echo "full_version=$TAG" >> $GITHUB_OUTPUT
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
 
-          echo "App version (for /version endpoint): $APP_VERSION"
           echo "Release version: $TAG"
-          echo "Commit SHA: $SHORT_SHA"
+          echo "Commit SHA (for promotion): $SHORT_SHA"
 
       # ------------------------------------------------------------
-      # Build images LOCALLY (amd64 only) for security scanning
+      # Checks: existence and multi-arch for each RC image (fail before promoting)
       # ------------------------------------------------------------
-      - name: Build discovery-backend image (local, amd64, for scan)
+      - name: Check RC images exist and are multi-arch (backend)
         run: |
-          docker build \
-            --platform linux/amd64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
-            -f Dockerfile-discovery-backend \
-            -t oleglod/cafe-discovery-backend:scan-local .
+          IMG="oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}"
+          if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
+            echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/amd64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/amd64)."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/arm64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/arm64)."
+            exit 1
+          fi
+          echo "RC image $IMG exists and is multi-arch."
 
-      - name: Build discovery-worker image (local, amd64, for scan)
+      - name: Check RC images exist and are multi-arch (worker)
         run: |
-          docker build \
-            --platform linux/amd64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-worker \
-            -t oleglod/cafe-discovery-worker:scan-local .
-
-      # ------------------------------------------------------------
-      # Docker Scout installation
-      # ------------------------------------------------------------
-      - name: Install Docker Scout CLI
-        run: |
-          mkdir -p ~/.docker/cli-plugins
-          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh
-          echo "$HOME/.docker/cli-plugins" >> $GITHUB_PATH
-          docker scout version
-
-      # ------------------------------------------------------------
-      # Security scan (NON-BLOCKING)
-      # ------------------------------------------------------------
-      - name: Scan discovery-backend image with Docker Scout
-        continue-on-error: true
-        run: |
-          docker scout cves oleglod/cafe-discovery-backend:scan-local \
-            --only-severity critical,high
-
-      - name: Scan discovery-worker image with Docker Scout
-        continue-on-error: true
-        run: |
-          docker scout cves oleglod/cafe-discovery-worker:scan-local \
-            --only-severity critical,high
+          IMG="oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}"
+          if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
+            echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/amd64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/amd64)."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/arm64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/arm64)."
+            exit 1
+          fi
+          echo "RC image $IMG exists and is multi-arch."
 
       # ------------------------------------------------------------
-      # Build & publish images (multi-arch: amd64, arm64)
+      # Promotion: imagetools create only (no upload, same digests)
       # ------------------------------------------------------------
-      - name: Build & publish discovery-backend image
+      - name: Promote discovery-backend to version and latest
         run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
-            -f Dockerfile-discovery-backend \
+          docker buildx imagetools create \
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }} \
             -t oleglod/cafe-discovery-backend:latest \
-            --push .
+            oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}
 
-      - name: Build & publish discovery-worker image
+      - name: Promote discovery-worker to version and latest
         run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-worker \
+          docker buildx imagetools create \
             -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }} \
             -t oleglod/cafe-discovery-worker:latest \
-            --push .
+            oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}
