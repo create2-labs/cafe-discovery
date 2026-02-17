@@ -1,0 +1,77 @@
+##############################
+# Stage 1 — Build (Go + OQS)
+##############################
+FROM oleglod/cafe-crypto-backend:build-oqs AS builder
+
+ARG TARGETARCH
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---- Install Go (BUILD ONLY) ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go manually (multi-arch)
+ENV GO_VERSION=1.25.7
+RUN set -eux; \
+    case "$TARGETARCH" in \
+    amd64)  GO_ARCH=amd64 ;; \
+    arm64)  GO_ARCH=arm64 ;; \
+    *) echo "unsupported arch $TARGETARCH"; exit 1 ;; \
+    esac; \
+    wget -q https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
+    rm go${GO_VERSION}.linux-${GO_ARCH}.tar.gz
+
+ENV PATH=/usr/local/go/bin:$PATH
+ENV CGO_ENABLED=1
+
+# ---- CGO + OQS flags ----
+ENV CGO_CFLAGS="-I/opt/liboqs/include"
+ENV CGO_LDFLAGS="-L/opt/liboqs/lib -loqs -lssl -lcrypto -Wl,-rpath,/opt/liboqs/lib"
+ENV PKG_CONFIG_PATH=/opt/liboqs/lib/pkgconfig
+
+WORKDIR /app
+
+# ---- Go deps ----
+COPY go.mod go.sum ./
+RUN go mod download
+
+# ---- Sources ----
+COPY . .
+
+# ---- Build ----
+RUN go build -o scanner ./cmd/scanner/main.go
+
+
+##############################
+# Stage CI — Lint / Test / Vuln (use: docker build --target ci)
+##############################
+FROM builder AS ci
+
+WORKDIR /app
+
+RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
+    && apt-get update && apt-get install -y curl \
+    && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+    | sh -s -- -b /usr/local/bin v2.8.0
+
+CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && /root/go/bin/govulncheck ./..."]
+
+
+##############################
+# Stage 2 — Runtime (default stage: last = image used without --target)
+##############################
+FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/scanner /app/scanner
+
+ENV DISCOVERY_SCANNER_TYPE=tls
+EXPOSE 8080
+ENTRYPOINT []
+CMD ["./scanner"]
