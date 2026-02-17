@@ -1,5 +1,5 @@
 # RC workflow: build once per trigger (label on PR or workflow_dispatch).
-# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend & worker.
+# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend, scanner-tls and scanner-wallet.
 # Release workflow promotes from sha-<short_sha> without rebuilding.
 # Fork PRs are refused (guard below).
 
@@ -108,13 +108,22 @@ jobs:
             -t oleglod/cafe-discovery-backend:scan-local \
             .
 
-      - name: Build for scan (worker, amd64)
+      - name: Build for scan (scanner-tls, amd64)
         run: |
           docker buildx build \
             --load \
             --platform linux/amd64 \
-            -f Dockerfile-discovery-worker \
-            -t oleglod/cafe-discovery-worker:scan-local \
+            -f Dockerfile-discovery-scanner-tls \
+            -t oleglod/cafe-discovery-scanner-tls:scan-local \
+            .
+
+      - name: Build for scan (scanner-wallet, amd64)
+        run: |
+          docker buildx build \
+            --load \
+            --platform linux/amd64 \
+            -f Dockerfile-discovery-scanner-wallet \
+            -t oleglod/cafe-discovery-scanner-wallet:scan-local \
             .
 
       # ------------------------------------------------------------
@@ -133,10 +142,16 @@ jobs:
           docker scout cves oleglod/cafe-discovery-backend:scan-local \
             --only-severity critical,high
 
-      - name: Scan discovery-worker with Docker Scout
+      - name: Scan discovery-scanner-tls with Docker Scout
         continue-on-error: true
         run: |
-          docker scout cves oleglod/cafe-discovery-worker:scan-local \
+          docker scout cves oleglod/cafe-discovery-scanner-tls:scan-local \
+            --only-severity critical,high
+
+      - name: Scan discovery-scanner-wallet with Docker Scout
+        continue-on-error: true
+        run: |
+          docker scout cves oleglod/cafe-discovery-scanner-wallet:scan-local \
             --only-severity critical,high
 
       # ------------------------------------------------------------
@@ -158,16 +173,30 @@ jobs:
             $TAGS \
             --push .
 
-      - name: Build & push discovery-worker (multi-arch)
+      - name: Build & push discovery-scanner-tls (multi-arch)
         run: |
-          TAGS="-t oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}"
+          TAGS="-t oleglod/cafe-discovery-scanner-tls:sha-${{ steps.version.outputs.short_sha }}"
           if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
-            TAGS="$TAGS -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.rc_tag }}"
+            TAGS="$TAGS -t oleglod/cafe-discovery-scanner-tls:${{ steps.version.outputs.rc_tag }}"
           fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-worker \
+            -f Dockerfile-discovery-scanner-tls \
+            $TAGS \
+            --push .
+
+      - name: Build & push discovery-scanner-wallet (multi-arch)
+        run: |
+          TAGS="-t oleglod/cafe-discovery-scanner-wallet:sha-${{ steps.version.outputs.short_sha }}"
+          if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
+            TAGS="$TAGS -t oleglod/cafe-discovery-scanner-wallet:${{ steps.version.outputs.rc_tag }}"
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            -f Dockerfile-discovery-scanner-wallet \
             $TAGS \
             --push .

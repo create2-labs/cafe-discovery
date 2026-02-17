@@ -1,5 +1,5 @@
 # Release workflow: promote RC images only (no build).
-# Expects RC images sha-<SHORT_SHA> for backend and worker to exist.
+# Expects RC images sha-<SHORT_SHA> for backend, scanner-tls and scanner-wallet to exist.
 # SHORT_SHA is derived from the commit pointed to by the tag (robust for annotated tags).
 # Promotion uses docker buildx imagetools create so digests stay identical.
 
@@ -78,9 +78,26 @@ jobs:
           fi
           echo "RC image $IMG exists and is multi-arch."
 
-      - name: Check RC images exist and are multi-arch (worker)
+      - name: Check RC images exist and are multi-arch (scanner-tls)
         run: |
-          IMG="oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}"
+          IMG="oleglod/cafe-discovery-scanner-tls:sha-${{ steps.version.outputs.short_sha }}"
+          if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
+            echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/amd64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/amd64)."
+            exit 1
+          fi
+          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/arm64; then
+            echo "::error::RC image $IMG is not multi-arch (missing linux/arm64)."
+            exit 1
+          fi
+          echo "RC image $IMG exists and is multi-arch."
+
+      - name: Check RC images exist and are multi-arch (scanner-wallet)
+        run: |
+          IMG="oleglod/cafe-discovery-scanner-wallet:sha-${{ steps.version.outputs.short_sha }}"
           if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
             echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
             exit 1
@@ -105,9 +122,16 @@ jobs:
             -t oleglod/cafe-discovery-backend:latest \
             oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}
 
-      - name: Promote discovery-worker to version and latest
+      - name: Promote discovery-scanner-tls to version and latest
         run: |
           docker buildx imagetools create \
-            -t oleglod/cafe-discovery-worker:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-worker:latest \
-            oleglod/cafe-discovery-worker:sha-${{ steps.version.outputs.short_sha }}
+            -t oleglod/cafe-discovery-scanner-tls:${{ steps.version.outputs.full_version }} \
+            -t oleglod/cafe-discovery-scanner-tls:latest \
+            oleglod/cafe-discovery-scanner-tls:sha-${{ steps.version.outputs.short_sha }}
+
+      - name: Promote discovery-scanner-wallet to version and latest
+        run: |
+          docker buildx imagetools create \
+            -t oleglod/cafe-discovery-scanner-wallet:${{ steps.version.outputs.full_version }} \
+            -t oleglod/cafe-discovery-scanner-wallet:latest \
+            oleglod/cafe-discovery-scanner-wallet:sha-${{ steps.version.outputs.short_sha }}

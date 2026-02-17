@@ -8,19 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// PlanHandler handles plan-related HTTP requests
+// PlanHandler handles plan-related HTTP requests. Uses Redis for scan counts (no Postgres).
 type PlanHandler struct {
-	planService      *service.PlanService
-	scanResultRepo   repository.ScanResultRepository
-	tlsScanResultRepo repository.TLSScanResultRepository
+	planService     *service.PlanService
+	redisWalletRepo repository.RedisWalletScanRepository
+	redisTLSRepo    repository.RedisTLSScanRepository
 }
 
-// NewPlanHandler creates a new plan handler
-func NewPlanHandler(planService *service.PlanService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository) *PlanHandler {
+// NewPlanHandler creates a new plan handler (Redis-only for usage counts).
+func NewPlanHandler(planService *service.PlanService, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository) *PlanHandler {
 	return &PlanHandler{
-		planService:      planService,
-		scanResultRepo:   scanResultRepo,
-		tlsScanResultRepo: tlsScanResultRepo,
+		planService:     planService,
+		redisWalletRepo: redisWalletRepo,
+		redisTLSRepo:    redisTLSRepo,
 	}
 }
 
@@ -37,7 +37,7 @@ func (h *PlanHandler) GetUserPlan(c *fiber.Ctx) error {
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
+			"error": "invalid user id format",
 		})
 	}
 
@@ -79,17 +79,16 @@ func (h *PlanHandler) GetPlanUsage(c *fiber.Ctx) error {
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
+			"error": "invalid user id format",
 		})
 	}
 
-	usage, err := h.planService.GetPlanUsage(userID, h.scanResultRepo, h.tlsScanResultRepo)
+	walletCount, _ := h.redisWalletRepo.CountByUserID(c.Context(), userID.String())
+	endpointCount, _ := h.redisTLSRepo.CountByUserID(c.Context(), userID.String())
+	usage, err := h.planService.GetPlanUsageFromCounts(userID, walletCount, endpointCount)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
-
 	return c.JSON(usage)
 }
 

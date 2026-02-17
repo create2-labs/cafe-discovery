@@ -33,6 +33,8 @@ type TLSScanResultEntity struct {
 	Curve        string         `gorm:"type:varchar(50)" json:"curve,omitempty"`
 	NISTLevels   string         `gorm:"type:text" json:"-"`                                    // JSON map stored as text
 	Default      bool           `gorm:"column:default;default:false" json:"default,omitempty"` // Whether this is a default endpoint
+	Status       string         `gorm:"type:varchar(20);default:RUNNING;index" json:"status"`  // PENDING, RUNNING, SUCCESS, FAILED, TIMEOUT, UNREACHABLE
+	Error        string         `gorm:"type:text" json:"error,omitempty"`                     // Error message when status is FAILED
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`

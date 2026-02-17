@@ -62,7 +62,7 @@ func InitializeDefaultEndpoints(ctx context.Context, tlsService *TLSService, tls
 
 			// Scan the endpoint and save with default=true (userID=nil for default endpoints)
 			log.Printf("  📡 Scanning %s (%s)...", ep.URL, ep.Comment)
-			result, err := tlsService.ScanTLS(ctx, nil, ep.URL, true) // nil userID for default endpoints
+			result, err := tlsService.ScanTLS(ctx, nil, ep.URL, true, false) // nil userID for default endpoints
 			if err != nil {
 				log.Printf("  ❌ %s: scan failed - %v", ep.URL, err)
 				continue

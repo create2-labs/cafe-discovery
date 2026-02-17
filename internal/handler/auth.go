@@ -66,17 +66,3 @@ func (h *AuthHandler) Signin(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// GetAnonymousToken handles GET /auth/anonymous
-// Returns a JWT token for anonymous (non-authenticated) users
-// This allows users to use the service without creating an account
-func (h *AuthHandler) GetAnonymousToken(c *fiber.Ctx) error {
-	response, err := h.authService.GetAnonymousToken()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to generate anonymous token",
-		})
-	}
-
-	return c.JSON(response)
-}
-

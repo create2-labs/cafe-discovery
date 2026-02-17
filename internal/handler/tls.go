@@ -15,23 +15,21 @@ import (
 	"github.com/google/uuid"
 )
 
-// TLSHandler handles TLS-related HTTP requests
+// TLSHandler handles TLS-related HTTP requests. Redis only for scan data; no Postgres.
 type TLSHandler struct {
-	tlsService        *service.TLSService
-	natsConn          nats.Connection
-	tlsScanResultRepo repository.TLSScanResultRepository
-	redisScanRepo     repository.RedisTLSScanRepository
-	planService       *service.PlanService
+	tlsService   *service.TLSService
+	natsConn     nats.Connection
+	redisTLSRepo repository.RedisTLSScanRepository
+	planService  *service.PlanService
 }
 
-// NewTLSHandler creates a new TLS handler
-func NewTLSHandler(tlsService *service.TLSService, natsConn nats.Connection, tlsScanResultRepo repository.TLSScanResultRepository, planService *service.PlanService, redisScanRepo repository.RedisTLSScanRepository) *TLSHandler {
+// NewTLSHandler creates a new TLS handler (Redis-only for scan data).
+func NewTLSHandler(tlsService *service.TLSService, natsConn nats.Connection, redisTLSRepo repository.RedisTLSScanRepository, planService *service.PlanService) *TLSHandler {
 	return &TLSHandler{
-		tlsService:        tlsService,
-		natsConn:          natsConn,
-		tlsScanResultRepo: tlsScanResultRepo,
-		redisScanRepo:     redisScanRepo,
-		planService:       planService,
+		tlsService:   tlsService,
+		natsConn:     natsConn,
+		redisTLSRepo: redisTLSRepo,
+		planService:  planService,
 	}
 }
 
@@ -49,23 +47,9 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	// Reject unauthenticated / anonymous first (fail fast, no need to validate URL)
-	userIDValue := c.Locals("user_id")
-	if userIDValue == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not authenticated",
-		})
-	}
-	userID, ok := userIDValue.(uuid.UUID)
-	if !ok {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "invalid user ID format",
-		})
-	}
-	if userID == uuid.Nil {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "sign in required to run scans",
-		})
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
 	}
 
 	if req.URL == "" {
@@ -82,7 +66,7 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 	}
 
 	// Validate that the URL is well-formed and can be parsed
-	// This catches issues like invalid hostnames before they reach the worker
+	// This catches issues like invalid hostnames before they reach the scanner
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -105,14 +89,11 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check plan limits before queuing the scan
-	// This ensures we return an error immediately to the frontend if limits are reached
 	if h.planService != nil {
-		canScan, usage, err := h.planService.CheckScanLimit(userID, "endpoint", nil, h.tlsScanResultRepo)
+		endpointCount, _ := h.redisTLSRepo.CountByUserID(c.Context(), userID.String())
+		canScan, usage, err := h.planService.CheckScanLimitFromCounts(userID, "endpoint", 0, endpointCount)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": fmt.Sprintf("failed to check plan limits: %v", err),
-			})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)})
 		}
 		if !canScan {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -121,13 +102,13 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		}
 	}
 
-	// Publish scan request to NATS for async processing (authenticated users only)
+	// Publish scan request to NATS (scanners subscribe to scan.requested.tls)
 	scanMsg := nats.TLSScanMessage{
+		ScanID:   uuid.New(),
 		UserID:   userID,
 		Endpoint: req.URL,
 	}
-
-	if err := nats.PublishJSON(h.natsConn, nats.SubjectTLSScan, scanMsg); err != nil {
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",
 		})
@@ -141,36 +122,36 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 	})
 }
 
-// ListScans handles GET /discovery/tls/scans
-// Returns the list of CBOMs for TLS scan results for the authenticated user with pagination
+// ListScans handles GET /discovery/tls/scans. Redis only; no Postgres fallback.
 func (h *TLSHandler) ListScans(c *fiber.Ctx) error {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		return err
 	}
-
 	limit, offset := parsePaginationParams(c)
-
-	// Get TLS scan results from service
-	results, total, err := h.tlsService.ListTLSScanResults(c.Context(), userID, limit, offset)
+	urls, err := h.redisTLSRepo.ListURLsByUserID(c.Context(), userID.String())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
-
-	// Convert TLS scan results to CBOMs
-	cboms := make([]fiber.Map, len(results))
-	for i, result := range results {
-		cboms[i] = h.tlsScanResultToCBOM(result)
+	total := int64(len(urls))
+	if offset > len(urls) {
+		urls = nil
+	} else {
+		urls = urls[offset:]
 	}
-
+	if limit > 0 && len(urls) > limit {
+		urls = urls[:limit]
+	}
+	ids := make([]fiber.Map, len(urls))
+	for i, u := range urls {
+		ids[i] = fiber.Map{"id": u}
+	}
 	return c.JSON(fiber.Map{
-		"results": cboms,
+		"results": ids,
 		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
-		"count":   len(cboms),
+		"count":   len(ids),
 	})
 }
 
@@ -287,64 +268,4 @@ func (h *TLSHandler) tlsScanResultToCBOM(tlsScanResult *domain.TLSScanResult) fi
 			"components": components,
 		},
 	}
-}
-
-// ListAnonymousScans handles GET /discovery/tls/scans/anonymous
-// Returns the list of anonymous TLS scan results from Redis for the current user's token
-// Also includes default endpoints that are visible to everyone
-func (h *TLSHandler) ListAnonymousScans(c *fiber.Ctx) error {
-	// Extract token from Authorization header to get the unique session identifier
-	authHeader := c.Get("Authorization")
-	if authHeader == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "missing authorization header",
-		})
-	}
-
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "invalid authorization header format",
-		})
-	}
-
-	token := parts[1]
-	tokenHash := repository.HashToken(token)
-
-	// Get anonymous scans from Redis for this specific token
-	anonymousResults, err := h.redisScanRepo.ListAll(c.Context(), tokenHash)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("failed to fetch anonymous scans: %v", err),
-		})
-	}
-
-	// Get default endpoints from database (visible to everyone)
-	defaultEntities, err := h.tlsScanResultRepo.FindAllDefault()
-	if err != nil {
-		// Log error but don't fail - continue without default endpoints
-		_ = err
-		defaultEntities = []*domain.TLSScanResultEntity{}
-	}
-
-	// Convert default entities to domain results
-	defaultResults := make([]*domain.TLSScanResult, len(defaultEntities))
-	for i, entity := range defaultEntities {
-		defaultResults[i] = entity.ToTLSScanResult()
-	}
-
-	// Combine anonymous scans and default endpoints
-	allResults := append(anonymousResults, defaultResults...)
-
-	// Convert TLS scan results to CBOMs
-	cboms := make([]fiber.Map, len(allResults))
-	for i, result := range allResults {
-		cboms[i] = h.tlsScanResultToCBOM(result)
-	}
-
-	return c.JSON(fiber.Map{
-		"results": cboms,
-		"total":   len(cboms),
-		"count":   len(cboms),
-	})
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 // JWTMiddleware creates a middleware to protect routes with JWT authentication
@@ -33,6 +34,13 @@ func JWTMiddleware(authService *service.AuthService) fiber.Handler {
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid or expired token",
+			})
+		}
+
+		// Reject empty user (sign in required)
+		if claims.UserID == uuid.Nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "sign in required to access this resource",
 			})
 		}
 

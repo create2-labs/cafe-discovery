@@ -1,4 +1,4 @@
-package worker
+package scanner
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 // MessageHandler is a function that processes a NATS message
 type MessageHandler func(msg *natslib.Msg) error
 
-// BaseWorker provides common functionality for all workers
-type BaseWorker struct {
+// BaseScanner provides common functionality for all scanners
+type BaseScanner struct {
 	natsConn  nats.Connection
 	subject   string
 	handler   MessageHandler
@@ -24,9 +24,9 @@ type BaseWorker struct {
 	mu        sync.RWMutex
 }
 
-// NewBaseWorker creates a new base worker
-func NewBaseWorker(natsConn nats.Connection, subject, name string, handler MessageHandler) *BaseWorker {
-	return &BaseWorker{
+// NewBaseScanner creates a new base scanner
+func NewBaseScanner(natsConn nats.Connection, subject, name string, handler MessageHandler) *BaseScanner {
+	return &BaseScanner{
 		natsConn: natsConn,
 		subject:  subject,
 		handler:  handler,
@@ -34,11 +34,11 @@ func NewBaseWorker(natsConn nats.Connection, subject, name string, handler Messa
 	}
 }
 
-// Start starts the worker and subscribes to NATS messages
-func (w *BaseWorker) Start(ctx context.Context) error {
+// Start starts the scanner and subscribes to NATS messages
+func (w *BaseScanner) Start(ctx context.Context) error {
 	_, err := w.natsConn.QueueSubscribe(
 		w.subject,
-		nats.QueueWorkers,
+		nats.QueueScanners,
 		w.handleMessage,
 	)
 	if err != nil {
@@ -49,28 +49,28 @@ func (w *BaseWorker) Start(ctx context.Context) error {
 	w.isRunning = true
 	w.mu.Unlock()
 
-	log.Printf("%s worker started and subscribed to %s", w.name, w.subject)
+	log.Printf("%s scanner started and subscribed to %s", w.name, w.subject)
 	return nil
 }
 
-// IsRunning returns whether the worker is currently running
-func (w *BaseWorker) IsRunning() bool {
+// IsRunning returns whether the scanner is currently running
+func (w *BaseScanner) IsRunning() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.isRunning
 }
 
-// GetName returns the worker name
-func (w *BaseWorker) GetName() string {
+// GetName returns the scanner name
+func (w *BaseScanner) GetName() string {
 	return w.name
 }
 
 // handleMessage processes a NATS message asynchronously so slow handlers (e.g. TLS scan)
 // do not block the NATS subscription and the next message can be delivered immediately.
-func (w *BaseWorker) handleMessage(msg *natslib.Msg) {
+func (w *BaseScanner) handleMessage(msg *natslib.Msg) {
 	go func() {
 		if err := w.handler(msg); err != nil {
-			log.Printf("Error processing message in %s worker: %v", w.name, err)
+			log.Printf("Error processing message in %s scanner: %v", w.name, err)
 			// In a production system, you might want to publish to a dead letter queue
 		}
 	}()
