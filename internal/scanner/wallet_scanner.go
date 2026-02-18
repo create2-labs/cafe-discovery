@@ -52,10 +52,12 @@ func (w *WalletScanner) handleMessage(msg *natslib.Msg) error {
 		if scanMsg.ScanID == uuid.Nil {
 			scanMsg.ScanID = uuid.New()
 		}
+		log.Printf("[NATS] RECV scan_id=%s address=%s component=scanner-wallet", scanMsg.ScanID.String(), scanMsg.Address)
 		started := nats.ScanStartedMessage{
 			ScanID: scanMsg.ScanID, Kind: "wallet", UserID: scanMsg.UserID,
 			StartedAt: time.Now().UTC().Format(time.RFC3339), Address: scanMsg.Address,
 		}
+		log.Printf("[NATS] PUB subject=scan.started scan_id=%s component=scanner-wallet", scanMsg.ScanID.String())
 		if err := nats.PublishJSON(w.base.natsConn, nats.SubjectScanStarted, started); err != nil {
 			log.Printf("Failed to publish scan.started: %v", err)
 		}
@@ -80,6 +82,7 @@ func (w *WalletScanner) handleMessage(msg *natslib.Msg) error {
 			CompletedAt: time.Now().UTC().Format(time.RFC3339), Address: scanMsg.Address,
 			Result: resultPayload,
 		}
+		log.Printf("[NATS] PUB subject=scan.completed scan_id=%s component=scanner-wallet", scanMsg.ScanID.String())
 		if err := nats.PublishJSON(w.base.natsConn, nats.SubjectScanCompleted, completed); err != nil {
 			log.Printf("Failed to publish scan.completed: %v", err)
 			return err
@@ -89,6 +92,7 @@ func (w *WalletScanner) handleMessage(msg *natslib.Msg) error {
 }
 
 func publishWalletScanFailed(conn nats.Connection, scanID, userID uuid.UUID, address, errMsg string) {
+	log.Printf("[NATS] PUB subject=scan.failed scan_id=%s component=scanner-wallet error=%s", scanID.String(), errMsg)
 	_ = nats.PublishJSON(conn, nats.SubjectScanFailed, nats.ScanFailedMessage{
 		ScanID: scanID, Kind: "wallet", UserID: userID,
 		Error: errMsg, CompletedAt: time.Now().UTC().Format(time.RFC3339), Address: address,

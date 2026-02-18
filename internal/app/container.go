@@ -15,6 +15,7 @@ import (
 	redisconn "cafe-discovery/pkg/redis"
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -170,9 +171,15 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		ScannerPresenceTracker: scannerPresence,
 	}
 
-	// Initialize default endpoints scanning (runs asynchronously)
-	// Default endpoints are not associated with any user and can be read by all users
-	service.InitializeDefaultEndpoints(context.Background(), tlsService, tlsScanResultRepo)
+	// Wait for persistence and scanners, then initialize default endpoints via NATS and wait until they are in Redis
+	ctx := context.Background()
+	if err := service.WaitForPersistence(ctx, natsConn, 15*time.Second); err != nil {
+		log.Printf("Warning: persistence not ready in time: %v (default endpoints may be empty)", err)
+	}
+	if err := service.WaitForScanners(ctx, scannerPresence, 30*time.Second); err != nil {
+		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
+	}
+	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
 
 	return container, nil
 }

@@ -11,9 +11,10 @@ type WalletScanMessage struct {
 
 // TLSScanMessage represents a TLS scan request message
 type TLSScanMessage struct {
-	ScanID   uuid.UUID `json:"scan_id"`   // Backend generates; used for idempotency and event correlation
-	UserID   uuid.UUID `json:"user_id"`
-	Endpoint string    `json:"endpoint"`
+	ScanID    uuid.UUID `json:"scan_id"`    // Backend generates; used for idempotency and event correlation
+	UserID    uuid.UUID `json:"user_id"`     // uuid.Nil for default endpoints
+	Endpoint  string    `json:"endpoint"`
+	IsDefault bool      `json:"is_default"`  // true when scanning default endpoints at startup
 }
 
 // ScannerPresenceEvent is the event type for scanner presence messages.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -201,6 +202,12 @@ func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
 		UserID:  userID,
 		Address: normalizedAddress,
 	}
+	log.Info().
+		Str("subject", nats.SubjectScanRequestedWallet).
+		Str("scan_id", scanMsg.ScanID.String()).
+		Str("address", normalizedAddress).
+		Str("component", "backend").
+		Msg("NATS → PUB scan.requested.wallet")
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedWallet, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",
@@ -275,6 +282,12 @@ func (h *DiscoveryHandler) scanTLS(c *fiber.Ctx, endpointURL string) error {
 		UserID:   userID,
 		Endpoint: endpointURL,
 	}
+	log.Info().
+		Str("subject", nats.SubjectScanRequestedTLS).
+		Str("scan_id", scanMsg.ScanID.String()).
+		Str("endpoint", scanMsg.Endpoint).
+		Str("component", "backend").
+		Msg("NATS → PUB scan.requested.tls")
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",

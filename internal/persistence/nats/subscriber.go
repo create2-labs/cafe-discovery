@@ -20,6 +20,12 @@ func SubscribeScanEvents(conn nats.Connection, h *handlers.ScanEventHandler) ([]
 			log.Warn().Err(err).Msg("persistence: invalid scan.started payload")
 			return
 		}
+		log.Info().
+			Str("subject", nats.SubjectScanStarted).
+			Str("scan_id", m.ScanID.String()).
+			Str("kind", m.Kind).
+			Str("component", "persistence").
+			Msg("NATS ← RECV scan.started")
 		if err := h.HandleStarted(&m); err != nil {
 			log.Error().Err(err).Msg("persistence: HandleStarted failed")
 		}
@@ -35,6 +41,12 @@ func SubscribeScanEvents(conn nats.Connection, h *handlers.ScanEventHandler) ([]
 			log.Warn().Err(err).Msg("persistence: invalid scan.completed payload")
 			return
 		}
+		log.Info().
+			Str("subject", nats.SubjectScanCompleted).
+			Str("scan_id", m.ScanID.String()).
+			Str("kind", m.Kind).
+			Str("component", "persistence").
+			Msg("NATS ← RECV scan.completed")
 		if err := h.HandleCompleted(&m); err != nil {
 			log.Error().Err(err).Msg("persistence: HandleCompleted failed")
 		}
@@ -50,6 +62,12 @@ func SubscribeScanEvents(conn nats.Connection, h *handlers.ScanEventHandler) ([]
 			log.Warn().Err(err).Msg("persistence: invalid scan.failed payload")
 			return
 		}
+		log.Info().
+			Str("subject", nats.SubjectScanFailed).
+			Str("scan_id", m.ScanID.String()).
+			Str("kind", m.Kind).
+			Str("component", "persistence").
+			Msg("NATS ← RECV scan.failed")
 		if err := h.HandleFailed(&m); err != nil {
 			log.Error().Err(err).Msg("persistence: HandleFailed failed")
 		}

@@ -33,48 +33,45 @@ func (w *TLSWriter) GetStatus(scanID uuid.UUID) (string, error) {
 	return ent.Status, nil
 }
 
-// OnStarted creates or updates a row with status RUNNING (idempotent). If row exists and is terminal, no-op (returns nil).
+// OnStarted creates or updates a row with status RUNNING (idempotent by user_id+url). If row exists and is terminal, no-op (returns nil).
 func (w *TLSWriter) OnStarted(scanID uuid.UUID, userID *uuid.UUID, url string) error {
-	current, err := w.GetStatus(scanID)
-	if err != nil {
-		return err
-	}
-	if scan.IsTerminal(current) {
-		return nil // do not downgrade terminal state
+	// Check existing row by (user_id, url) to avoid downgrading terminal state
+	var existing domain.TLSScanResultEntity
+	err := w.db.Select("status").Where("url = ? AND (user_id IS NOT DISTINCT FROM ?)", url, userID).First(&existing).Error
+	if err == nil && scan.IsTerminal(existing.Status) {
+		return nil
 	}
 	ent := &domain.TLSScanResultEntity{
 		ID: scanID, UserID: userID, URL: url, Host: "", Port: 0, Status: scan.StateRUNNING,
 	}
 	return w.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at"}),
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "url"}},
+		DoUpdates: clause.AssignmentColumns([]string{"id", "status", "updated_at"}),
 	}).Create(ent).Error
 }
 
-// OnCompleted updates row to SUCCESS and full result data (idempotent).
+// OnCompleted upserts row to SUCCESS and full result data (idempotent by user_id+url; same URL overwrites).
 func (w *TLSWriter) OnCompleted(scanID uuid.UUID, entity *domain.TLSScanResultEntity) error {
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
 	return w.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "url"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"user_id", "url", "host", "port", "protocol_version", "nist_level", "risk_score", "pqc_risk",
-			"certificate", "cipher_suites", "supported_pqcs", "recommendations",
+			"id", "host", "port", "protocol_version", "nist_level", "risk_score", "pqc_risk",
+			"certificate", "cipher_suites", "supported_pq_cs", "recommendations",
 			"kex_algorithm", "kex_pqc_ready", "pqc_mode", "pfs", "alpn", "ocsp_stapled", "curve", "nist_levels", "default",
 			"status", "error", "updated_at",
 		}),
 	}).Create(entity).Error
 }
 
-// OnFailed updates row to FAILED; if no row exists, creates one (idempotent).
+// OnFailed updates row to FAILED by id (from OnStarted); if no row exists, upserts by (user_id, url).
 func (w *TLSWriter) OnFailed(scanID uuid.UUID, userID *uuid.UUID, url, errMsg string) error {
 	res := w.db.Model(&domain.TLSScanResultEntity{}).Where("id = ?", scanID).
 		Updates(map[string]interface{}{
 			"status":     scan.StateFAILED,
 			"error":      errMsg,
-			"user_id":    userID,
-			"url":        url,
 			"updated_at": gorm.Expr("NOW()"),
 		})
 	if res.Error != nil {
@@ -84,7 +81,10 @@ func (w *TLSWriter) OnFailed(scanID uuid.UUID, userID *uuid.UUID, url, errMsg st
 		ent := &domain.TLSScanResultEntity{
 			ID: scanID, UserID: userID, URL: url, Status: scan.StateFAILED, Error: errMsg,
 		}
-		return w.db.Create(ent).Error
+		return w.db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "url"}},
+			DoUpdates: clause.AssignmentColumns([]string{"id", "status", "error", "updated_at"}),
+		}).Create(ent).Error
 	}
 	return nil
 }
@@ -111,47 +111,43 @@ func (w *WalletWriter) GetStatus(scanID uuid.UUID) (string, error) {
 	return ent.Status, nil
 }
 
-// OnStarted creates or updates a row with status RUNNING (idempotent). If row exists and is terminal, no-op.
+// OnStarted creates or updates a row with status RUNNING (idempotent by user_id+address). If row exists and is terminal, no-op.
 func (w *WalletWriter) OnStarted(scanID, userID uuid.UUID, address string) error {
-	current, err := w.GetStatus(scanID)
-	if err != nil {
-		return err
-	}
-	if scan.IsTerminal(current) {
+	var existing domain.ScanResultEntity
+	err := w.db.Select("status").Where("user_id = ? AND address = ?", userID, address).First(&existing).Error
+	if err == nil && scan.IsTerminal(existing.Status) {
 		return nil
 	}
 	ent := &domain.ScanResultEntity{
 		ID: scanID, UserID: userID, Address: address, Status: scan.StateRUNNING,
 	}
 	return w.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at"}),
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "address"}},
+		DoUpdates: clause.AssignmentColumns([]string{"id", "status", "updated_at"}),
 	}).Create(ent).Error
 }
 
-// OnCompleted updates row to SUCCESS and full result data (idempotent).
+// OnCompleted upserts row to SUCCESS and full result data (idempotent by user_id+address; same address overwrites).
 func (w *WalletWriter) OnCompleted(scanID uuid.UUID, entity *domain.ScanResultEntity) error {
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
 	return w.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "address"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"user_id", "address", "type", "algorithm", "nist_level", "key_exposed",
+			"id", "type", "algorithm", "nist_level", "key_exposed",
 			"public_key", "transaction_hash", "exposed_network", "is_eoa", "is_erc4337", "risk_score",
 			"networks", "connections", "status", "error", "updated_at",
 		}),
 	}).Create(entity).Error
 }
 
-// OnFailed updates row to FAILED; if no row exists, creates one (idempotent).
+// OnFailed updates row to FAILED by id; if no row exists, upserts by (user_id, address).
 func (w *WalletWriter) OnFailed(scanID, userID uuid.UUID, address, errMsg string) error {
 	res := w.db.Model(&domain.ScanResultEntity{}).Where("id = ?", scanID).
 		Updates(map[string]interface{}{
 			"status":     scan.StateFAILED,
 			"error":      errMsg,
-			"user_id":    userID,
-			"address":    address,
 			"updated_at": gorm.Expr("NOW()"),
 		})
 	if res.Error != nil {
@@ -163,7 +159,10 @@ func (w *WalletWriter) OnFailed(scanID, userID uuid.UUID, address, errMsg string
 			Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
 			KeyExposed: false, IsEOA: true, IsERC4337: false, RiskScore: 0,
 		}
-		return w.db.Create(ent).Error
+		return w.db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "address"}},
+			DoUpdates: clause.AssignmentColumns([]string{"id", "status", "error", "updated_at"}),
+		}).Create(ent).Error
 	}
 	return nil
 }

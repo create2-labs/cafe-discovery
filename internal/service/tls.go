@@ -61,6 +61,7 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 
 	if info.ProtocolVersion < 0x0304 { // TLS 1.3 = 0x0304
 		res := s.buildResultForTLSBelow13(info, targetURL, protocolVersionStr)
+		res.Default = isDefault
 		if !skipPersist {
 			s.persistTLSScanResult(userID, res, targetURL, isDefault)
 		}
@@ -74,6 +75,7 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 	s.updateNISTLevelAndRiskFromPQC(state, info, protocolVersionStr)
 	s.updatePQCRiskAndFinalScores(state, info, protocolVersionStr)
 
+	state.result.Default = isDefault
 	if !skipPersist {
 		s.persistTLSScanResult(userID, state.result, targetURL, isDefault)
 	}

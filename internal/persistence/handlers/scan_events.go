@@ -96,7 +96,8 @@ func (h *ScanEventHandler) HandleCompleted(msg *nats.ScanCompletedMessage) error
 		if msg.UserID == uuid.Nil {
 			userID = nil
 		}
-		entity := domain.FromTLSScanResult(userID, &result, false)
+		isDefault := result.Default
+		entity := domain.FromTLSScanResult(userID, &result, isDefault)
 		entity.ID = msg.ScanID
 		if err := h.tlsWriter.OnCompleted(msg.ScanID, entity); err != nil {
 			log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: OnCompleted TLS failed")
@@ -107,7 +108,16 @@ func (h *ScanEventHandler) HandleCompleted(msg *nats.ScanCompletedMessage) error
 			return err
 		}
 	case "wallet":
+		log.Debug().
+			Str("scan_id", msg.ScanID.String()).
+			Str("user_id", msg.UserID.String()).
+			Str("address", msg.Address).
+			Msg("persistence: wallet scan.completed received, checking status")
 		current, _ := h.walletWriter.GetStatus(msg.ScanID)
+		log.Debug().
+			Str("scan_id", msg.ScanID.String()).
+			Str("current_status", current).
+			Msg("persistence: wallet GetStatus result")
 		if current == "" {
 			log.Warn().
 				Str("scan_id", msg.ScanID.String()).
@@ -128,16 +138,26 @@ func (h *ScanEventHandler) HandleCompleted(msg *nats.ScanCompletedMessage) error
 			log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: decode wallet result failed")
 			return err
 		}
+		log.Debug().Str("scan_id", msg.ScanID.String()).Msg("persistence: wallet result decoded OK")
 		entity := domain.FromScanResult(msg.UserID, &result)
 		entity.ID = msg.ScanID
 		if err := h.walletWriter.OnCompleted(msg.ScanID, entity); err != nil {
 			log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: OnCompleted wallet failed")
 			return err
 		}
+		log.Info().
+			Str("scan_id", msg.ScanID.String()).
+			Str("address", msg.Address).
+			Msg("persistence: wallet Postgres write OK")
 		if err := h.redisCache.SaveWalletScan(ctx, msg.UserID, msg.Address, &result); err != nil {
 			log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: Redis wallet write failed")
 			return err
 		}
+		log.Info().
+			Str("scan_id", msg.ScanID.String()).
+			Str("address", msg.Address).
+			Str("user_id", msg.UserID.String()).
+			Msg("persistence: wallet Redis write OK")
 	default:
 		log.Warn().Str("kind", msg.Kind).Msg("unknown scan kind, ignoring")
 	}

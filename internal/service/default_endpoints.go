@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"cafe-discovery/internal/repository"
+	"cafe-discovery/pkg/nats"
+
+	"github.com/google/uuid"
 )
 
 // DefaultEndpoint represents a default endpoint to scan at startup
@@ -16,7 +19,7 @@ type DefaultEndpoint struct {
 }
 
 // DefaultEndpoints is the list of endpoints to scan at application startup
-// if they are not already in the database
+// if they are not already in Redis (written by persistence after scan.requested.tls).
 var DefaultEndpoints = []DefaultEndpoint{
 	{URL: "https://nginx", Default: true, Comment: "Cafe Discovery"},
 	{URL: "https://test.openquantumsafe.org", Default: true, Comment: "OpenQuantum Safe Test"},
@@ -40,48 +43,68 @@ var DefaultEndpoints = []DefaultEndpoint{
 	{URL: "https://goerli.lineascan.build", Default: true, Comment: "Linea Explorer (Goerli)"},
 }
 
-// InitializeDefaultEndpoints scans all default endpoints if they are not already in the database
-// This function runs asynchronously and does not block the application startup
-// Default endpoints are not associated with any user (userID=nil)
-func InitializeDefaultEndpoints(ctx context.Context, tlsService *TLSService, tlsScanResultRepo repository.TLSScanResultRepository) {
+const defaultUserIDForRedis = "00000000-0000-0000-0000-000000000000" // uuid.Nil for default endpoints in Redis keys
+
+// InitializeDefaultEndpointsSync runs after persistence and scanners are ready:
+// 1) For each default endpoint URL, skip if already in Redis; otherwise publish scan.requested.tls (IsDefault=true).
+// 2) Block until all requested URLs have a result in Redis (or timeout).
+// Call this only after WaitForPersistence and WaitForScanners have returned.
+func InitializeDefaultEndpointsSync(ctx context.Context, natsConn nats.Connection, redisTLSRepo repository.RedisTLSScanRepository) {
 	log.Printf("🔍 Initializing default endpoints (%d endpoints)...", len(DefaultEndpoints))
 
-	// Run in a goroutine to not block startup
-	go func() {
-		for _, ep := range DefaultEndpoints {
-			// Check if default endpoint already exists in database (default=true)
-			existing, err := tlsScanResultRepo.FindDefaultByURL(ep.URL)
-			if err != nil {
-				log.Printf("  ⚠️  %s: error checking existing scan - %v", ep.URL, err)
-				continue
-			}
-			if existing != nil {
-				log.Printf("  ⏭️  %s: already scanned as default endpoint (skipping)", ep.URL)
-				continue
-			}
-
-			// Scan the endpoint and save with default=true (userID=nil for default endpoints)
-			log.Printf("  📡 Scanning %s (%s)...", ep.URL, ep.Comment)
-			result, err := tlsService.ScanTLS(ctx, nil, ep.URL, true, false) // nil userID for default endpoints
-			if err != nil {
-				log.Printf("  ❌ %s: scan failed - %v", ep.URL, err)
-				continue
-			}
-
-			// Log success
-			pqcInfo := ""
-			if result.KexPQCReady {
-				pqcInfo = " [PQC Ready]"
-			}
-			if result.PQCMode != "" && result.PQCMode != "classical" {
-				pqcInfo += " [" + result.PQCMode + "]"
-			}
-			log.Printf("  ✅ %s: TLS=%s%s (saved as default)", ep.URL, result.ProtocolVersion, pqcInfo)
-
-			// Small delay to avoid overwhelming the system
-			time.Sleep(500 * time.Millisecond)
+	var toRequest []string
+	for _, ep := range DefaultEndpoints {
+		_, err := redisTLSRepo.FindByUserIDAndURL(ctx, defaultUserIDForRedis, ep.URL)
+		if err == nil {
+			log.Printf("  ⏭️  %s: already in Redis (skipping)", ep.URL)
+			continue
 		}
+		toRequest = append(toRequest, ep.URL)
+	}
 
-		log.Printf("✅ Default endpoints initialization completed")
-	}()
+	if len(toRequest) == 0 {
+		log.Printf("✅ All default endpoints already in Redis")
+		return
+	}
+
+	// Publish scan requests (scanners + persistence must be up)
+	for _, url := range toRequest {
+		msg := nats.TLSScanMessage{
+			ScanID:    uuid.New(),
+			UserID:    uuid.Nil,
+			Endpoint:  url,
+			IsDefault: true,
+		}
+		if err := nats.PublishJSON(natsConn, nats.SubjectScanRequestedTLS, msg); err != nil {
+			log.Printf("  ⚠️  %s: failed to publish scan.requested.tls: %v", url, err)
+			continue
+		}
+		log.Printf("  📡 Requested scan for %s", url)
+		time.Sleep(300 * time.Millisecond) // avoid flooding
+	}
+
+	// Wait until each requested URL appears in Redis (persistence write-through after scan.completed/failed)
+	deadline := time.Now().Add(defaultEndpointsPollTimeout)
+	ticker := time.NewTicker(defaultEndpointsPollInterval)
+	defer ticker.Stop()
+	remaining := make(map[string]struct{})
+	for _, u := range toRequest {
+		remaining[u] = struct{}{}
+	}
+
+	for len(remaining) > 0 && time.Now().Before(deadline) {
+		<-ticker.C
+		for url := range remaining {
+			_, err := redisTLSRepo.FindByUserIDAndURL(ctx, defaultUserIDForRedis, url)
+			if err == nil {
+				delete(remaining, url)
+				log.Printf("  ✅ %s: now in Redis", url)
+			}
+		}
+	}
+	if len(remaining) > 0 {
+		log.Printf("⚠️  %d default endpoint(s) still not in Redis after timeout: %v", len(remaining), remaining)
+	} else {
+		log.Printf("✅ Default endpoints initialization completed (all in Redis)")
+	}
 }

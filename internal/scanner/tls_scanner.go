@@ -53,11 +53,13 @@ func (w *TLSScanner) handleMessage(msg *natslib.Msg) error {
 		if scanMsg.ScanID == uuid.Nil {
 			scanMsg.ScanID = uuid.New()
 		}
+		log.Printf("[NATS] RECV scan_id=%s endpoint=%s component=scanner-tls", scanMsg.ScanID.String(), scanMsg.Endpoint)
 		// Notify persistence: scan started
 		started := nats.ScanStartedMessage{
 			ScanID: scanMsg.ScanID, Kind: "tls", UserID: scanMsg.UserID,
 			StartedAt: time.Now().UTC().Format(time.RFC3339), Endpoint: scanMsg.Endpoint,
 		}
+		log.Printf("[NATS] PUB subject=scan.started scan_id=%s component=scanner-tls", scanMsg.ScanID.String())
 		if err := nats.PublishJSON(w.base.natsConn, nats.SubjectScanStarted, started); err != nil {
 			log.Printf("Failed to publish scan.started: %v", err)
 		}
@@ -68,7 +70,10 @@ func (w *TLSScanner) handleMessage(msg *natslib.Msg) error {
 			return err
 		}
 		userID := &scanMsg.UserID
-		result, err := w.plugin.Run(context.Background(), userID, target, scan.RunOptions{IsDefault: false, SkipPersist: true})
+		if scanMsg.UserID == uuid.Nil {
+			userID = nil
+		}
+		result, err := w.plugin.Run(context.Background(), userID, target, scan.RunOptions{IsDefault: scanMsg.IsDefault, SkipPersist: true})
 		if err != nil {
 			publishTLSScanFailed(w.base.natsConn, scanMsg.ScanID, scanMsg.UserID, scanMsg.Endpoint, err.Error())
 			return err
@@ -82,6 +87,7 @@ func (w *TLSScanner) handleMessage(msg *natslib.Msg) error {
 			CompletedAt: time.Now().UTC().Format(time.RFC3339), Endpoint: scanMsg.Endpoint,
 			Result: resultPayload,
 		}
+		log.Printf("[NATS] PUB subject=scan.completed scan_id=%s component=scanner-tls", scanMsg.ScanID.String())
 		if err := nats.PublishJSON(w.base.natsConn, nats.SubjectScanCompleted, completed); err != nil {
 			log.Printf("Failed to publish scan.completed: %v", err)
 			return err
@@ -91,6 +97,7 @@ func (w *TLSScanner) handleMessage(msg *natslib.Msg) error {
 }
 
 func publishTLSScanFailed(conn nats.Connection, scanID, userID uuid.UUID, endpoint, errMsg string) {
+	log.Printf("[NATS] PUB subject=scan.failed scan_id=%s component=scanner-tls error=%s", scanID.String(), errMsg)
 	_ = nats.PublishJSON(conn, nats.SubjectScanFailed, nats.ScanFailedMessage{
 		ScanID: scanID, Kind: "tls", UserID: userID,
 		Error: errMsg, CompletedAt: time.Now().UTC().Format(time.RFC3339), Endpoint: endpoint,

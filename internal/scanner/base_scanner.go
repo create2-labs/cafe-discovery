@@ -68,6 +68,7 @@ func (w *BaseScanner) GetName() string {
 // handleMessage processes a NATS message asynchronously so slow handlers (e.g. TLS scan)
 // do not block the NATS subscription and the next message can be delivered immediately.
 func (w *BaseScanner) handleMessage(msg *natslib.Msg) {
+	log.Printf("[NATS] RECV subject=%s component=scanner-%s", w.subject, w.name)
 	go func() {
 		if err := w.handler(msg); err != nil {
 			log.Printf("Error processing message in %s scanner: %v", w.name, err)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 // TLSHandler handles TLS-related HTTP requests. Redis only for scan data; no Postgres.
@@ -108,6 +109,12 @@ func (h *TLSHandler) Scan(c *fiber.Ctx) error {
 		UserID:   userID,
 		Endpoint: req.URL,
 	}
+	log.Info().
+		Str("subject", nats.SubjectScanRequestedTLS).
+		Str("scan_id", scanMsg.ScanID.String()).
+		Str("endpoint", scanMsg.Endpoint).
+		Str("component", "backend").
+		Msg("NATS → PUB scan.requested.tls")
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to queue scan request",

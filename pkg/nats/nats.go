@@ -105,6 +105,7 @@ const (
 	SubjectScanFailed          = "scan.failed"
 	SubjectScannerHeartbeatTLS    = "scanner.heartbeat.tls"
 	SubjectScannerHeartbeatWallet = "scanner.heartbeat.wallet"
+	SubjectPersistenceReady      = "persistence.ready"
 )
 
 // QueuePersistence is the queue name for persistence service consumers
