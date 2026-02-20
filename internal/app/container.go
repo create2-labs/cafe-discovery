@@ -1,6 +1,12 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"time"
+
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
@@ -13,12 +19,9 @@ import (
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
-	"context"
-	"fmt"
-	"log"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
@@ -114,14 +117,17 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to create scanner presence tracker: %w", err)
 	}
 
-	// Redis scan repos (backend reads only from Redis; no Postgres for scan data)
+	// Redis scan repos (backend read-through: Redis then Postgres for scan list/get)
 	redisTLSRepo := repository.NewRedisTLSScanRepository(redisConn)
 	redisWalletRepo := repository.NewRedisWalletScanRepository(redisConn)
 
-	// Initialize handlers (Redis-only for scan list/get and plan usage)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService)
-	authHandler := handler.NewAuthHandler(authService)
+	// User scan cache: read-through and warm cache on sign-in
+	userScanCache := service.NewUserScanCacheService(scanResultRepo, tlsScanResultRepo, redisWalletRepo, redisTLSRepo)
+
+	// Initialize handlers (read-through for scan list/get; plan usage from Redis counts)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache)
+	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)
 
@@ -180,6 +186,17 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
+
+	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres); GET /discovery/cbom will then return the result
+	if _, err := natsConn.Subscribe(nats.SubjectScanReady, func(msg *natsio.Msg) {
+		var m nats.ScanReadyMessage
+		if err := json.Unmarshal(msg.Data, &m); err != nil {
+			return
+		}
+		log.Printf("scan.ready: user=%s kind=%s status=%s endpoint=%s address=%s", m.UserID.String(), m.Kind, m.Status, m.Endpoint, m.Address)
+	}); err != nil {
+		log.Printf("Warning: subscribe scan.ready failed: %v", err)
+	}
 
 	return container, nil
 }

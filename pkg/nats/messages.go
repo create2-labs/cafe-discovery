@@ -66,6 +66,16 @@ type ScanFailedMessage struct {
 	Address    string    `json:"address,omitempty"`
 }
 
+// ScanReadyMessage is published by persistence-service after writing a scan result (success or failure) to Redis and Postgres.
+// API backend can subscribe to know when GET /discovery/cbom will return the result.
+type ScanReadyMessage struct {
+	UserID   uuid.UUID `json:"user_id"`
+	Kind     string    `json:"kind"`     // "tls" or "wallet"
+	Endpoint string    `json:"endpoint,omitempty"`
+	Address  string    `json:"address,omitempty"`
+	Status   string    `json:"status"`   // "success" or "failed"
+}
+
 // ScannerHeartbeatMessage is published by scanners every 5s (backend tracks last_seen in Redis).
 type ScannerHeartbeatMessage struct {
 	ScannerID string    `json:"scanner_id"`

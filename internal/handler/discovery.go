@@ -30,7 +30,7 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Backend reads scan data from Redis only (no Postgres). On Redis miss returns 404.
+// Scan list/get use read-through (Redis then Postgres); plan limits use Redis counts.
 type DiscoveryHandler struct {
 	discoveryService *service.DiscoveryService
 	tlsService       *service.TLSService
@@ -40,10 +40,11 @@ type DiscoveryHandler struct {
 	scannerPresence  ScannerPresenceChecker
 	redisWalletRepo  repository.RedisWalletScanRepository
 	redisTLSRepo     repository.RedisTLSScanRepository
+	userScanCache    *service.UserScanCacheService
 }
 
-// NewDiscoveryHandler creates a new discovery handler (Redis-only for scan data).
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository) *DiscoveryHandler {
+// NewDiscoveryHandler creates a new discovery handler (read-through for scan data).
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		tlsService:       tlsService,
@@ -53,6 +54,7 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService 
 		scannerPresence:  scannerPresence,
 		redisWalletRepo:  redisWalletRepo,
 		redisTLSRepo:     redisTLSRepo,
+		userScanCache:    userScanCache,
 	}
 }
 
@@ -338,36 +340,27 @@ func (h *DiscoveryHandler) ListRPCs(c *fiber.Ctx) error {
 	})
 }
 
-// ListScans handles GET /discovery/scans. Redis only; no Postgres fallback.
+// ListScans handles GET /discovery/scans. Read-through: Redis then Postgres.
 func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		return err
 	}
 	limit, offset := parsePaginationParams(c)
-	addresses, err := h.redisWalletRepo.ListAddressesByUserID(c.Context(), userID.String())
+	addresses, total, err := h.userScanCache.ListWalletAddresses(c.Context(), userID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
-	total := int64(len(addresses))
-	if offset > len(addresses) {
-		addresses = nil
-	} else {
-		addresses = addresses[offset:]
-	}
-	if limit > 0 && len(addresses) > limit {
-		addresses = addresses[:limit]
-	}
-	ids := make([]fiber.Map, len(addresses))
-	for i, addr := range addresses {
-		ids[i] = fiber.Map{"id": addr}
+	results := make([]fiber.Map, len(addresses))
+	for i, a := range addresses {
+		results[i] = fiber.Map{"id": a}
 	}
 	return c.JSON(fiber.Map{
-		"results": ids,
+		"results": results,
 		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
-		"count":   len(ids),
+		"count":   len(results),
 	})
 }
 
@@ -465,13 +458,13 @@ func (h *DiscoveryHandler) GetCBOM(c *fiber.Ctx) error {
 	}
 }
 
-// getWalletCBOM retrieves CBOM for a wallet address. Redis only; 404 on miss.
+// getWalletCBOM retrieves CBOM for a wallet address. Read-through: Redis then Postgres.
 func (h *DiscoveryHandler) getWalletCBOM(c *fiber.Ctx, address string, userID uuid.UUID) error {
 	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(address)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	scanResult, err := h.redisWalletRepo.FindByUserIDAndAddress(c.Context(), userID.String(), normalizedAddress)
+	scanResult, err := h.userScanCache.GetWalletScan(c.Context(), userID, normalizedAddress)
 	if err != nil || scanResult == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "scan result not found for this wallet address",
@@ -480,12 +473,12 @@ func (h *DiscoveryHandler) getWalletCBOM(c *fiber.Ctx, address string, userID uu
 	return c.JSON(h.scanResultToCBOM(scanResult))
 }
 
-// getTLSCBOM retrieves CBOM for a TLS endpoint. Redis only; 404 on miss.
+// getTLSCBOM retrieves CBOM for a TLS endpoint. Read-through: Redis then Postgres (user then default).
 func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID) error {
 	if !strings.HasPrefix(url, schemeHTTPS) && !strings.HasPrefix(url, schemeHTTP) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "url must use http:// or https:// protocol"})
 	}
-	tlsScanResult, err := h.redisTLSRepo.FindByUserIDAndURL(c.Context(), userID.String(), url)
+	tlsScanResult, err := h.userScanCache.GetTLSScan(c.Context(), userID, url)
 	if err != nil || tlsScanResult == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "TLS scan result not found for this endpoint"})
 	}
