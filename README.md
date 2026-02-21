@@ -16,6 +16,7 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 - **CycloneDX v1.7 CBOMs**: All scan results are returned as CycloneDX v1.7-based Cryptographic Bill of Materials (CBOMs) with NIST SP 800-57 key states and lifecycle metadata. Note: CAFE extends CycloneDX with custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`) that are not part of the standard specification.
 - **Subscription Plans**: Free and Premium (CAFEIN) plans with usage limits
 - **Versioning**: Automatic version tracking via `/version` endpoint and Docker image tags
+- **Authentication**: All backend API calls require authentication.
 
 ## Architecture
 
@@ -35,12 +36,13 @@ The application is designed to be scalable with a focus on performance.
 
 #### 1. API Server (`cmd/server`)
 
-- Role: HTTP server (Fiber) that exposes REST endpoints
+- Role: HTTP server (Fiber) that exposes REST endpoints. **All API calls require authentication**.
 - Responsibilities:
   - User authentication with hybrid PQC JWT tokens
   - Receiving scan requests (wallet and TLS)
   - Publishing NATS messages for asynchronous processing
-  - Reading results from PostgreSQL
+  - Consuming `scan.ready` NATS messages (when persistence has written a result to Redis) so GET requests can return results
+  - Reading results from PostgreSQL and Redis (cache)
 
 #### 2. Scanners (`cmd/scanner`)
 
@@ -51,20 +53,34 @@ The application is designed to be scalable with a focus on performance.
 - Responsibilities:
   - Consuming NATS messages (wallet and/or TLS subject)
   - Decoding messages and running scans via the **scan plugins** (`plugin.DecodeMessage`, `plugin.Run`)
-  - Saving authenticated user results to PostgreSQL
-  - Saving anonymous TLS scan results to Redis (with TTL)
+  - Publishing scan lifecycle events to NATS (`scan.started`, `scan.completed`, `scan.failed`) for the **persistence service** to write to storage
 - **Deployment**: For production you can run one process per type (`DISCOVERY_SCANNER_TYPE=tls` or `wallet`), each with its own Docker image (TLS image uses OQS; Wallet image is Alpine without OQS).
 
-#### 3. NATS
+#### 3. Persistence Service (`cmd/persistence`)
+
+- Role: Single writer to PostgreSQL and Redis for scan lifecycle events. Scanners do not write to Postgres; they publish events that the persistence service consumes.
+- Responsibilities:
+  - Subscribing to NATS subjects `scan.started`, `scan.completed`, `scan.failed` (queue `cafe.persistence`)
+  - Writing scan results idempotently to PostgreSQL (TLS and wallet scan tables) and to Redis (write-through cache for performance)
+  - When a scan result has been written to Redis (and PostgreSQL), publishing a NATS message (`scan.ready`); the **backend consumes this message** so GET requests can return the result
+  - Enforcing valid scan state transitions
+  - Publishing `persistence.ready` on startup so the backend can wait for persistence before initializing default endpoints
+- **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run the persistence service before or with the backend for full functionality.
+- **Deployment**: Built with `Dockerfile-discovery-persistence`; can be run as a separate process or container (e.g. in cafe-deploy).
+
+#### 4. NATS
 
 - Role: Messaging system for asynchronous communication
 - Note: NATS is managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
 - Subjects:
   - `cafe.discovery.wallet.scan`: Wallet scan requests
   - `cafe.discovery.tls.scan`: TLS scan requests
-- Queue: `cafe.scanners` (enables load distribution between multiple scanners)
+  - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
+  - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
+  - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
+- Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
 
-#### 4. PostgreSQL
+#### 5. PostgreSQL
 
 - Role: Primary database for authenticated users
 - Note: PostgreSQL is managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
@@ -79,22 +95,17 @@ The application is designed to be scalable with a focus on performance.
   - ACID transactions
   - Horizontal scalability with read replicas
 
-#### 5. Redis
+#### 6. Redis
 
-- Role: Temporary storage for anonymous TLS scan results
+- Role: **Performance cache only** (write-through).
 - Note: Redis is managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
 - Stores:
-  - Anonymous TLS scan results (with TTL expiration)
-  - Results are isolated per anonymous session using token hash
-- Use Case:
-  - Allows unauthenticated users to scan TLS endpoints
-  - Results are automatically expired after a configurable TTL
-  - Provides fast key-value storage for temporary data
+  - **User-scoped scan results** (TLS and wallet): Written by the **persistence service** after `scan.completed` / `scan.failed`; read by the API for GET by user+url or user+address.
+- Flow:
+  - Persistence writes to PostgreSQL then to Redis; when the result is in Redis, persistence publishes a NATS message (`scan.ready`); the backend consumes this message and can then serve GET requests from cache (or Postgres).
 - Advantages:
-  - Fast in-memory storage
-  - Automatic expiration (TTL)
+  - Fast in-memory reads; reduces load on PostgreSQL for repeated GETs
   - Low latency for read/write operations
-  - Reduces load on PostgreSQL for temporary data
 
 ### Plugin-based scan architecture
 
@@ -113,6 +124,7 @@ cafe-discovery/
 ├── cmd/
 │   ├── server/            # API server entrypoint
 │   ├── scanner/            # Scanner entrypoint (runs TLS and/or Wallet via core + runners)
+│   ├── persistence/       # Persistence service entrypoint (single writer to Postgres + Redis for scan lifecycle)
 │   └── cli/
 │      └── publickey/      # Utility for testing public key recovery
 ├── internal/
@@ -120,6 +132,10 @@ cafe-discovery/
 │   ├── domain/            # Domain models and types
 │   ├── handler/           # HTTP handlers (Fiber)
 │   ├── metrics/           # Prometheus metrics registration
+│   ├── persistence/       # Persistence service: NATS subscribers, handlers, Postgres/Redis writers
+│   │   ├── handlers/      # scan.started / scan.completed / scan.failed handlers
+│   │   ├── nats/          # NATS subscription (queue cafe.persistence)
+│   │   └── storage/       # TLS/wallet writers, Redis cache write-through
 │   ├── scan/              # Scan plugins (implement pkg/scan.Plugin)
 │   │   ├── tls/           # TLS plugin + result adapter
 │   │   └── wallet/        # Wallet plugin + result adapter
@@ -147,6 +163,7 @@ cafe-discovery/
 │   └── SCAN_PLUGIN_ARCHITECTURE.md
 ├── scripts/
 ├── Dockerfile-discovery-backend        # API server (OQS)
+├── Dockerfile-discovery-persistence   # Persistence service (single writer for scan lifecycle)
 ├── Dockerfile-discovery-scanner-tls    # TLS scanner only (OQS, DISCOVERY_SCANNER_TYPE=tls)
 ├── Dockerfile-discovery-scanner-wallet # Wallet scanner only (Alpine, no OQS, DISCOVERY_SCANNER_TYPE=wallet)
 ├── docker-compose.yml
@@ -166,13 +183,19 @@ The project uses a multi-stage Docker build approach:
    - Uses `oleglod/cafe-crypto-backend:build-oqs` as base
    - Output: `cafe-discovery-backend` service
 
-3. **`Dockerfile-discovery-scanner-tls`** (TLS scanner only):
+3. **`Dockerfile-discovery-persistence`** (Persistence service):
+   - Builds the persistence binary; single writer for scan lifecycle events
+   - Subscribes to `scan.started`, `scan.completed`, `scan.failed`; writes to PostgreSQL and Redis; publishes `scan.ready` and `persistence.ready`
+   - Uses `oleglod/cafe-crypto-backend:build-oqs` and `runtime-oqs` (same as backend)
+   - Run this service so the backend can receive `persistence.ready` and seed default endpoints; API GET results depend on persistence writing after scanner completion.
+
+4. **`Dockerfile-discovery-scanner-tls`** (TLS scanner only):
    - Builds the same scanner binary; at runtime runs only the TLS scanner (`ENV DISCOVERY_SCANNER_TYPE=tls`)
    - Uses `oleglod/cafe-crypto-backend:build-oqs` (needs OQS for PQC TLS scanning)
    - Runtime: `oleglod/cafe-crypto-backend:runtime-oqs`
    - Use when you want a dedicated TLS scanner process (e.g. scaling or separate deployment).
 
-4. **`Dockerfile-discovery-scanner-wallet`** (Wallet scanner only):
+5. **`Dockerfile-discovery-scanner-wallet`** (Wallet scanner only):
    - Builds the same scanner binary; at runtime runs only the Wallet scanner (`ENV DISCOVERY_SCANNER_TYPE=wallet`)
    - Builder: `golang:1.23-alpine3.19` (no OQS). Runtime: `alpine:3.19`
    - Lighter image; use when you want a dedicated Wallet scanner process.
@@ -181,29 +204,29 @@ For local or single-process deployment you can still run **both** scanners in on
 
 Build order:
 1. Build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images)).
-2. Build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`). Compose defines two scanner services: `cafe-discovery-scanner-tls` and `cafe-discovery-scanner-wallet`.
+2. Build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`). Compose defines backend, persistence (if added), and scanner services: `cafe-discovery-scanner-tls` and `cafe-discovery-scanner-wallet`.
 
 ### Data Flow
 
 #### Wallet Scan
 
 ```
-Client HTTP → Discovery → NATS (publish) → Worker → Service → PostgreSQL
-               backend           ↓
-                              Immediate Response
+Client HTTP → Discovery → NATS (publish) → Scanner → NATS (scan.started/completed/failed) → Persistence → PostgreSQL + Redis
+               backend           ↓                              ↓
+                              Immediate Response              Persistence writes; publishes scan.ready → Backend can return GET result
 ```
 
 1. Client sends a POST request to `/discovery/scan`
 2. API Server validates the request and publishes a NATS message
 3. Client receives an immediate response: `{"status": "processing"}`
-4. A scanner consumes the message and processes the scan
-5. The result is saved to PostgreSQL
+4. A scanner consumes the message and processes the scan, then publishes `scan.started` / `scan.completed` or `scan.failed`
+5. The **persistence service** consumes those events and saves the result to PostgreSQL and Redis (write-through); then publishes `scan.ready` so the API can return the result on GET
 
 #### TLS Scan
 
 Authenticated Users:
 ```
-Client HTTP → Discovery  → NATS (publish) → Worker → Service → PostgreSQL
+Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started/completed/failed) → Persistence → PostgreSQL + Redis
                backend            ↓
                          Immediate Response
 ```
@@ -211,32 +234,15 @@ Client HTTP → Discovery  → NATS (publish) → Worker → Service → Postgre
 1. Client sends a POST request to `/discovery/tls/scan`
 2. API Server validates the request and publishes a NATS message to `cafe.discovery.tls.scan`
 3. Client receives an immediate response: `{"message": "scan queued successfully", "status": "processing"}`
-4. A scanner consumes the message and processes the TLS scan (checks for PQC certificate support)
-5. The result is saved to PostgreSQL for permanent access
+4. A scanner consumes the message and processes the TLS scan (checks for PQC certificate support), then publishes scan lifecycle events
+5. The **persistence service** consumes those events and saves the result to PostgreSQL and Redis; when the result is in Redis, it publishes `scan.ready`; the **backend consumes this message** and can then return the result on GET.
 
-Anonymous Users:
-```
-Client HTTP → Discovery → NATS (publish) → Worker → Service → Redis (with TTL)
-               backend           ↓
-                         Immediate Response
-```
-
-1. Client sends a POST request to `/discovery/tls/scan` (without authentication)
-2. API Server validates the request, extracts token from Authorization header, and publishes a NATS message to `cafe.discovery.tls.scan.anonymous`
-3. Client receives an immediate response: `{"message": "scan queued successfully", "status": "processing"}`
-4. A scanner consumes the message and processes the TLS scan (checks for PQC certificate support)
-5. The result is saved to Redis with automatic expiration (TTL), isolated per anonymous session using token hash
-
-Notes:
-- Anonymous TLS scans are stored in Redis with automatic expiration (TTL)
-- Results are isolated per anonymous session using token hash
-- Authenticated TLS scans are stored in PostgreSQL for permanent access
-
+**Note:** All backend API calls require authentication. Unauthenticated users cannot call the API.
 
 ### Local Development
 
 - Infrastructure services (PostgreSQL, NATS, Redis) are managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
-- Run API server and scanner as separate processes or via Docker Compose (local only)
+- Run API server, **persistence service**, and scanner(s) as separate processes or via Docker Compose (local only). The backend waits for `persistence.ready` at startup before seeding default endpoints; for full behavior (including GET results after scans), the persistence service must be running.
 - Staging/production deployment is done from [cafe-deploy](https://github.com/create2-labs/cafe-deploy)
 
 ## CI/CD and Release Process
@@ -669,9 +675,9 @@ This provides the base images:
 ### Step 2: Start Infrastructure Services
 
 The infrastructure is managed in the `cafe-infra` [cafe-infra](https://github.com/kantika-tech/cafe-infra) repository.
-Please, refer to it.
+Please refer to it.
 
-For information, the infrastructure is as follow:
+For reference, the infrastructure is as follows:
 - PostgreSQL on port `5432`
 - NATS on ports `4222` (client) and `8222` (monitoring)
 - Redis on port `6379`
@@ -722,12 +728,17 @@ The project uses a two-file Docker Compose setup for local development:
    - Health check: `curl http://localhost:8080/health` (every 30s)
    - Restart policy: `unless-stopped`
    - Exposes `/version` endpoint for version information
+   - At startup waits for `persistence.ready` (and scanner heartbeats) before seeding default endpoints
 
-2. **`cafe-discovery-scanner-tls`**:
+2. **Persistence service** (optional in local compose; may be defined in cafe-deploy):
+   - Single writer for scan lifecycle: subscribes to `scan.started`, `scan.completed`, `scan.failed`; writes to PostgreSQL and Redis; publishes `scan.ready` and `persistence.ready`
+   - Built with `Dockerfile-discovery-persistence`. Run it so the backend can complete startup and so GET requests return results after scans complete.
+
+3. **`cafe-discovery-scanner-tls`**:
    - TLS scan scanner (consumes `cafe.discovery.tls.scan`). Health check on port `8081` (exposed as 8081 in dev).
    - Health check: `wget http://localhost:8081/health` (every 30s). Restart policy: `unless-stopped`.
 
-3. **`cafe-discovery-scanner-wallet`**:
+4. **`cafe-discovery-scanner-wallet`**:
    - Wallet scan scanner (consumes `cafe.discovery.wallet.scan`). Health check on port `8081` (exposed as 8082 in dev).
    - Health check: `wget http://localhost:8081/health` (every 30s). Restart policy: `unless-stopped`.
 
@@ -924,27 +935,27 @@ Using config.yaml vs Environment Variables:
 - For local Docker Compose: Use `config.yaml` with Docker service names (postgres, nats, redis)
 - For staging/production (cafe-deploy): Use environment variables or a secrets management system
 
-### Démarrer en mode debug
+### Starting in debug mode
 
-Log levels permit to define how detailed should the log be.
+Log levels define how detailed the logs should be.
 
-Availabel log levels :
-- `trace` : all logs
-- `debug` : debug level and above
-- `info` : default level and above
-- `warn` : warnings and above
-- `error` : errors and above
-- `fatal` : fatal errors and above
-- `panic` : panic level only
+Available log levels:
+- `trace`: all logs
+- `debug`: debug level and above
+- `info`: default level and above
+- `warn`: warnings and above
+- `error`: errors and above
+- `fatal`: fatal errors and above
+- `panic`: panic level only
 
-Example
+Example:
 
 ```bash
-# Terminal 1 - Serveur en mode debug
+# Terminal 1 - Server in debug mode
 export LOG_LEVEL=debug
 go run cmd/server/main.go
 
-# Terminal 2 - Worker en mode debug
+# Terminal 2 - Worker in debug mode
 export LOG_LEVEL=debug
 go run cmd/scanner/main.go
 ```
@@ -1544,57 +1555,9 @@ curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-### GET /discovery/tls/scans/anonymous
-
-Returns list of CBOMs for anonymous TLS scan results from Redis for the current user's token. Also includes default endpoints that are visible to everyone.
-
-Note: Requires a token in the Authorization header (even for anonymous users).
-
-Response:
-```json
-{
-  "results": [
-    {
-      "url": "https://example.com",
-      "host": "example.com",
-      "port": 443,
-      "protocol": "TLS 1.3",
-      "nist_level": 1,
-      "risk_score": 0.75,
-      "scanned_at": "2025-01-15T10:30:00Z",
-      "cbom": {
-        "bomFormat": "CycloneDX",
-        "specVersion": "1.7",
-        "version": 1,
-        "metadata": {
-          "timestamp": "2025-01-15T10:30:00Z",
-          "lifecycles": [
-            {
-              "phase": "discovery",
-              "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network"
-            }
-          ]
-        },
-        "type": "tls-endpoint",
-        "components": [...]
-      }
-    }
-  ],
-  "total": 1,
-  "count": 1
-}
-```
-
-Example:
-```bash
-# Get anonymous TLS scan CBOMs
-curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
-  -H "Authorization: Bearer YOUR_ANONYMOUS_TOKEN" | jq .
-```
-
 ### GET /discovery/rpcs
 
-Returns the list of configured RPC endpoints. No authentication required.
+Returns the list of configured RPC endpoints. Requires authentication.
 
 Response:
 ```json
@@ -1786,8 +1749,7 @@ Get current usage statistics for the authenticated user.
 
 ### Plan Enforcement
 
-- **Authenticated users**: Plan limits are enforced based on the user's assigned plan
-- **Anonymous users**: Limited to 5 scans per hour (same as Free Plan) via rate limiting
+- **All API access requires authentication.** Plan limits are enforced based on the authenticated user's assigned plan.
 - **Unlimited plans**: Plans with `wallet_scan_limit` or `endpoint_scan_limit` of `0` have no restrictions
 
 ### Worker Health Check
@@ -1877,7 +1839,7 @@ curl -X POST http://localhost:8080/discovery/scan \
 
 ### 3. List Scan IDs and Retrieve CBOMs
 
-The list endpoints `/discovery/scans` and `/discovery/tls/scans` return **IDs only** (paginated). Use each `id` with `GET /discovery/cbom/{id}` to fetch the full CBOM. The endpoint `/discovery/tls/scans/anonymous` returns full CBOMs (default endpoints list is small and admin-controlled).
+The list endpoints `/discovery/scans` and `/discovery/tls/scans` return **IDs only** (paginated). Use each `id` with `GET /discovery/cbom/{id}` to fetch the full CBOM.
 
 ```bash
 # List wallet scan IDs (paginated); then GET /discovery/cbom/{id} for each
@@ -1886,10 +1848,6 @@ curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
 
 # List TLS scan IDs (paginated); then GET /discovery/cbom/{url-encoded-id} for each
 curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-# List anonymous TLS scan CBOMs (full CBOMs, no pagination needed)
-curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
@@ -1905,7 +1863,7 @@ For each id from the list, the full result is a **CycloneDX v1.7-based CBOM** (e
 
 ### 4. Retrieve CBOM (Cryptographic Bill of Materials)
 
-**List endpoints return IDs only.** The endpoints `/discovery/scans` and `/discovery/tls/scans` return paginated lists of `{ "id": "..." }` (wallet address or TLS URL). Use `GET /discovery/cbom/{id}` with each id to fetch the full CBOM. The endpoint `/discovery/tls/scans/anonymous` still returns full CBOMs (default endpoints list is admin-controlled and small).
+**List endpoints return IDs only.** The endpoints `/discovery/scans` and `/discovery/tls/scans` return paginated lists of `{ "id": "..." }` (wallet address or TLS URL). Use `GET /discovery/cbom/{id}` with each id to fetch the full CBOM.
 
 #### List wallet scan IDs and fetch CBOMs
 
@@ -1918,10 +1876,6 @@ curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
 
 # Fetch full CBOM for one wallet (use each id from the list)
 curl -X GET "http://localhost:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-# List anonymous TLS scan CBOMs (full CBOMs)
-curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
@@ -1946,10 +1900,6 @@ curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
 
 # Fetch full CBOM for one endpoint (use each id from the list; URL-encode for path)
 curl -X GET "http://localhost:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-# List anonymous TLS scan CBOMs (full CBOMs)
-curl -X GET "http://localhost:8080/discovery/tls/scans/anonymous" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
