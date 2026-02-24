@@ -58,7 +58,11 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("redis connect failed")
 	}
-	defer redis.Close()
+	defer func() {
+		if err := redis.Close(); err != nil {
+			log.Warn().Err(err).Msg("redis close failed")
+		}
+	}()
 
 	// NATS
 	nc, err := natsconn.New()
