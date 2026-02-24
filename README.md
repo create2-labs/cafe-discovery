@@ -36,18 +36,19 @@ The application is designed to be scalable with a focus on performance.
 
 #### 1. API Server (`cmd/server`)
 
-- Role: HTTP server (Fiber) that exposes REST endpoints. **All API calls require authentication**.
+- Role: HTTP server (Fiber) that exposes REST endpoints. **All API calls require authentication**. Target role: **control-plane** (HTTP API + NATS publish/subscribe + Redis reads).
 - Responsibilities:
   - User authentication with hybrid PQC JWT tokens
   - Receiving scan requests (wallet and TLS)
   - Publishing NATS messages for asynchronous processing
   - Consuming `scan.ready` NATS messages (when persistence has written a result to Redis) so GET requests can return results
-  - Reading results from PostgreSQL and Redis (cache)
+  - Serving scan list/GET from Redis; on cache miss, **currently** the backend uses **read-through** from PostgreSQL (see [Architecture Decisions](#architecture-decisions) and [docs/CHECKARCH.md](docs/CHECKARCH.md)).
+- **Current state (PostgreSQL usage):** The backend **currently** connects to PostgreSQL and uses it for: (1) **Auth and users** (signup/signin, user and plan records), (2) **Plans and usage** (plan limits, scan counts), (3) **Cafe wallets** (CRUD), (4) **Pending scan records** (creating a row when a scan is requested, before the scanner runs), (5) **Read-through** for scan list/GET when Redis is empty (e.g. after sign-in warm or first request). The intended direction is to reserve Postgres for the persistence service only (scan lifecycle) and to serve scan data from Redis only from the API; see [docs/CHECKARCH.md](docs/CHECKARCH.md) for verification and envisioned changes.
 
 #### 2. Scanners (`cmd/scanner`)
 
-- Role: NATS consumers that process scans. The scanner process can run **one or both** scanner types (TLS and Wallet) depending on `DISCOVERY_SCANNER_TYPE`.
-- **Scanner core** (`internal/scanner/core`): Shared bootstrap — DB, NATS, plan service, chain config, health server, graceful shutdown. Defines the `Runner` interface and `Deps`.
+- Role: NATS consumers that process scans (**compute-only**: NATS in/out + heartbeat; no Postgres). The scanner process can run **one or both** scanner types (TLS and Wallet) depending on `DISCOVERY_SCANNER_TYPE`.
+- **Scanner core** (`internal/scanner/core`): Shared bootstrap — **NATS**, chain config, health server, graceful shutdown. Defines the `Runner` interface and `Deps`. Scanners do **not** have a DB or plan service; they only publish `scan.started` / `scan.completed` / `scan.failed` to NATS for the persistence service.
 - **TLS scanner** (`internal/scanner/tlsrunner`): Consumes `cafe.discovery.tls.scan`, runs TLS scans via the TLS plugin (requires OQS/liboqs for PQC scanning).
 - **Wallet scanner** (`internal/scanner/walletrunner`): Consumes `cafe.discovery.wallet.scan`, runs wallet scans via the Wallet plugin (EVM + Moralis).
 - Responsibilities:
@@ -102,10 +103,19 @@ The application is designed to be scalable with a focus on performance.
 - Stores:
   - **User-scoped scan results** (TLS and wallet): Written by the **persistence service** after `scan.completed` / `scan.failed`; read by the API for GET by user+url or user+address.
 - Flow:
-  - Persistence writes to PostgreSQL then to Redis; when the result is in Redis, persistence publishes a NATS message (`scan.ready`); the backend consumes this message and can then serve GET requests from cache (or Postgres).
+  - Persistence writes to PostgreSQL then to Redis; when the result is in Redis, persistence publishes a NATS message (`scan.ready`); the backend consumes this message. The backend serves GET requests from Redis; **currently** it also performs read-through from PostgreSQL on cache miss (see [Architecture Decisions](#architecture-decisions)).
 - Advantages:
   - Fast in-memory reads; reduces load on PostgreSQL for repeated GETs
   - Low latency for read/write operations
+
+### Architecture Decisions
+
+- **Single-writer principle (target):** Only the **persistence service** should write to PostgreSQL and Redis for **scan lifecycle** (scan results). The backend should act as control-plane (API + NATS + Redis reads only). Scanners are execution-plane (NATS + heartbeat, no Postgres). *Current code still has the backend creating pending scan rows and doing read-through from Postgres; see [docs/CHECKARCH.md](docs/CHECKARCH.md).*
+- **Redis as the read path for scans:** Scan list/GET are intended to be served from Redis so that the API does not depend on Postgres for hot path. Persistence writes through to both Postgres and Redis; the backend reads from Redis. On Redis miss, the target behavior is to return a consistent NOT_READY/404-style response rather than rehydrating from Postgres in the backend.
+- **Why the backend should not read Postgres for scan data (target):** Keeps the API stateless with respect to the database and avoids duplicate read paths; persistence remains the single writer and Redis the single read source for scan results from the API’s perspective.
+- **Future:** Two-network Docker Compose (e.g. control-plane vs data-plane isolation) is not implemented yet; it may be added later to enforce single-writer at the network level.
+
+**Verification:** A code-based verification of Postgres usage (backend vs scanners) and documentation alignment is recorded in [docs/CHECKARCH.md](docs/CHECKARCH.md).
 
 ### Plugin-based scan architecture
 
@@ -816,7 +826,8 @@ docker run --network cafe-infra_observability --rm \
   cafe-discovery-backend:latest
 ```
 
-**Start the TLS scanner:**
+**Start the TLS scanner:**  
+(Scanners do not use PostgreSQL; `POSTGRES_*` env vars are optional and may be omitted if not in your config.)
 ```bash
 docker run --network cafe-infra_observability --rm \
   -p 8081:8081 \
