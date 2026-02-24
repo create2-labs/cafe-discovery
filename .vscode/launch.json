@@ -33,11 +33,11 @@
             "trace": "log"
         },
         {
-            "name": "Debug Worker",
+            "name": "Debug Scanner",
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/cmd/worker",
+            "program": "${workspaceFolder}/cmd/scanner",
             "env": {
                 "CONFIG_PATH": "${workspaceFolder}/config.yaml",
                 "SERVER_HOST": "0.0.0.0",

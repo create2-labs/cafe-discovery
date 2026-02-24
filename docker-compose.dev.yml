@@ -9,8 +9,18 @@ services:
     ports:
       - "8080:8080"
 
-  cafe-discovery-worker:
+  cafe-discovery-scanner-tls:
     build:
       context: .
-      dockerfile: Dockerfile-discovery-worker
+      dockerfile: Dockerfile-discovery-scanner-tls
       target: runtime
+    ports:
+      - "8081:8081"
+
+  cafe-discovery-scanner-wallet:
+    build:
+      context: .
+      dockerfile: Dockerfile-discovery-scanner-wallet
+      target: runtime
+    ports:
+      - "8082:8081"

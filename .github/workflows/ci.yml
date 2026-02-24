@@ -41,16 +41,28 @@ jobs:
           docker run --rm cafe-discovery-backend:ci
 
       # ============================================================
-      # WORKER
+      # SCANNERS (TLS + Wallet)
       # ============================================================
-      - name: Build worker CI image
+      - name: Build scanner-tls CI image
         run: |
           set -euo pipefail
           docker build \
             --target ci \
-            -f Dockerfile-discovery-worker \
-            -t cafe-discovery-worker:ci .
+            -f Dockerfile-discovery-scanner-tls \
+            -t cafe-discovery-scanner-tls:ci .
 
-      - name: Run worker CI checks (inside CI image)
+      - name: Run scanner-tls CI checks (inside CI image)
         run: |
-          docker run --rm cafe-discovery-worker:ci
+          docker run --rm cafe-discovery-scanner-tls:ci
+
+      - name: Build scanner-wallet CI image
+        run: |
+          set -euo pipefail
+          docker build \
+            --target ci \
+            -f Dockerfile-discovery-scanner-wallet \
+            -t cafe-discovery-scanner-wallet:ci .
+
+      - name: Run scanner-wallet CI checks (inside CI image)
+        run: |
+          docker run --rm cafe-discovery-scanner-wallet:ci

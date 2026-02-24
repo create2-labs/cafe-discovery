@@ -110,7 +110,7 @@ func main() {
 	}()
 
 	// Start server
-	log.Printf("Starting server on %s:%s", viper.GetString(config.ServerHost), viper.GetString(config.ServerPort))
+	log.Printf("COUCOU 2    Starting server on %s:%s", viper.GetString(config.ServerHost), viper.GetString(config.ServerPort))
 	if err := container.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

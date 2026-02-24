@@ -36,31 +36,22 @@ func NewTLSService(tlsScanResultRepo repository.TLSScanResultRepository, planSer
 	}
 }
 
-// ScanTLS scans a URL for TLS certificate and cipher suite information and saves the result for the user
+// ScanTLS scans a URL for TLS certificate and cipher suite information and optionally saves the result.
+// When skipPersist is true (scanner path), the result is not written to DB; the scanner publishes scan.completed/failed.
 // userID can be nil for default endpoints (isDefault=true)
-// isDefault indicates whether this is a default endpoint (default=false for user-scanned endpoints)
-func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL string, isDefault bool) (result *domain.TLSScanResult, err error) {
-	// Record metrics for TLS scan
+func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL string, isDefault bool, skipPersist bool) (result *domain.TLSScanResult, err error) {
 	startTime := time.Now()
 	m := metrics.Get()
 	defer func() {
-		duration := time.Since(startTime)
-		// Record success if no error occurred, failure otherwise
-		success := err == nil
-		m.RecordTLSScan(duration, success)
+		m.RecordTLSScan(time.Since(startTime), err == nil)
 	}()
-	// Check plan limits only for user-scanned endpoints (not for default endpoints)
-	if !isDefault && userID != nil && s.planService != nil {
-		canScan, usage, err := s.planService.CheckScanLimit(*userID, "endpoint", nil, s.tlsScanResultRepo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check plan limits: %w", err)
-		}
-		if !canScan {
-			return nil, fmt.Errorf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
+
+	if !skipPersist {
+		if err := s.checkPlanLimitForScan(userID, isDefault); err != nil {
+			return nil, err
 		}
 	}
 
-	// Scan the URL
 	info, err := s.scanner.ScanURL(ctx, targetURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan TLS: %w", err)
@@ -68,48 +59,86 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 
 	protocolVersionStr := tlspkg.GetProtocolVersion(info.ProtocolVersion)
 
-	// Security model: TLS < 1.3 is fundamentally quantum-unsafe
-	// Classify immediately without detailed PQC analysis
 	if info.ProtocolVersion < 0x0304 { // TLS 1.3 = 0x0304
-		// TLS < 1.3: Immediate quantum-unsafe classification
-		// Still extract basic info for completeness, but mark as quantum-unsafe
-		certLevel, isPQCCert := s.pqcRules.ClassifyCertificate(info.Certificate)
-		certInfo := s.extractCertificateInfo(info.Certificate, certLevel, isPQCCert)
-		cipherSuites := s.extractCipherSuites(info)
-
-		port, _ := strconv.Atoi(info.Port)
-		return &domain.TLSScanResult{
-			URL:             targetURL,
-			Host:            info.Host,
-			Port:            port,
-			Certificate:     certInfo,
-			CipherSuites:    cipherSuites,
-			ProtocolVersion: protocolVersionStr,
-			NISTLevel:       certLevel,  // Use cert level (likely low for TLS < 1.3)
-			RiskScore:       1.0,        // Maximum risk for quantum-unsafe protocol
-			PQCRisk:         "critical", // Quantum-unsafe
-			SupportedPQCs:   []string{},
-			Recommendations: []string{
-				"CRITICAL: TLS protocol version is below 1.3. TLS versions prior to 1.3 are fundamentally unsafe against quantum computing threats. Upgrade to TLS 1.3 immediately to enable quantum-resistant cryptography.",
-			},
-			ScannedAt:   time.Now(),
-			KexPQCReady: false,
-			PQCMode:     "classical",
-			PFS:         false, // TLS < 1.3 may not have PFS
-		}, nil
+		res := s.buildResultForTLSBelow13(info, targetURL, protocolVersionStr)
+		res.Default = isDefault
+		if !skipPersist {
+			s.persistTLSScanResult(userID, res, targetURL, isDefault)
+		}
+		return res, nil
 	}
 
-	// TLS 1.3: Proceed with detailed PQC analysis
-	// Classify certificate
+	state := s.buildTLS13BaseState(info, targetURL, protocolVersionStr)
+	s.applyPQCInfoToResult(state, info, protocolVersionStr)
+	s.setPFSAndALPNOnResult(state, info, protocolVersionStr)
+	s.updateRiskScoreIfNeeded(state, info, protocolVersionStr)
+	s.updateNISTLevelAndRiskFromPQC(state, info, protocolVersionStr)
+	s.updatePQCRiskAndFinalScores(state, info, protocolVersionStr)
+
+	state.result.Default = isDefault
+	if !skipPersist {
+		s.persistTLSScanResult(userID, state.result, targetURL, isDefault)
+	}
+	return state.result, nil
+}
+
+// checkPlanLimitForScan returns an error if the user has reached their endpoint scan limit.
+func (s *TLSService) checkPlanLimitForScan(userID *uuid.UUID, isDefault bool) error {
+	if isDefault || userID == nil || s.planService == nil {
+		return nil
+	}
+	canScan, usage, err := s.planService.CheckScanLimit(*userID, "endpoint", nil, s.tlsScanResultRepo)
+	if err != nil {
+		return fmt.Errorf("failed to check plan limits: %w", err)
+	}
+	if !canScan {
+		return fmt.Errorf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
+	}
+	return nil
+}
+
+// buildResultForTLSBelow13 returns a quantum-unsafe result for TLS < 1.3.
+func (s *TLSService) buildResultForTLSBelow13(info *tlspkg.TLSInfo, targetURL, protocolVersionStr string) *domain.TLSScanResult {
 	certLevel, isPQCCert := s.pqcRules.ClassifyCertificate(info.Certificate)
-
-	// Extract certificate information
 	certInfo := s.extractCertificateInfo(info.Certificate, certLevel, isPQCCert)
+	cipherSuites := s.extractCipherSuites(info)
+	port, _ := strconv.Atoi(info.Port)
+	return &domain.TLSScanResult{
+		URL:             targetURL,
+		Host:            info.Host,
+		Port:            port,
+		Certificate:     certInfo,
+		CipherSuites:    cipherSuites,
+		ProtocolVersion: protocolVersionStr,
+		NISTLevel:       certLevel,
+		RiskScore:       1.0,
+		PQCRisk:         "critical",
+		SupportedPQCs:   []string{},
+		Recommendations: []string{
+			"CRITICAL: TLS protocol version is below 1.3. TLS versions prior to 1.3 are fundamentally unsafe against quantum computing threats. Upgrade to TLS 1.3 immediately to enable quantum-resistant cryptography.",
+		},
+		ScannedAt:   time.Now(),
+		KexPQCReady: false,
+		PQCMode:     "classical",
+		PFS:         false,
+	}
+}
 
-	// Extract cipher suites information
+// tls13BuildState holds working state while building a TLS 1.3 scan result.
+type tls13BuildState struct {
+	result        *domain.TLSScanResult
+	certLevel     domain.NISTLevel
+	certInfo      domain.CertificateInfo
+	cipherSuites  []domain.CipherSuiteInfo
+	overallLevel  domain.NISTLevel
+	supportedPQCs []string
+}
+
+func (s *TLSService) buildTLS13BaseState(info *tlspkg.TLSInfo, targetURL, protocolVersionStr string) *tls13BuildState {
+	certLevel, isPQCCert := s.pqcRules.ClassifyCertificate(info.Certificate)
+	certInfo := s.extractCertificateInfo(info.Certificate, certLevel, isPQCCert)
 	cipherSuites := s.extractCipherSuites(info)
 
-	// Determine overall NIST level (worst case)
 	overallLevel := certLevel
 	for _, cs := range cipherSuites {
 		if cs.NISTLevel < overallLevel {
@@ -117,262 +146,234 @@ func (s *TLSService) ScanTLS(ctx context.Context, userID *uuid.UUID, targetURL s
 		}
 	}
 
-	// Calculate risk score (will be updated after PQC info is integrated)
-	riskScore := s.calculateTLSRiskScore(certLevel, cipherSuites, protocolVersionStr, false, false, false, false, nil)
-
-	// Determine PQC risk level (will be updated after PQC detection)
-	pqcRisk := "critical" // Default for TLS 1.3 without PQC
-
-	// Generate recommendations (will be updated after PQC info is integrated)
-	recommendations := s.generateRecommendations(certInfo, cipherSuites, overallLevel, protocolVersionStr, false, false, false, "classical")
-
-	// Check for supported PQC algorithms
+	riskScore := s.calculateTLSRiskScore(tlsRiskParams{
+		CertLevel: certLevel, CipherSuites: cipherSuites, ProtocolVersion: protocolVersionStr,
+		HasPFS: false, HasOCSPStapling: false, KexPQCReady: false, IsPQCMode: false, DetailedNISTLevels: nil,
+	})
+	recommendations := s.generateRecommendations(tlsRecommendationParams{
+		Cert: certInfo, Suites: cipherSuites, Level: overallLevel, ProtocolVersion: protocolVersionStr,
+		HasPFS: false, HasOCSPStapling: false, KexPQCReady: false, IsPQCMode: "classical",
+	})
 	supportedPQCs := s.detectSupportedPQC(certInfo, cipherSuites)
 
 	port, _ := strconv.Atoi(info.Port)
-
-	result = &domain.TLSScanResult{
+	result := &domain.TLSScanResult{
 		URL:             targetURL,
 		Host:            info.Host,
 		Port:            port,
 		Certificate:     certInfo,
 		CipherSuites:    cipherSuites,
-		ProtocolVersion: tlspkg.GetProtocolVersion(info.ProtocolVersion),
+		ProtocolVersion: protocolVersionStr,
 		NISTLevel:       overallLevel,
 		RiskScore:       riskScore,
-		PQCRisk:         pqcRisk,
+		PQCRisk:         "critical",
 		SupportedPQCs:   supportedPQCs,
 		Recommendations: recommendations,
 		ScannedAt:       time.Now(),
 	}
 
-	// Integrate PQC information from OQS/OpenSSL scan if available
-	if info.PQCInfo != nil {
-		// Prefer kex_alg over group (kex_alg may contain full hybrid name)
-		result.KexAlgorithm = info.PQCInfo.KexAlg
-		if result.KexAlgorithm == "" {
-			result.KexAlgorithm = info.PQCInfo.Group
-		}
-
-		// Enhanced PQC detection: check multiple indicators
-		// Priority: 1) kex_pqc_ready flag, 2) pqc flag, 3) pqc_mode, 4) algorithm name analysis
-		result.KexPQCReady = info.PQCInfo.KexPQCReady || info.PQCInfo.PQC
-
-		// Set PQC mode - prefer from scan, but infer if needed
-		result.PQCMode = info.PQCInfo.PQCMode
-
-		// If mode is not set but we have an algorithm name, analyze it
-		if result.PQCMode == "" && result.KexAlgorithm != "" {
-			algUpper := strings.ToUpper(result.KexAlgorithm)
-			hasClassical := strings.Contains(algUpper, "X25519") ||
-				strings.Contains(algUpper, "P256") ||
-				strings.Contains(algUpper, "P384") ||
-				strings.Contains(algUpper, "SECP")
-			hasPQC := strings.Contains(algUpper, "MLKEM") ||
-				strings.Contains(algUpper, "KYBER") ||
-				strings.Contains(algUpper, "FRODO") ||
-				strings.Contains(algUpper, "BIKE")
-			if hasClassical && hasPQC {
-				result.PQCMode = "hybrid"
-				result.KexPQCReady = true
-			} else if hasPQC {
-				result.PQCMode = "pure"
-				result.KexPQCReady = true
-			} else {
-				result.PQCMode = "classical"
-			}
-		}
-
-		// If KexPQCReady is still false but mode indicates PQC, set it to true
-		if !result.KexPQCReady && (result.PQCMode == "hybrid" || result.PQCMode == "pure") {
-			result.KexPQCReady = true
-		}
-
-		// Final check: if algorithm name contains PQC indicators, ensure flags are set
-		if result.KexAlgorithm != "" {
-			algUpper := strings.ToUpper(result.KexAlgorithm)
-			if strings.Contains(algUpper, "MLKEM") || strings.Contains(algUpper, "KYBER") ||
-				strings.Contains(algUpper, "FRODO") || strings.Contains(algUpper, "BIKE") {
-				result.KexPQCReady = true
-				// If mode is still classical but we have PQC in name, it's likely hybrid
-				if result.PQCMode == "classical" || result.PQCMode == "" {
-					if strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
-						strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP") {
-						result.PQCMode = "hybrid"
-					} else {
-						result.PQCMode = "pure"
-					}
-				}
-			}
-		}
-
-		result.NISTLevels = info.PQCInfo.NISTLevels
-		result.Curve = info.PQCInfo.CertPubkeyECGroup
-
-		// TLS 1.3 always has PFS by design
-		if strings.Contains(strings.ToUpper(protocolVersionStr), "1.3") {
-			result.PFS = true
-		} else if info.PQCInfo.CipherSuite != "" {
-			// For TLS < 1.3, check cipher suite
-			result.PFS = s.hasPFSFromCipherName(info.PQCInfo.CipherSuite)
-		}
+	return &tls13BuildState{
+		result:        result,
+		certLevel:     certLevel,
+		certInfo:      certInfo,
+		cipherSuites:  cipherSuites,
+		overallLevel:  overallLevel,
+		supportedPQCs: supportedPQCs,
 	}
+}
 
-	// Set ALPN and OCSP from Go TLS scan (available in TLSInfo)
-	result.ALPN = info.ALPN
-	result.OCSPStapled = info.OCSPStapled
-
-	// Set PFS if not already set
-	// TLS 1.3 always has PFS by design
-	if !result.PFS {
-		if strings.Contains(strings.ToUpper(protocolVersionStr), "1.3") {
-			result.PFS = true
-		} else if len(cipherSuites) > 0 {
-			cipherName := tlspkg.GetCipherSuiteName(cipherSuites[0].ID)
-			result.PFS = s.hasPFSFromCipherName(cipherName)
-		}
+func (s *TLSService) applyPQCInfoToResult(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	if info.PQCInfo == nil {
+		return
 	}
+	pqc := info.PQCInfo
 
-	// Update risk score with PFS and OCSP information if not already updated by PQC scan
-	if info.PQCInfo == nil || info.PQCInfo.NISTLevels == nil {
-		result.RiskScore = s.calculateTLSRiskScore(
-			certLevel,
-			cipherSuites,
-			protocolVersionStr,
-			result.PFS,
-			result.OCSPStapled,
-			result.KexPQCReady,
-			result.PQCMode == "hybrid" || result.PQCMode == "pure",
-			nil,
-		)
+	state.result.KexAlgorithm = pqc.KexAlg
+	if state.result.KexAlgorithm == "" {
+		state.result.KexAlgorithm = pqc.Group
 	}
+	state.result.KexPQCReady = pqc.KexPQCReady || pqc.PQC
+	state.result.PQCMode = pqc.PQCMode
 
-	// Update overall NIST level using all available information
-	// Take the minimum (worst) level from certificate, cipher suites, and detailed levels
-	if info.PQCInfo != nil && info.PQCInfo.NISTLevels != nil {
-		// Check all detailed NIST levels and take the minimum
-		for _, level := range info.PQCInfo.NISTLevels {
-			if domain.NISTLevel(level) < overallLevel {
-				overallLevel = domain.NISTLevel(level)
-			}
-		}
-		result.NISTLevel = overallLevel
-
-		// Recalculate risk score with detailed NIST levels and updated PQC info
-		result.RiskScore = s.calculateTLSRiskScore(
-			certLevel,
-			cipherSuites,
-			protocolVersionStr,
-			result.PFS,
-			result.OCSPStapled,
-			result.KexPQCReady,
-			result.PQCMode == "hybrid" || result.PQCMode == "pure",
-			info.PQCInfo.NISTLevels,
-		)
-
-		// Regenerate recommendations with updated information
-		result.Recommendations = s.generateRecommendations(
-			certInfo,
-			cipherSuites,
-			overallLevel,
-			protocolVersionStr,
-			result.PFS,
-			result.OCSPStapled,
-			result.KexPQCReady,
-			result.PQCMode, // Pass the mode string directly
-		)
+	s.inferPQCModeFromAlgorithm(state.result)
+	if !state.result.KexPQCReady && (state.result.PQCMode == "hybrid" || state.result.PQCMode == "pure") {
+		state.result.KexPQCReady = true
 	}
+	s.ensurePQCFlagsFromAlgorithmName(state.result)
 
-	// Update PQC risk based on real PQC detection and protocol version
-	// TLS < 1.3 is quantum-unsafe (should be filtered earlier, but handle gracefully)
-	if !strings.Contains(strings.ToUpper(protocolVersionStr), "1.3") {
-		result.PQCRisk = "critical"
+	state.result.NISTLevels = pqc.NISTLevels
+	state.result.Curve = pqc.CertPubkeyECGroup
+
+	if strings.Contains(strings.ToUpper(protocolVersionStr), "1.3") {
+		state.result.PFS = true
+	} else if pqc.CipherSuite != "" {
+		state.result.PFS = s.hasPFSFromCipherName(pqc.CipherSuite)
+	}
+}
+
+func (s *TLSService) inferPQCModeFromAlgorithm(result *domain.TLSScanResult) {
+	if result.PQCMode != "" || result.KexAlgorithm == "" {
+		return
+	}
+	algUpper := strings.ToUpper(result.KexAlgorithm)
+	hasClassical := strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
+		strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP")
+	hasPQC := strings.Contains(algUpper, "MLKEM") || strings.Contains(algUpper, "KYBER") ||
+		strings.Contains(algUpper, "FRODO") || strings.Contains(algUpper, "BIKE")
+	if hasClassical && hasPQC {
+		result.PQCMode = "hybrid"
+		result.KexPQCReady = true
+	} else if hasPQC {
+		result.PQCMode = "pure"
+		result.KexPQCReady = true
 	} else {
-		// TLS 1.3: Check for PQC KEM using multiple indicators
-		hasPQCKEM := false
+		result.PQCMode = "classical"
+	}
+}
 
-		// Check 1: Explicit flags from scan
-		if result.KexPQCReady || result.PQCMode == "hybrid" || result.PQCMode == "pure" {
-			hasPQCKEM = true
-		}
-
-		// Check 2: Algorithm name contains PQC indicators (even if flags weren't set)
-		if !hasPQCKEM && result.KexAlgorithm != "" {
-			algUpper := strings.ToUpper(result.KexAlgorithm)
-			if strings.Contains(algUpper, "MLKEM") || strings.Contains(algUpper, "KYBER") ||
-				strings.Contains(algUpper, "FRODO") || strings.Contains(algUpper, "BIKE") {
-				hasPQCKEM = true
-				// Update flags to reflect reality
-				result.KexPQCReady = true
-				if result.PQCMode == "" || result.PQCMode == "classical" {
-					if strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
-						strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP") {
-						result.PQCMode = "hybrid"
-					} else {
-						result.PQCMode = "pure"
-					}
-				}
-			}
-		}
-
-		// Check 3: PQCInfo flags (fallback)
-		if !hasPQCKEM && info.PQCInfo != nil {
-			if info.PQCInfo.PQC || info.PQCInfo.KexPQCReady {
-				hasPQCKEM = true
-				result.KexPQCReady = true
-			}
-		}
-
-		if hasPQCKEM {
-			// TLS 1.3 with hybrid or pure PQC KEM → safe (HN-DL mitigated)
-			result.PQCRisk = "safe"
-			// Add PQC algorithms to supported list
-			if result.KexAlgorithm != "" {
-				supportedPQCs = append(supportedPQCs, result.KexAlgorithm)
-			}
+func (s *TLSService) ensurePQCFlagsFromAlgorithmName(result *domain.TLSScanResult) {
+	if result.KexAlgorithm == "" {
+		return
+	}
+	algUpper := strings.ToUpper(result.KexAlgorithm)
+	if !strings.Contains(algUpper, "MLKEM") && !strings.Contains(algUpper, "KYBER") &&
+		!strings.Contains(algUpper, "FRODO") && !strings.Contains(algUpper, "BIKE") {
+		return
+	}
+	result.KexPQCReady = true
+	if result.PQCMode == "classical" || result.PQCMode == "" {
+		if strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
+			strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP") {
+			result.PQCMode = "hybrid"
 		} else {
-			// TLS 1.3 without PQC KEM → critical (HN-DL vulnerability)
-			result.PQCRisk = "critical"
+			result.PQCMode = "pure"
 		}
 	}
-	result.SupportedPQCs = supportedPQCs
+}
 
-	// Recalculate risk score with complete information (PQC, PFS, OCSP, etc.)
-	result.RiskScore = s.calculateTLSRiskScore(
-		result.NISTLevel,
-		cipherSuites,
-		protocolVersionStr,
-		result.PFS,
-		result.OCSPStapled,
-		result.KexPQCReady,
-		result.PQCMode == "hybrid" || result.PQCMode == "pure",
-		result.NISTLevels,
-	)
+func (s *TLSService) setPFSAndALPNOnResult(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	state.result.ALPN = info.ALPN
+	state.result.OCSPStapled = info.OCSPStapled
+	if state.result.PFS {
+		return
+	}
+	if strings.Contains(strings.ToUpper(protocolVersionStr), "1.3") {
+		state.result.PFS = true
+	} else if len(state.cipherSuites) > 0 {
+		cipherName := tlspkg.GetCipherSuiteName(state.cipherSuites[0].ID)
+		state.result.PFS = s.hasPFSFromCipherName(cipherName)
+	}
+}
 
-	// Regenerate recommendations with complete information
-	result.Recommendations = s.generateRecommendations(
-		certInfo,
-		cipherSuites,
-		result.NISTLevel,
-		protocolVersionStr,
-		result.PFS,
-		result.OCSPStapled,
-		result.KexPQCReady,
-		result.PQCMode, // Pass the mode string directly
-	)
+func (s *TLSService) updateRiskScoreIfNeeded(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	if info.PQCInfo != nil && info.PQCInfo.NISTLevels != nil {
+		return
+	}
+	state.result.RiskScore = s.calculateTLSRiskScore(tlsRiskParams{
+		CertLevel: state.certLevel, CipherSuites: state.cipherSuites, ProtocolVersion: protocolVersionStr,
+		HasPFS: state.result.PFS, HasOCSPStapling: state.result.OCSPStapled,
+		KexPQCReady: state.result.KexPQCReady, IsPQCMode: state.result.PQCMode == "hybrid" || state.result.PQCMode == "pure",
+		DetailedNISTLevels: nil,
+	})
+}
 
-	// Save TLS scan result to database for authenticated users or default endpoints
-	// Anonymous users (uuid.Nil) can scan but results are not saved to DB (they go to Redis)
-	// Default endpoints (isDefault=true, userID=nil) should be saved to DB
-	if s.tlsScanResultRepo != nil && (isDefault || (userID != nil && *userID != uuid.Nil)) {
-		tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
-		if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
-			log.Printf("Failed to save TLS scan result to database (url=%s): %v", targetURL, err)
-			// Don't fail the request - scan was successful; user may retry or check DB connectivity
+func (s *TLSService) updateNISTLevelAndRiskFromPQC(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	if info.PQCInfo == nil || info.PQCInfo.NISTLevels == nil {
+		return
+	}
+	for _, level := range info.PQCInfo.NISTLevels {
+		if domain.NISTLevel(level) < state.overallLevel {
+			state.overallLevel = domain.NISTLevel(level)
 		}
 	}
+	state.result.NISTLevel = state.overallLevel
+	state.result.RiskScore = s.calculateTLSRiskScore(tlsRiskParams{
+		CertLevel: state.certLevel, CipherSuites: state.cipherSuites, ProtocolVersion: protocolVersionStr,
+		HasPFS: state.result.PFS, HasOCSPStapling: state.result.OCSPStapled,
+		KexPQCReady: state.result.KexPQCReady, IsPQCMode: state.result.PQCMode == "hybrid" || state.result.PQCMode == "pure",
+		DetailedNISTLevels: info.PQCInfo.NISTLevels,
+	})
+	state.result.Recommendations = s.generateRecommendations(tlsRecommendationParams{
+		Cert: state.certInfo, Suites: state.cipherSuites, Level: state.overallLevel, ProtocolVersion: protocolVersionStr,
+		HasPFS: state.result.PFS, HasOCSPStapling: state.result.OCSPStapled,
+		KexPQCReady: state.result.KexPQCReady, IsPQCMode: state.result.PQCMode,
+	})
+}
 
-	return result, nil
+func (s *TLSService) updatePQCRiskAndFinalScores(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	s.applyPQCRiskToState(state, info, protocolVersionStr)
+	state.result.SupportedPQCs = state.supportedPQCs
+
+	state.result.RiskScore = s.calculateTLSRiskScore(tlsRiskParams{
+		CertLevel: state.result.NISTLevel, CipherSuites: state.cipherSuites, ProtocolVersion: protocolVersionStr,
+		HasPFS: state.result.PFS, HasOCSPStapling: state.result.OCSPStapled,
+		KexPQCReady: state.result.KexPQCReady, IsPQCMode: state.result.PQCMode == "hybrid" || state.result.PQCMode == "pure",
+		DetailedNISTLevels: state.result.NISTLevels,
+	})
+	state.result.Recommendations = s.generateRecommendations(tlsRecommendationParams{
+		Cert: state.certInfo, Suites: state.cipherSuites, Level: state.result.NISTLevel, ProtocolVersion: protocolVersionStr,
+		HasPFS: state.result.PFS, HasOCSPStapling: state.result.OCSPStapled,
+		KexPQCReady: state.result.KexPQCReady, IsPQCMode: state.result.PQCMode,
+	})
+}
+
+// applyPQCRiskToState sets state.result.PQCRisk and may append to state.supportedPQCs based on PQC detection.
+func (s *TLSService) applyPQCRiskToState(state *tls13BuildState, info *tlspkg.TLSInfo, protocolVersionStr string) {
+	protocolUpper := strings.ToUpper(protocolVersionStr)
+	if !strings.Contains(protocolUpper, "1.3") {
+		state.result.PQCRisk = "critical"
+		return
+	}
+	hasPQCKEM := state.result.KexPQCReady || state.result.PQCMode == "hybrid" || state.result.PQCMode == "pure"
+	if !hasPQCKEM && state.result.KexAlgorithm != "" {
+		hasPQCKEM = s.applyPQCKEMFromAlgorithmName(state.result)
+	}
+	if !hasPQCKEM && info.PQCInfo != nil && (info.PQCInfo.PQC || info.PQCInfo.KexPQCReady) {
+		hasPQCKEM = true
+		state.result.KexPQCReady = true
+	}
+	if hasPQCKEM {
+		state.result.PQCRisk = "safe"
+		if state.result.KexAlgorithm != "" {
+			state.supportedPQCs = append(state.supportedPQCs, state.result.KexAlgorithm)
+		}
+	} else {
+		state.result.PQCRisk = "critical"
+	}
+}
+
+// applyPQCKEMFromAlgorithmName updates result flags from algorithm name and returns true if PQC KEM was detected.
+func (s *TLSService) applyPQCKEMFromAlgorithmName(result *domain.TLSScanResult) bool {
+	algUpper := strings.ToUpper(result.KexAlgorithm)
+	if !strings.Contains(algUpper, "MLKEM") && !strings.Contains(algUpper, "KYBER") &&
+		!strings.Contains(algUpper, "FRODO") && !strings.Contains(algUpper, "BIKE") {
+		return false
+	}
+	result.KexPQCReady = true
+	if result.PQCMode == "" || result.PQCMode == "classical" {
+		if strings.Contains(algUpper, "X25519") || strings.Contains(algUpper, "P256") ||
+			strings.Contains(algUpper, "P384") || strings.Contains(algUpper, "SECP") {
+			result.PQCMode = "hybrid"
+		} else {
+			result.PQCMode = "pure"
+		}
+	}
+	return true
+}
+
+func (s *TLSService) persistTLSScanResult(userID *uuid.UUID, result *domain.TLSScanResult, targetURL string, isDefault bool) {
+	log.Printf("persistTLSScanResult(userID=%v, result=%v, targetURL=%s, isDefault=%v)", userID, result, targetURL, isDefault)
+	if s.tlsScanResultRepo == nil {
+		return
+	}
+	if !isDefault && (userID == nil || *userID == uuid.Nil) {
+		log.Printf("TLS scan result not persisted: userID is nil or Nil (url=%s). Sign in and use a valid token so the backend sends user_id in the scan request.", targetURL)
+		return
+	}
+	tlsScanResultEntity := domain.FromTLSScanResult(userID, result, isDefault)
+	if err := s.tlsScanResultRepo.Create(tlsScanResultEntity); err != nil {
+		log.Printf("Failed to save TLS scan result to database (url=%s): %v", targetURL, err)
+	}
 }
 
 // GetTLSScanByURL retrieves a TLS scan result by URL for a specific user
@@ -467,201 +468,172 @@ func (s *TLSService) extractCipherSuites(info *tlspkg.TLSInfo) []domain.CipherSu
 	return suites
 }
 
+// tlsRiskInputs holds NIST-level aggregates used for risk calculation.
+type tlsRiskInputs struct {
+	worstNISTLevel domain.NISTLevel
+	avgNISTLevel   float64
+}
+
+// tlsRiskParams holds all inputs for TLS risk score calculation (keeps param count ≤7).
+type tlsRiskParams struct {
+	CertLevel          domain.NISTLevel
+	CipherSuites       []domain.CipherSuiteInfo
+	ProtocolVersion    string
+	HasPFS             bool
+	HasOCSPStapling    bool
+	KexPQCReady        bool
+	IsPQCMode          bool
+	DetailedNISTLevels map[string]int
+}
+
 // calculateTLSRiskScore calculates a comprehensive risk score for TLS configuration
-// The score ranges from 0.0 (lowest risk) to 1.0 (highest risk)
-//
-// Factors considered:
-//   - NIST security levels (certificate, cipher suites, and detailed component levels)
-//   - TLS protocol version (TLS 1.3 is preferred)
-//   - Perfect Forward Secrecy (PFS) support
-//   - OCSP stapling support
-//   - Post-Quantum Cryptography (PQC) readiness
-//   - PQC mode (hybrid or pure PQC)
-//
-// The calculation uses weighted components:
-//   - Base risk (40%): Based on worst NIST level across all components
-//   - Cipher suite risk (25%): Based on weakest cipher suite
-//   - Protocol risk (15%): TLS 1.2 or older increases risk
-//   - Security features (10%): PFS and OCSP stapling reduce risk
-//   - PQC readiness (10%): PQC support significantly reduces risk
-func (s *TLSService) calculateTLSRiskScore(
-	certLevel domain.NISTLevel,
-	cipherSuites []domain.CipherSuiteInfo,
-	protocolVersion string,
-	hasPFS bool,
-	hasOCSPStapling bool,
-	kexPQCReady bool,
-	isPQCMode bool,
-	detailedNISTLevels map[string]int,
-) float64 {
-	// 1. Base risk from NIST levels (40% weight)
-	// Use weighted average of all components to better reflect overall security
-	// Critical components (certificate/signature) have more weight
-	worstNISTLevel := certLevel
-	avgNISTLevel := float64(certLevel)
-	componentCount := 1.0
+// (0.0 = lowest risk, 1.0 = highest). Weights: base 40%, cipher 25%, protocol 15%, security 10%, PQC 10%.
+func (s *TLSService) calculateTLSRiskScore(p tlsRiskParams) float64 {
+	nist := s.computeNISTLevelsForRisk(p.CertLevel, p.CipherSuites, p.DetailedNISTLevels)
+	baseRisk := s.baseRiskFromNISTLevels(nist.avgNISTLevel, nist.worstNISTLevel)
+	cipherRisk := s.cipherRiskFromSuites(p.CipherSuites, nist.worstNISTLevel)
+	protocolRisk := s.protocolRiskFromVersion(p.ProtocolVersion)
+	securityRisk := s.securityFeaturesRisk(p.HasPFS, p.HasOCSPStapling)
+	pqcRisk := s.pqcRiskScore(p.IsPQCMode, p.KexPQCReady)
 
+	score := (baseRisk * 0.40) + (cipherRisk * 0.25) + (protocolRisk * 0.15) + (securityRisk * 0.10) + (pqcRisk * 0.10)
+	return clampRiskScore(score)
+}
+
+func (s *TLSService) computeNISTLevelsForRisk(certLevel domain.NISTLevel, cipherSuites []domain.CipherSuiteInfo, detailedNISTLevels map[string]int) tlsRiskInputs {
 	if len(detailedNISTLevels) > 0 {
-		// Find the worst level and calculate weighted average
-		// Certificate/signature are critical (weight 2x), others are standard (weight 1x)
-		for key, level := range detailedNISTLevels {
-			nistLevel := domain.NISTLevel(level)
-			if nistLevel < worstNISTLevel {
-				worstNISTLevel = nistLevel
-			}
-
-			// Weight critical components more heavily
-			weight := 1.0
-			if key == "sig" || key == "certificate" {
-				weight = 2.0 // Certificate and signature are critical
-			}
-
-			avgNISTLevel += float64(nistLevel) * weight
-			componentCount += weight
-		}
-
-		// Calculate weighted average
-		avgNISTLevel = avgNISTLevel / componentCount
-	} else {
-		// Fallback: check cipher suites if no detailed levels
-		for _, cs := range cipherSuites {
-			if cs.NISTLevel < worstNISTLevel {
-				worstNISTLevel = cs.NISTLevel
-			}
-			avgNISTLevel += float64(cs.NISTLevel)
-			componentCount += 1.0
-		}
-		avgNISTLevel = avgNISTLevel / componentCount
+		return s.nistLevelsFromDetailed(certLevel, detailedNISTLevels)
 	}
+	return s.nistLevelsFromCipherSuites(certLevel, cipherSuites)
+}
 
-	// Use weighted average for risk calculation, but cap at worst level
-	// This reflects that one weak component doesn't make everything weak,
-	// but the worst component still matters significantly
+func (s *TLSService) nistLevelsFromDetailed(certLevel domain.NISTLevel, detailedNISTLevels map[string]int) tlsRiskInputs {
+	worst := certLevel
+	avg := float64(certLevel)
+	count := 1.0
+	for key, level := range detailedNISTLevels {
+		nl := domain.NISTLevel(level)
+		if nl < worst {
+			worst = nl
+		}
+		weight := 1.0
+		if key == "sig" || key == "certificate" {
+			weight = 2.0
+		}
+		avg += float64(nl) * weight
+		count += weight
+	}
+	return tlsRiskInputs{worstNISTLevel: worst, avgNISTLevel: avg / count}
+}
+
+func (s *TLSService) nistLevelsFromCipherSuites(certLevel domain.NISTLevel, cipherSuites []domain.CipherSuiteInfo) tlsRiskInputs {
+	worst := certLevel
+	avg := float64(certLevel)
+	count := 1.0
+	for _, cs := range cipherSuites {
+		if cs.NISTLevel < worst {
+			worst = cs.NISTLevel
+		}
+		avg += float64(cs.NISTLevel)
+		count++
+	}
+	return tlsRiskInputs{worstNISTLevel: worst, avgNISTLevel: avg / count}
+}
+
+func (s *TLSService) baseRiskFromNISTLevels(avgNISTLevel float64, worstNISTLevel domain.NISTLevel) float64 {
 	effectiveLevel := avgNISTLevel
 	if float64(worstNISTLevel) < effectiveLevel {
-		// If worst level is significantly lower, blend it in (30% worst, 70% average)
 		effectiveLevel = 0.3*float64(worstNISTLevel) + 0.7*effectiveLevel
 	}
-
-	// NIST level to risk: Level 1 = 1.0, Level 5 = 0.0
-	// Linear mapping: risk = 1.0 - ((level - 1) / 4)
 	baseRisk := 1.0 - ((effectiveLevel - 1.0) / 4.0)
-	if baseRisk < 0.0 {
-		baseRisk = 0.0
-	}
-	if baseRisk > 1.0 {
-		baseRisk = 1.0
-	}
+	return clampRiskScore(baseRisk)
+}
 
-	// 2. Cipher suite risk (25% weight)
-	cipherRisk := 0.0
+func (s *TLSService) cipherRiskFromSuites(cipherSuites []domain.CipherSuiteInfo, worstNISTLevel domain.NISTLevel) float64 {
 	if len(cipherSuites) == 0 {
-		cipherRisk = 1.0 // High risk if no cipher suites
-	} else {
-		// Find worst cipher suite level
-		worstCipherLevel := worstNISTLevel
-		for _, cs := range cipherSuites {
-			if cs.NISTLevel < worstCipherLevel {
-				worstCipherLevel = cs.NISTLevel
-			}
-		}
-		cipherRisk = 1.0 - ((float64(worstCipherLevel) - 1.0) / 4.0)
-		if cipherRisk < 0.0 {
-			cipherRisk = 0.0
-		}
-		if cipherRisk > 1.0 {
-			cipherRisk = 1.0
+		return 1.0
+	}
+	worstCipher := worstNISTLevel
+	for _, cs := range cipherSuites {
+		if cs.NISTLevel < worstCipher {
+			worstCipher = cs.NISTLevel
 		}
 	}
+	return clampRiskScore(1.0 - ((float64(worstCipher) - 1.0) / 4.0))
+}
 
-	// 3. Protocol version risk (15% weight)
-	// TLS 1.3 = 0.0 risk, TLS 1.2 = 0.3 risk, TLS 1.1 or older = 0.8 risk
-	protocolRisk := 0.0
-	protocolUpper := strings.ToUpper(protocolVersion)
-	if strings.Contains(protocolUpper, "1.3") {
-		protocolRisk = 0.0
-	} else if strings.Contains(protocolUpper, "1.2") {
-		protocolRisk = 0.3
-	} else if strings.Contains(protocolUpper, "1.1") || strings.Contains(protocolUpper, "1.0") {
-		protocolRisk = 0.8
-	} else {
-		protocolRisk = 0.5 // Unknown protocol version
+func (s *TLSService) protocolRiskFromVersion(protocolVersion string) float64 {
+	upper := strings.ToUpper(protocolVersion)
+	if strings.Contains(upper, "1.3") {
+		return 0.0
 	}
+	if strings.Contains(upper, "1.2") {
+		return 0.3
+	}
+	if strings.Contains(upper, "1.1") || strings.Contains(upper, "1.0") {
+		return 0.8
+	}
+	return 0.5
+}
 
-	// 4. Security features risk reduction (10% weight)
-	// PFS and OCSP stapling reduce risk
-	securityFeaturesRisk := 0.5 // Default: moderate risk
+func (s *TLSService) securityFeaturesRisk(hasPFS, hasOCSPStapling bool) float64 {
 	if hasPFS && hasOCSPStapling {
-		securityFeaturesRisk = 0.0 // Both features present: no additional risk
-	} else if hasPFS {
-		securityFeaturesRisk = 0.2 // PFS only: low additional risk
-	} else if hasOCSPStapling {
-		securityFeaturesRisk = 0.3 // OCSP only: moderate additional risk
+		return 0.0
 	}
+	if hasPFS {
+		return 0.2
+	}
+	if hasOCSPStapling {
+		return 0.3
+	}
+	return 0.5
+}
 
-	// 5. PQC readiness risk reduction (10% weight)
-	// PQC support significantly reduces quantum risk
-	// For TLS 1.3, this is critical for quantum attack surface assessment
-	var pqcRisk float64
+func (s *TLSService) pqcRiskScore(isPQCMode, kexPQCReady bool) float64 {
 	if isPQCMode {
-		// Pure or hybrid PQC mode: minimal quantum risk
-		// Hybrid provides protection against harvest-now-decrypt-later attacks
-		pqcRisk = 0.0
-	} else if kexPQCReady {
-		// PQC KEX ready but not in PQC mode: low quantum risk
-		// This shouldn't happen in practice (PQC KEX implies PQC mode)
-		// but handle gracefully
-		pqcRisk = 0.1
-	} else {
-		// No PQC KEM: high quantum risk for TLS 1.3
-		// This is the "harvest now, decrypt later" vulnerability
-		// Even with high NIST level certs, lack of PQC KEM is critical
-		pqcRisk = 0.8
+		return 0.0
 	}
-
-	// Weighted combination
-	riskScore := (baseRisk * 0.40) +
-		(cipherRisk * 0.25) +
-		(protocolRisk * 0.15) +
-		(securityFeaturesRisk * 0.10) +
-		(pqcRisk * 0.10)
-
-	// Clamp between 0.0 and 1.0
-	if riskScore > 1.0 {
-		riskScore = 1.0
+	if kexPQCReady {
+		return 0.1
 	}
-	if riskScore < 0.0 {
-		riskScore = 0.0
-	}
+	return 0.8
+}
 
-	return riskScore
+func clampRiskScore(score float64) float64 {
+	if score < 0.0 {
+		return 0.0
+	}
+	if score > 1.0 {
+		return 1.0
+	}
+	return score
+}
+
+// tlsRecommendationParams holds inputs for recommendation generation (keeps param count ≤7).
+type tlsRecommendationParams struct {
+	Cert            domain.CertificateInfo
+	Suites          []domain.CipherSuiteInfo
+	Level           domain.NISTLevel
+	ProtocolVersion string
+	HasPFS          bool
+	HasOCSPStapling bool
+	KexPQCReady     bool
+	IsPQCMode       string // "classical", "hybrid", or "pure"
 }
 
 // generateRecommendations generates security findings based on scan results
-// These are observations about security issues, not remediation recommendations
-// Takes into account NIST levels, protocol version, PFS, OCSP, and PQC readiness
-func (s *TLSService) generateRecommendations(
-	cert domain.CertificateInfo,
-	suites []domain.CipherSuiteInfo,
-	level domain.NISTLevel,
-	protocolVersion string,
-	hasPFS bool,
-	hasOCSPStapling bool,
-	kexPQCReady bool,
-	isPQCMode string, // Changed from bool to string: "classical", "hybrid", or "pure"
-) []string {
+// (NIST levels, protocol version, PFS, OCSP, PQC readiness).
+func (s *TLSService) generateRecommendations(p tlsRecommendationParams) []string {
+	protocolUpper := strings.ToUpper(p.ProtocolVersion)
 	var recommendations []string
-	protocolUpper := strings.ToUpper(protocolVersion)
-
-	recommendations = append(recommendations, s.generateNISTLevelRecommendations(level)...)
-	recommendations = append(recommendations, s.generateCertPQCRecommendations(cert)...)
+	recommendations = append(recommendations, s.generateNISTLevelRecommendations(p.Level)...)
+	recommendations = append(recommendations, s.generateCertPQCRecommendations(p.Cert)...)
 	recommendations = append(recommendations, s.generateProtocolVersionRecommendations(protocolUpper)...)
-	recommendations = append(recommendations, s.generatePFSRecommendations(hasPFS)...)
-	recommendations = append(recommendations, s.generateOCSPRecommendations(hasOCSPStapling)...)
-	recommendations = append(recommendations, s.generateCipherSuiteRecommendations(suites, level)...)
-	recommendations = append(recommendations, s.generatePQCRecommendations(protocolUpper, isPQCMode, kexPQCReady)...)
-	recommendations = append(recommendations, s.generatePositiveFeedback(level, protocolUpper, isPQCMode, hasPFS, hasOCSPStapling, recommendations)...)
-
+	recommendations = append(recommendations, s.generatePFSRecommendations(p.HasPFS)...)
+	recommendations = append(recommendations, s.generateOCSPRecommendations(p.HasOCSPStapling)...)
+	recommendations = append(recommendations, s.generateCipherSuiteRecommendations(p.Suites, p.Level)...)
+	recommendations = append(recommendations, s.generatePQCRecommendations(protocolUpper, p.IsPQCMode, p.KexPQCReady)...)
+	recommendations = append(recommendations, s.generatePositiveFeedback(p.Level, protocolUpper, p.IsPQCMode, p.HasPFS, p.HasOCSPStapling, recommendations)...)
 	return recommendations
 }
 

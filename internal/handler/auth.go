@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"context"
+	"log"
+	"time"
+
 	"cafe-discovery/internal/service"
 
 	"github.com/gofiber/fiber/v2"
@@ -8,13 +12,15 @@ import (
 
 // AuthHandler handles authentication-related HTTP requests
 type AuthHandler struct {
-	authService *service.AuthService
+	authService    *service.AuthService
+	userScanCache  *service.UserScanCacheService
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, userScanCache *service.UserScanCacheService) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
+		authService:   authService,
+		userScanCache: userScanCache,
 	}
 }
 
@@ -63,18 +69,13 @@ func (h *AuthHandler) Signin(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(response)
-}
-
-// GetAnonymousToken handles GET /auth/anonymous
-// Returns a JWT token for anonymous (non-authenticated) users
-// This allows users to use the service without creating an account
-func (h *AuthHandler) GetAnonymousToken(c *fiber.Ctx) error {
-	response, err := h.authService.GetAnonymousToken()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to generate anonymous token",
-		})
+	// Warm user scan cache from Postgres so first list after sign-in is fast
+	if h.userScanCache != nil && response.User != nil {
+		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+		defer cancel()
+		if warmErr := h.userScanCache.WarmForUser(ctx, response.User.ID); warmErr != nil {
+			log.Printf("auth: warm user cache after sign-in: %v", warmErr)
+		}
 	}
 
 	return c.JSON(response)

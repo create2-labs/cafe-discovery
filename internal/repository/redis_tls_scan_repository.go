@@ -13,19 +13,29 @@ import (
 )
 
 const (
-	// Redis key prefix for anonymous TLS scans
-	redisKeyPrefix = "tls:scan:anonymous:"
-	// TTL for anonymous scans (30 minutes)
-	anonymousScanTTL = 30 * time.Minute
+	redisKeyPrefix   = "tls:scan:token:"
+	tlsUserKeyPrefix = "tls:user:"
+	tlsScanTTL       = 30 * time.Minute
+
+	// DefaultUserIDForRedis is the null UUID used for default TLS endpoints in Redis keys.
+	DefaultUserIDForRedis = "00000000-0000-0000-0000-000000000000"
 )
 
-// RedisTLSScanRepository handles storage of anonymous TLS scan results in Redis
+// RedisTLSScanRepository stores TLS scan results in Redis by token (temporary, TTL).
+// User-scoped methods (FindByUserIDAndURL, ListURLsByUserID) read keys written by persistence-service (tls:user:<id>:<url>).
 type RedisTLSScanRepository interface {
 	Save(ctx context.Context, tokenHash string, url string, result *domain.TLSScanResult) error
 	FindByURL(ctx context.Context, tokenHash string, url string) (*domain.TLSScanResult, error)
 	ListAll(ctx context.Context, tokenHash string) ([]*domain.TLSScanResult, error)
 	Count(ctx context.Context, tokenHash string) (int, error)
 	Delete(ctx context.Context, tokenHash string, url string) error
+	// User-scoped (persistence-service write-through keys)
+	SaveByUserIDAndURL(ctx context.Context, userID string, url string, result *domain.TLSScanResult) error
+	FindByUserIDAndURL(ctx context.Context, userID string, url string) (*domain.TLSScanResult, error)
+	ListURLsByUserID(ctx context.Context, userID string) ([]string, error)
+	// ListURLsByUserIDOrDefault returns user's URLs plus default endpoints (null UUID), deduped (user first).
+	ListURLsByUserIDOrDefault(ctx context.Context, userID string) ([]string, error)
+	CountByUserID(ctx context.Context, userID string) (int64, error)
 }
 
 // HashToken creates a SHA256 hash of the JWT token for use as a unique identifier
@@ -59,7 +69,7 @@ func (r *redisTLSScanRepository) Save(ctx context.Context, tokenHash string, url
 		return fmt.Errorf("failed to marshal scan result: %w", err)
 	}
 
-	if err := r.redis.Set(ctx, key, data, anonymousScanTTL).Err(); err != nil {
+	if err := r.redis.Set(ctx, key, data, tlsScanTTL).Err(); err != nil {
 		return fmt.Errorf("failed to save scan result to Redis: %w", err)
 	}
 
@@ -83,7 +93,7 @@ func (r *redisTLSScanRepository) FindByURL(ctx context.Context, tokenHash string
 	return &result, nil
 }
 
-// ListAll lists all anonymous TLS scan results for a specific token
+// ListAll lists all TLS scan results for a specific token
 func (r *redisTLSScanRepository) ListAll(ctx context.Context, tokenHash string) ([]*domain.TLSScanResult, error) {
 	pattern := redisKeyPrefix + tokenHash + ":*"
 	keys, err := r.redis.Keys(ctx, pattern).Result()
@@ -111,7 +121,7 @@ func (r *redisTLSScanRepository) ListAll(ctx context.Context, tokenHash string) 
 	return results, nil
 }
 
-// Count counts the number of anonymous TLS scan results for a specific token
+// Count counts the number of TLS scan results for a specific token
 func (r *redisTLSScanRepository) Count(ctx context.Context, tokenHash string) (int, error) {
 	pattern := redisKeyPrefix + tokenHash + ":*"
 	keys, err := r.redis.Keys(ctx, pattern).Result()
@@ -128,4 +138,87 @@ func (r *redisTLSScanRepository) Delete(ctx context.Context, tokenHash string, u
 		return fmt.Errorf("failed to delete scan result from Redis: %w", err)
 	}
 	return nil
+}
+
+// getUserKey returns the key used by persistence-service for user-scoped TLS results
+func (r *redisTLSScanRepository) getUserKey(userID string, url string) string {
+	return tlsUserKeyPrefix + userID + ":" + url
+}
+
+// SaveByUserIDAndURL writes a TLS scan result for user+url (read-through / warm cache). Same key format as persistence.
+func (r *redisTLSScanRepository) SaveByUserIDAndURL(ctx context.Context, userID string, url string, result *domain.TLSScanResult) error {
+	key := r.getUserKey(userID, url)
+	data, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("marshal tls result: %w", err)
+	}
+	if err := r.redis.Set(ctx, key, data, tlsScanTTL).Err(); err != nil {
+		return fmt.Errorf("redis set: %w", err)
+	}
+	return nil
+}
+
+// FindByUserIDAndURL finds a TLS scan result by user ID and URL (persistence-service keys)
+func (r *redisTLSScanRepository) FindByUserIDAndURL(ctx context.Context, userID string, url string) (*domain.TLSScanResult, error) {
+	key := r.getUserKey(userID, url)
+	data, err := r.redis.Get(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	var result domain.TLSScanResult
+	if err := json.Unmarshal([]byte(data), &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal scan result: %w", err)
+	}
+	return &result, nil
+}
+
+// ListURLsByUserID lists all TLS scan URLs for a user (persistence-service keys)
+func (r *redisTLSScanRepository) ListURLsByUserID(ctx context.Context, userID string) ([]string, error) {
+	pattern := tlsUserKeyPrefix + userID + ":*"
+	keys, err := r.redis.Keys(ctx, pattern).Result()
+	if err != nil {
+		return nil, err
+	}
+	prefix := tlsUserKeyPrefix + userID + ":"
+	urls := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if len(k) > len(prefix) {
+			urls = append(urls, k[len(prefix):])
+		}
+	}
+	return urls, nil
+}
+
+// ListURLsByUserIDOrDefault returns user's TLS URLs plus default endpoints (null UUID), deduped (user URLs first).
+func (r *redisTLSScanRepository) ListURLsByUserIDOrDefault(ctx context.Context, userID string) ([]string, error) {
+	userURLs, err := r.ListURLsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	defaultURLs, err := r.ListURLsByUserID(ctx, DefaultUserIDForRedis)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(userURLs))
+	for _, u := range userURLs {
+		seen[u] = struct{}{}
+	}
+	merged := make([]string, len(userURLs), len(userURLs)+len(defaultURLs))
+	copy(merged, userURLs)
+	for _, u := range defaultURLs {
+		if _, ok := seen[u]; !ok {
+			seen[u] = struct{}{}
+			merged = append(merged, u)
+		}
+	}
+	return merged, nil
+}
+
+// CountByUserID returns the number of TLS scans for a user (for plan limits; backend Redis-only).
+func (r *redisTLSScanRepository) CountByUserID(ctx context.Context, userID string) (int64, error) {
+	urls, err := r.ListURLsByUserID(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(urls)), nil
 }

@@ -1,6 +1,12 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"time"
+
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
@@ -13,11 +19,9 @@ import (
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
-	"context"
-	"fmt"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
@@ -31,20 +35,21 @@ const (
 
 // Container holds all application dependencies
 type Container struct {
-	ChainConfig       *config.ChainConfig
-	DiscoveryService  *service.DiscoveryService
-	DiscoveryHandler  *handler.DiscoveryHandler
-	TLSService        *service.TLSService
-	TLSHandler        *handler.TLSHandler
-	AuthService       *service.AuthService
-	AuthHandler       *handler.AuthHandler
-	CafeWalletService *service.CafeWalletService
-	CafeWalletHandler *handler.CafeWalletHandler
-	App               *fiber.App
-	DB                postgresdb.PostgreSQLConnection
-	NATSConn          nats.Connection
-	RedisConn         redisconn.Connection
-	MoralisClient     *moralis.MoralisClient
+	ChainConfig          *config.ChainConfig
+	DiscoveryService     *service.DiscoveryService
+	DiscoveryHandler     *handler.DiscoveryHandler
+	TLSService           *service.TLSService
+	TLSHandler           *handler.TLSHandler
+	AuthService          *service.AuthService
+	AuthHandler          *handler.AuthHandler
+	CafeWalletService    *service.CafeWalletService
+	CafeWalletHandler    *handler.CafeWalletHandler
+	App                  *fiber.App
+	DB                   postgresdb.PostgreSQLConnection
+	NATSConn             nats.Connection
+	RedisConn            redisconn.Connection
+	MoralisClient        *moralis.MoralisClient
+	ScannerPresenceTracker *service.ScannerPresenceTracker
 }
 
 // NewContainer creates and initializes the application container
@@ -92,8 +97,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	userRepo := repository.NewUserRepository(db.GetDB())
 	scanResultRepo := repository.NewScanResultRepository(db.GetDB())
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
-	redisTLSScanRepo := repository.NewRedisTLSScanRepository(redisConn)
-	redisWalletScanRepo := repository.NewRedisWalletScanRepository(redisConn)
 	cafeWalletRepo := repository.NewCafeWalletRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
 
@@ -109,12 +112,24 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 	cafeWalletService := service.NewCafeWalletService(cafeWalletRepo)
 
-	// Initialize handlers
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, redisWalletScanRepo, redisTLSScanRepo, planService)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, tlsScanResultRepo, planService, redisTLSScanRepo)
-	authHandler := handler.NewAuthHandler(authService)
+	scannerPresence, err := service.NewScannerPresenceTracker(natsConn, redisConn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create scanner presence tracker: %w", err)
+	}
+
+	// Redis scan repos (backend read-through: Redis then Postgres for scan list/get)
+	redisTLSRepo := repository.NewRedisTLSScanRepository(redisConn)
+	redisWalletRepo := repository.NewRedisWalletScanRepository(redisConn)
+
+	// User scan cache: read-through and warm cache on sign-in
+	userScanCache := service.NewUserScanCacheService(scanResultRepo, tlsScanResultRepo, redisWalletRepo, redisTLSRepo)
+
+	// Initialize handlers (read-through for scan list/get; plan usage from Redis counts)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache)
+	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
-	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
+	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)
 
 	// Initialize Prometheus metrics
 	// This must be called before starting the server to register all metrics
@@ -154,16 +169,34 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		AuthHandler:       authHandler,
 		CafeWalletService: cafeWalletService,
 		CafeWalletHandler: cafeWalletHandler,
-		App:               app,
-		DB:                db,
-		NATSConn:          natsConn,
-		RedisConn:         redisConn,
-		MoralisClient:     moralisClient,
+		App:                   app,
+		DB:                    db,
+		NATSConn:              natsConn,
+		RedisConn:             redisConn,
+		MoralisClient:         moralisClient,
+		ScannerPresenceTracker: scannerPresence,
 	}
 
-	// Initialize default endpoints scanning (runs asynchronously)
-	// Default endpoints are not associated with any user and can be read by all users
-	service.InitializeDefaultEndpoints(context.Background(), tlsService, tlsScanResultRepo)
+	// Wait for persistence and scanners, then initialize default endpoints via NATS and wait until they are in Redis
+	ctx := context.Background()
+	if err := service.WaitForPersistence(ctx, natsConn, 15*time.Second); err != nil {
+		log.Printf("Warning: persistence not ready in time: %v (default endpoints may be empty)", err)
+	}
+	if err := service.WaitForScanners(ctx, scannerPresence, 30*time.Second); err != nil {
+		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
+	}
+	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
+
+	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres); GET /discovery/cbom will then return the result
+	if _, err := natsConn.Subscribe(nats.SubjectScanReady, func(msg *natsio.Msg) {
+		var m nats.ScanReadyMessage
+		if err := json.Unmarshal(msg.Data, &m); err != nil {
+			return
+		}
+		log.Printf("scan.ready: user=%s kind=%s status=%s endpoint=%s address=%s", m.UserID.String(), m.Kind, m.Status, m.Endpoint, m.Address)
+	}); err != nil {
+		log.Printf("Warning: subscribe scan.ready failed: %v", err)
+	}
 
 	return container, nil
 }
@@ -174,7 +207,6 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	auth := app.Group("/auth")
 	auth.Post("/signup", authHandler.Signup)
 	auth.Post("/signin", authHandler.Signin)
-	auth.Get("/anonymous", authHandler.GetAnonymousToken) // Anonymous token for non-authenticated users
 
 	// Health check endpoint (public)
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -190,15 +222,17 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	// This endpoint exposes metrics in Prometheus format for scraping
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
-	// Protected routes - require JWT authentication
+	// Public discovery routes (no authentication)
+	discoveryPublic := app.Group("/discovery")
+	discoveryPublic.Get("/rpcs", discoveryHandler.ListRPCs)
+	discoveryPublic.Get("/scanners", discoveryHandler.ListAvailableScanners)
+
+	// Protected discovery routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
 	api.Post("/scan", discoveryHandler.UnifiedScan) // Unified scan endpoint - automatically detects wallet or TLS endpoint
-	api.Get("/rpcs", discoveryHandler.ListRPCs)
 	api.Get("/scans", discoveryHandler.ListScans)
 	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 	api.Get("/tls/scans", tlsHandler.ListScans)
-	api.Get("/tls/scans/anonymous", tlsHandler.ListAnonymousScans)   // Route for anonymous TLS scans from Redis
-	api.Get("/scans/anonymous", discoveryHandler.ListAnonymousScans) // Route for anonymous wallet scans from Redis
 
 	// Wallet management routes
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))
@@ -302,6 +336,9 @@ func (c *Container) Start() error {
 
 // Shutdown gracefully shuts down the server
 func (c *Container) Shutdown() error {
+	if c.ScannerPresenceTracker != nil {
+		_ = c.ScannerPresenceTracker.Close()
+	}
 	if c.AuthService != nil {
 		c.AuthService.Close()
 	}

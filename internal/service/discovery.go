@@ -53,14 +53,14 @@ func NewDiscoveryService(clients map[string]*evm.Client, moralisClient *moralis.
 	}
 }
 
-// ScanWallet scans a wallet address across all configured networks and saves the result for the user
-func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, address string) (result *domain.ScanResult, err error) {
+// ScanWallet scans a wallet address across all configured networks and optionally saves the result.
+// When skipPersist is true (scanner path), the result is not written to DB; the scanner publishes scan.completed/failed.
+func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, address string, skipPersist bool) (result *domain.ScanResult, err error) {
 	// Record metrics for wallet scan
 	startTime := time.Now()
 	m := metrics.Get()
 	defer func() {
 		duration := time.Since(startTime)
-		// Record success if no error occurred, failure otherwise
 		success := err == nil
 		m.RecordWalletScan(duration, success)
 	}()
@@ -70,18 +70,14 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 		return nil, err
 	}
 
-	// For anonymous users (uuid.Nil), skip existing scan check but still check rate limits
-	isAnonymous := userID == uuid.Nil
-	if !isAnonymous {
+	if !skipPersist {
 		existingScan, err := s.getExistingScan(userID, normalizedAddress)
 		if err != nil || existingScan != nil {
 			return existingScan, err
 		}
-	}
-
-	// Check plan limits for both authenticated and anonymous users (anonymous uses rate limiting)
-	if err := s.checkPlanLimits(userID); err != nil {
-		return nil, err
+		if err := s.checkPlanLimits(userID); err != nil {
+			return nil, err
+		}
 	}
 
 	networkResults, networks, recoveredPublicKey, transactionHash, exposedNetwork := s.scanAllNetworks(ctx, normalizedAddress)
@@ -89,10 +85,9 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 	accountType, algorithm, nistLevel := s.determineAccountType(networkResults)
 	riskScore := s.calculateRiskScore(networkResults, accountType, nistLevel)
 
-	// Determine if address is EOA (all networks show EOA)
 	isEOA := true
-	for _, result := range networkResults {
-		if !result.IsEOA {
+	for _, r := range networkResults {
+		if !r.IsEOA {
 			isEOA = false
 			break
 		}
@@ -112,9 +107,7 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 	}
 	result = s.buildScanResult(normalizedAddress, scanData, networks)
 
-	// Save scan result only if not anonymous (userID != uuid.Nil)
-	// Anonymous users can scan but results are not saved
-	if !isAnonymous {
+	if !skipPersist {
 		s.saveScanResult(userID, result)
 	}
 
@@ -138,6 +131,9 @@ func (s *DiscoveryService) validateAndNormalizeAddress(address string) (string, 
 
 // getExistingScan checks if a scan already exists for the user and address
 func (s *DiscoveryService) getExistingScan(userID uuid.UUID, address string) (*domain.ScanResult, error) {
+	if s.scanResultRepo == nil {
+		return nil, nil
+	}
 	existingEntity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, address)
 	if err == nil && existingEntity != nil {
 		return existingEntity.ToScanResult(), nil
@@ -235,10 +231,12 @@ func (s *DiscoveryService) buildScanResult(address string, data scanResultData, 
 
 // saveScanResult saves the scan result to the database
 func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanResult) {
+	if s.scanResultRepo == nil {
+		return
+	}
 	scanResultEntity := domain.FromScanResult(userID, result)
 	if err := s.scanResultRepo.Create(scanResultEntity); err != nil {
 		log.Printf("Failed to save wallet scan result to database (address=%s): %v", result.Address, err)
-		// Don't fail the request - scan was successful; user may retry or check DB connectivity
 	}
 }
 

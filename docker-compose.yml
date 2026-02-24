@@ -32,11 +32,48 @@ services:
       timeout: 5s
       retries: 5
 
-  cafe-discovery-worker:
-    container_name: cafe-discovery-worker
+  cafe-discovery-scanner-tls:
+    container_name: cafe-discovery-scanner-tls
     restart: unless-stopped
     environment:
-      - WORKER_HEALTH_PORT=8081
+      - DISCOVERY_SCANNER_TYPE=tls
+      - SCANNER_HEALTH_PORT=8081
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=cafe
+      - POSTGRES_USER=${POSTGRES_USER:-cafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
+      - POSTGRES_SSLMODE=disable
+      - NATS_URL=nats://nats:4222
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-change-me-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CONFIG_PATH=/app/config.yaml
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - cafe-infra_observability
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8081/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  cafe-discovery-scanner-wallet:
+    container_name: cafe-discovery-scanner-wallet
+    restart: unless-stopped
+    environment:
+      - DISCOVERY_SCANNER_TYPE=wallet
+      - SCANNER_HEALTH_PORT=8081
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=cafe
