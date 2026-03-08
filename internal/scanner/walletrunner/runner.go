@@ -7,9 +7,9 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/scan/wallet"
-	"cafe-discovery/internal/service"
-	"cafe-discovery/internal/scanner/core"
 	scanner "cafe-discovery/internal/scanner"
+	"cafe-discovery/internal/scanner/core"
+	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const heartbeatInterval = 5 * time.Second
+const heartbeatInterval = 30 * time.Second
 
 // Runner starts the Wallet scan scanner (consumes NATS Wallet subject).
 type Runner struct{}
