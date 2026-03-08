@@ -73,7 +73,8 @@ func (c *Client) Call(ctx context.Context, method string, params []interface{}) 
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	// G704: rpcURL is from config, not user input
+	resp, err := c.httpClient.Do(httpReq) // #nosec G704
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}

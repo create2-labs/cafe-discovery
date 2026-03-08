@@ -562,7 +562,7 @@ func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID
 		"url":             tlsScanResult.URL,
 		"host":            tlsScanResult.Host,
 		"port":            tlsScanResult.Port,
-		"protocol":        tlsScanResult.ProtocolVersion,
+		"protocol_version": tlsScanResult.ProtocolVersion,
 		"nist_level":      tlsScanResult.NISTLevel,
 		"risk_score":      tlsScanResult.RiskScore,
 		"pqc_risk":        tlsScanResult.PQCRisk,

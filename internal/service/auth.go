@@ -111,14 +111,14 @@ func (s *AuthService) Close() {
 type SignupRequest struct {
 	TurnstileToken  string `json:"turnstile_token"`
 	Email           string `json:"email"`
-	Password        string `json:"password"`
+	Password        string `json:"password"` // #nosec G117 -- auth DTO; password is hashed server-side, never logged
 	ConfirmPassword string `json:"confirm_password"`
 }
 
 // SigninRequest represents the signin request
 type SigninRequest struct {
 	Email          string `json:"email"`
-	Password       string `json:"password"`
+	Password       string `json:"password"` // #nosec G117 -- auth DTO; password is hashed server-side, never logged
 	TurnstileToken string `json:"turnstile_token"`
 }
 
