@@ -37,7 +37,8 @@ func (c *MoralisClient) GetTransactionsByAddress(address string, chainName strin
 	}
 	req.Header.Set("X-API-Key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.httpClient.Do(req)
+	// G704: URL is c.apiURL (config) + path segments; address/chain validated by callers
+	resp, err := c.httpClient.Do(req) // #nosec G704
 	if err != nil {
 		return nil, err
 	}
