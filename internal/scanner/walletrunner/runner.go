@@ -9,7 +9,7 @@ import (
 	"cafe-discovery/internal/scan/wallet"
 	scanner "cafe-discovery/internal/scanner"
 	"cafe-discovery/internal/scanner/core"
-	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/walletscan"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
@@ -58,10 +58,9 @@ func (Runner) Start(ctx context.Context, deps *core.Deps) ([]core.HealthChecker,
 		clients[blockchain.Name] = evm.NewClient(blockchain.RPC, blockchain.MoralisChainName)
 	}
 	moralisClient := moralis.NewMoralisClient(viper.GetString(config.MoralisAPIKey), viper.GetString(config.MoralisAPIURL))
-	// Scanners do not use Postgres; persistence-service writes from scan.completed/failed
-	discoveryService := service.NewDiscoveryService(clients, moralisClient, nil, nil)
+	engine := walletscan.NewWalletScanEngine(clients, moralisClient)
 
-	walletPlugin := wallet.NewPlugin(discoveryService, viper.GetString(config.ScanPluginsWalletVersion), nats.SubjectScanRequestedWallet)
+	walletPlugin := wallet.NewPlugin(engine, viper.GetString(config.ScanPluginsWalletVersion), nats.SubjectScanRequestedWallet, nil)
 	scan.Register(walletPlugin)
 
 	w := scanner.NewWalletScanner(scan.Get(scan.KindWallet), deps.NATS)
