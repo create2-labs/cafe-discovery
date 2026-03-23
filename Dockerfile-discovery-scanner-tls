@@ -44,7 +44,7 @@ RUN go mod download
 COPY . .
 
 # ---- Build ----
-RUN go build -o scanner ./cmd/scanner/main.go
+RUN go build -o scanner-tls ./cmd/scanner-tls/main.go
 
 
 ##############################
@@ -71,9 +71,8 @@ FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/scanner /app/scanner
+COPY --from=builder /app/scanner-tls /app/scanner-tls
 
-ENV DISCOVERY_SCANNER_TYPE=tls
 EXPOSE 8080
 ENTRYPOINT []
-CMD ["./scanner"]
+CMD ["./scanner-tls"]

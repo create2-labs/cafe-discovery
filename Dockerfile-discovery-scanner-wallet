@@ -1,39 +1,9 @@
 ##############################
-# Stage 1 — Build (Go + OQS)
-# Wallet scanner shares service/tls/pqc deps → same builder as scanner-tls
+# Stage 1 — Build (Go, no OQS)
 ##############################
-FROM oleglod/cafe-crypto-backend:build-oqs AS builder
+FROM golang:1.26.1-bookworm AS builder
 
-ARG TARGETARCH
-ENV DEBIAN_FRONTEND=noninteractive
-
-# ---- Install Go (BUILD ONLY) ----
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    wget \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Go manually (multi-arch)
-ENV GO_VERSION=1.26.1
-RUN set -eux; \
-    case "$TARGETARCH" in \
-    amd64)  GO_ARCH=amd64 ;; \
-    arm64)  GO_ARCH=arm64 ;; \
-    *) echo "unsupported arch $TARGETARCH"; exit 1 ;; \
-    esac; \
-    wget -q https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
-    tar -C /usr/local -xzf go${GO_VERSION}.linux-${GO_ARCH}.tar.gz; \
-    rm go${GO_VERSION}.linux-${GO_ARCH}.tar.gz
-
-ENV PATH=/usr/local/go/bin:$PATH
-ENV CGO_ENABLED=1
-
-# ---- CGO + OQS flags ----
-ENV CGO_CFLAGS="-I/opt/liboqs/include"
-ENV CGO_LDFLAGS="-L/opt/liboqs/lib -loqs -lssl -lcrypto -Wl,-rpath,/opt/liboqs/lib"
-ENV PKG_CONFIG_PATH=/opt/liboqs/lib/pkgconfig
+ENV CGO_ENABLED=0
 
 WORKDIR /app
 
@@ -45,7 +15,7 @@ RUN go mod download
 COPY . .
 
 # ---- Build ----
-RUN go build -o scanner ./cmd/scanner/main.go
+RUN go build -o scanner-wallet ./cmd/scanner-wallet/main.go
 
 
 ##############################
@@ -68,13 +38,15 @@ CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... &&
 ##############################
 # Stage 2 — Runtime (default stage: last = image used without --target)
 ##############################
-FROM oleglod/cafe-crypto-backend:runtime-oqs AS runtime
+FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/scanner /app/scanner
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV DISCOVERY_SCANNER_TYPE=wallet
+COPY --from=builder /app/scanner-wallet /app/scanner-wallet
 EXPOSE 8080
 ENTRYPOINT []
-CMD ["./scanner"]
+CMD ["./scanner-wallet"]
