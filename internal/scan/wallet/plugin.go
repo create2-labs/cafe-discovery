@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
-	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/metrics"
+	"cafe-discovery/internal/walletscan"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
@@ -16,12 +19,15 @@ import (
 // Plugin implements scan.Plugin for wallet discovery.
 type Plugin struct {
 	descriptor *scan.PluginDescriptor
-	service    *service.DiscoveryService
+	engine     *walletscan.WalletScanEngine
+	// validate is used for DecodeHTTP (same rules as DiscoveryService API path).
+	validate func(address string) (string, error)
 }
 
 // NewPlugin returns the wallet discovery plugin. version is read from config (e.g. scan.plugins.wallet.version).
 // subjectOverride: when non-empty (e.g. nats.SubjectScanRequestedWallet in scanner), use it instead of SubjectWalletScan.
-func NewPlugin(svc *service.DiscoveryService, version string, subjectOverride string) *Plugin {
+// validate, if non-nil, is used for DecodeHTTP (typically DiscoveryService.ValidateAndNormalizeAddress). If nil, the engine validates.
+func NewPlugin(engine *walletscan.WalletScanEngine, version string, subjectOverride string, validate func(address string) (string, error)) *Plugin {
 	if version == "" {
 		version = "1.0"
 	}
@@ -29,15 +35,20 @@ func NewPlugin(svc *service.DiscoveryService, version string, subjectOverride st
 	if subjectOverride != "" {
 		subject = subjectOverride
 	}
-	return &Plugin{
+	p := &Plugin{
 		descriptor: &scan.PluginDescriptor{
 			Kind:         scan.KindWallet,
 			Subject:      subject,
 			PlanLimitKey: scan.PlanLimitKeyWallet,
 			Version:      version,
 		},
-		service: svc,
+		engine:   engine,
+		validate: validate,
 	}
+	if p.validate == nil {
+		p.validate = engine.ValidateAndNormalizeAddress
+	}
+	return p
 }
 
 // Descriptor implements scan.Plugin.
@@ -54,7 +65,7 @@ func (p *Plugin) DecodeHTTP(body []byte) (scan.ScanTarget, error) {
 	if req.Address == "" {
 		return nil, errors.New("address is required")
 	}
-	normalized, err := p.service.ValidateAndNormalizeAddress(req.Address)
+	normalized, err := p.validate(req.Address)
 	if err != nil {
 		return nil, err
 	}
@@ -75,15 +86,21 @@ func (p *Plugin) DecodeMessage(msg any) (scan.ScanTarget, error) {
 
 // Run implements scan.Plugin.
 func (p *Plugin) Run(ctx context.Context, userID *uuid.UUID, target scan.ScanTarget, opts scan.RunOptions) (scan.ScanResult, error) {
+	_ = userID
+	_ = opts.SkipPersist // scanner path never persists; engine has no DB access
 	t, ok := target.(*scan.WalletTarget)
 	if !ok {
 		return nil, errors.New("invalid target type for wallet plugin")
 	}
-	uid := uuid.Nil
-	if userID != nil {
-		uid = *userID
-	}
-	result, err := p.service.ScanWallet(ctx, uid, t.Address, opts.SkipPersist)
+	var err error
+	startTime := time.Now()
+	m := metrics.Get()
+	defer func() {
+		m.RecordWalletScan(time.Since(startTime), err == nil)
+	}()
+
+	var result *domain.ScanResult
+	result, err = p.engine.Execute(ctx, t.Address)
 	if err != nil {
 		return nil, err
 	}
