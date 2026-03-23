@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/tlsscan"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
@@ -23,12 +23,12 @@ const (
 // Plugin implements scan.Plugin for TLS endpoint discovery.
 type Plugin struct {
 	descriptor *scan.PluginDescriptor
-	service    *service.TLSService
+	engine     *tlsscan.TLSScanEngine
 }
 
 // NewPlugin returns the TLS discovery plugin. version is read from config (e.g. scan.plugins.tls.version).
 // subjectOverride: when non-empty (e.g. nats.SubjectScanRequestedTLS in scanner), use it instead of SubjectTLSScan.
-func NewPlugin(svc *service.TLSService, version string, subjectOverride string) *Plugin {
+func NewPlugin(engine *tlsscan.TLSScanEngine, version string, subjectOverride string) *Plugin {
 	if version == "" {
 		version = "1.0"
 	}
@@ -43,7 +43,7 @@ func NewPlugin(svc *service.TLSService, version string, subjectOverride string) 
 			PlanLimitKey: scan.PlanLimitKeyEndpoint,
 			Version:      version,
 		},
-		service: svc,
+		engine: engine,
 	}
 }
 
@@ -91,11 +91,12 @@ func (p *Plugin) DecodeMessage(msg any) (scan.ScanTarget, error) {
 
 // Run implements scan.Plugin.
 func (p *Plugin) Run(ctx context.Context, userID *uuid.UUID, target scan.ScanTarget, opts scan.RunOptions) (scan.ScanResult, error) {
+	_ = opts.SkipPersist // scanner path never persists; persistence-service consumes events
 	t, ok := target.(*scan.TLSTarget)
 	if !ok {
 		return nil, errors.New("invalid target type for TLS plugin")
 	}
-	result, err := p.service.ScanTLS(ctx, userID, t.Endpoint, opts.IsDefault, opts.SkipPersist)
+	result, err := p.engine.Execute(ctx, userID, t.Endpoint, opts.IsDefault)
 	if err != nil {
 		return nil, err
 	}

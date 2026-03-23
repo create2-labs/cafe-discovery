@@ -9,7 +9,7 @@ import (
 	"cafe-discovery/internal/scan/tls"
 	scanner "cafe-discovery/internal/scanner"
 	"cafe-discovery/internal/scanner/core"
-	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/tlsscan"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
@@ -51,9 +51,8 @@ func (Runner) Start(ctx context.Context, deps *core.Deps) ([]core.HealthChecker,
 		}
 	}()
 
-	// Scanners do not use Postgres; persistence-service writes from scan.completed/failed
-	tlsService := service.NewTLSService(nil, nil)
-	tlsPlugin := tls.NewPlugin(tlsService, viper.GetString(config.ScanPluginsTLSVersion), nats.SubjectScanRequestedTLS)
+	engine := tlsscan.NewTLSScanEngine()
+	tlsPlugin := tls.NewPlugin(engine, viper.GetString(config.ScanPluginsTLSVersion), nats.SubjectScanRequestedTLS)
 	scan.Register(tlsPlugin)
 
 	w := scanner.NewTLSScanner(scan.Get(scan.KindTLS), deps.NATS)
