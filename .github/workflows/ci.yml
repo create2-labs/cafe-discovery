@@ -66,3 +66,13 @@ jobs:
       - name: Run scanner-wallet CI checks (inside CI image)
         run: |
           docker run --rm cafe-discovery-scanner-wallet:ci
+
+      # ============================================================
+      # PERSISTENCE
+      # ============================================================
+      - name: Build persistence runtime image
+        run: |
+          set -euo pipefail
+          docker build \
+            -f Dockerfile-discovery-persistence \
+            -t cafe-discovery-persistence:ci .

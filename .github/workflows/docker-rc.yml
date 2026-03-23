@@ -19,7 +19,6 @@ permissions:
   contents: read
 
 env:
-  CGO_ENABLED: "1"
   DOCKER_BUILDKIT: "1"
 
 jobs:
