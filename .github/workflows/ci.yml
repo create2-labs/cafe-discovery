@@ -17,13 +17,13 @@ jobs:
       # Checkout (images built with --target ci only; not pushed)
       # ------------------------------------------------------------
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ------------------------------------------------------------
       # Docker / Buildx
       # ------------------------------------------------------------
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # ============================================================
       # BACKEND
