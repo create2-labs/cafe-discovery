@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/scanner/core"
 	"cafe-discovery/internal/scanner/tlsrunner"
-	"cafe-discovery/internal/scanner/walletrunner"
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
@@ -70,12 +68,9 @@ func main() {
 
 	scannerType := strings.ToLower(strings.TrimSpace(viper.GetString(config.DiscoveryScannerType)))
 	runTLS := scannerType == "" || scannerType == "all" || scannerType == "tls"
-	runWallet := scannerType == "" || scannerType == "all" || scannerType == "wallet"
-	if !runTLS && !runWallet {
-		log.Fatalf("Invalid DISCOVERY_SCANNER_TYPE=%q; use tls, wallet, or all", scannerType)
+	if !runTLS {
+		log.Fatalf("Invalid DISCOVERY_SCANNER_TYPE=%q; only tls or all are supported in this repository", scannerType)
 	}
-
-	fmt.Println("scannerType", scannerType)
 
 	deps, err := core.Setup(scannerType)
 	if err != nil {
@@ -88,9 +83,6 @@ func main() {
 	}()
 
 	var runners []core.Runner
-	if runWallet {
-		runners = append(runners, walletrunner.Runner{})
-	}
 	if runTLS {
 		runners = append(runners, tlsrunner.Runner{})
 	}
