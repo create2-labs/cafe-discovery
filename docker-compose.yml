@@ -68,44 +68,6 @@ services:
       retries: 3
       start_period: 10s
 
-  cafe-discovery-scanner-wallet:
-    container_name: cafe-discovery-scanner-wallet
-    restart: unless-stopped
-    environment:
-      - DISCOVERY_SCANNER_TYPE=wallet
-      - SCANNER_HEALTH_PORT=8081
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DATABASE=cafe
-      - POSTGRES_USER=${POSTGRES_USER:-cafe}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cafe}
-      - POSTGRES_SSLMODE=disable
-      - NATS_URL=nats://nats:4222
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-change-me-}
-      - MORALIS_API_KEY=${MORALIS_API_KEY}
-      - MORALIS_API_URL=${MORALIS_API_URL:-https://deep-index.moralis.io}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - CONFIG_PATH=/app/config.yaml
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro
-    networks:
-      - cafe-infra_observability
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--quiet",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8081/health",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
 networks:
   cafe-infra_observability:
     external: true

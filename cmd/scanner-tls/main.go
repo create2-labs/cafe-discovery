@@ -66,13 +66,7 @@ func main() {
 	initConfig()
 	initLogging()
 
-	scannerType := strings.ToLower(strings.TrimSpace(viper.GetString(config.DiscoveryScannerType)))
-	runTLS := scannerType == "" || scannerType == "all" || scannerType == "tls"
-	if !runTLS {
-		log.Fatalf("Invalid DISCOVERY_SCANNER_TYPE=%q; only tls or all are supported in this repository", scannerType)
-	}
-
-	deps, err := core.Setup(scannerType)
+	deps, err := core.Setup("tls")
 	if err != nil {
 		log.Fatalf("Setup failed: %v", err)
 	}
@@ -82,14 +76,10 @@ func main() {
 		}
 	}()
 
-	var runners []core.Runner
-	if runTLS {
-		runners = append(runners, tlsrunner.Runner{})
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	runners := []core.Runner{tlsrunner.Runner{}}
 	if err := core.Run(ctx, cancel, deps, runners); err != nil {
 		log.Fatalf("Run failed: %v", err)
 	}

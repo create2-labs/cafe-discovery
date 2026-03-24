@@ -1,5 +1,5 @@
 # RC workflow: build once per trigger (label on PR or workflow_dispatch).
-# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend, persistence, scanner-tls and scanner-wallet.
+# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend, persistence, and scanner-tls.
 # Release workflow promotes from sha-<short_sha> without rebuilding.
 # Fork PRs are refused (guard below).
 
@@ -19,7 +19,6 @@ permissions:
   contents: read
 
 env:
-  CGO_ENABLED: "1"
   DOCKER_BUILDKIT: "1"
 
 jobs:
@@ -36,14 +35,14 @@ jobs:
       # ------------------------------------------------------------
       - name: Checkout PR head
         if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Checkout default ref
         if: github.event_name != 'pull_request_target'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -51,10 +50,10 @@ jobs:
       # Docker / Buildx setup
       # ------------------------------------------------------------
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -117,15 +116,6 @@ jobs:
             -t oleglod/cafe-discovery-scanner-tls:scan-local \
             .
 
-      - name: Build for scan (scanner-wallet, amd64)
-        run: |
-          docker buildx build \
-            --load \
-            --platform linux/amd64 \
-            -f Dockerfile-discovery-scanner-wallet \
-            -t oleglod/cafe-discovery-scanner-wallet:scan-local \
-            .
-
       - name: Build for scan (persistence, amd64)
         run: |
           docker buildx build \
@@ -155,12 +145,6 @@ jobs:
         continue-on-error: true
         run: |
           docker scout cves oleglod/cafe-discovery-scanner-tls:scan-local \
-            --only-severity critical,high
-
-      - name: Scan discovery-scanner-wallet with Docker Scout
-        continue-on-error: true
-        run: |
-          docker scout cves oleglod/cafe-discovery-scanner-wallet:scan-local \
             --only-severity critical,high
 
       - name: Scan discovery-persistence with Docker Scout
@@ -199,20 +183,6 @@ jobs:
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-scanner-tls \
-            $TAGS \
-            --push .
-
-      - name: Build & push discovery-scanner-wallet (multi-arch)
-        run: |
-          TAGS="-t oleglod/cafe-discovery-scanner-wallet:sha-${{ steps.version.outputs.short_sha }}"
-          if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
-            TAGS="$TAGS -t oleglod/cafe-discovery-scanner-wallet:${{ steps.version.outputs.rc_tag }}"
-          fi
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-scanner-wallet \
             $TAGS \
             --push .
 
