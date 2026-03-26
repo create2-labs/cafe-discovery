@@ -175,7 +175,6 @@ cafe-discovery/
 ├── scripts/
 ├── Dockerfile-discovery-backend        # API server (OQS)
 ├── Dockerfile-discovery-persistence   # Persistence service (single writer for scan lifecycle)
-├── Dockerfile-discovery-scanner-tls    # TLS scanner only (OQS, DISCOVERY_SCANNER_TYPE=tls)
 ├── docker-compose.yml
 └── config.yaml
 ```
@@ -199,19 +198,13 @@ The project uses a multi-stage Docker build approach:
    - Uses `oleglod/cafe-crypto-backend:build-oqs` and `runtime-oqs` (same as backend)
    - Run this service so the backend can receive `persistence.ready` and seed default endpoints; API GET results depend on persistence writing after scanner completion.
 
-4. **`Dockerfile-discovery-scanner-tls`** (TLS scanner only):
-   - Builds the same scanner binary; at runtime runs only the TLS scanner (`ENV DISCOVERY_SCANNER_TYPE=tls`)
-   - Uses `oleglod/cafe-crypto-backend:build-oqs` (needs OQS for PQC TLS scanning)
-   - Runtime: `oleglod/cafe-crypto-backend:runtime-oqs`
-   - Use when you want a dedicated TLS scanner process (e.g. scaling or separate deployment).
-
-5. **Wallet scanner image**: moved to `cafe-scanner-wallet` repository (`oleglod/cafe-scanner-wallet`).
-
-For local or single-process deployment you can still run **both** scanners in one container by building with either scanner Dockerfile and overriding the env (e.g. `DISCOVERY_SCANNER_TYPE=all` or unset).
+4. **Scanner images** are produced by dedicated repositories:
+   - TLS scanner: `cafe-scanner-tls` (`oleglod/cafe-scanner-tls`)
+   - Wallet scanner: `cafe-scanner-wallet` (`oleglod/cafe-scanner-wallet`)
 
 Build order:
 1. Build the OQS base images from [cafe-crypto-backend](https://github.com/create2-labs/cafe-crypto-backend) (see [Step 1: Build OQS base images](#step-1-build-oqs-base-images)).
-2. Build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`). Compose defines backend and scanner-tls in this repository.
+2. Build discovery services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` (or `up --build`). This repository now builds backend only; scanners run from dedicated repositories.
 
 ### Data Flow
 
@@ -258,12 +251,13 @@ This project implements a strict, security-focused CI/CD pipeline that enforces 
 
 ### Overview
 
-The project produces **one backend image and two scanner images**:
+The project produces **backend and persistence images**:
 - `oleglod/cafe-discovery-backend`: API server image (`Dockerfile-discovery-backend`)
-- `oleglod/cafe-discovery-scanner-tls`: TLS scanner only (`Dockerfile-discovery-scanner-tls`, OQS)
-- `oleglod/cafe-scanner-wallet`: Wallet scanner image (published from `cafe-scanner-wallet` repository).
+- `oleglod/cafe-discovery-persistence`: persistence image (`Dockerfile-discovery-persistence`)
 
-There is no single "scanner" image; TLS and Wallet scanners each have their own image and are released together with the backend.
+Scanner images are published from dedicated repositories:
+- `oleglod/cafe-scanner-tls` (from `cafe-scanner-tls`)
+- `oleglod/cafe-scanner-wallet` (from `cafe-scanner-wallet`)
 
 ### Pipeline Separation
 
@@ -304,13 +298,10 @@ The `docker-compose.yml` file includes CI service definitions that build the CI 
 ```bash
 # Build CI images (if your compose defines them; otherwise use Method 2)
 docker compose build cafe-discovery-backend-ci
-docker compose build cafe-discovery-scanner-tls-ci
 
 # Run CI checks for backend
 docker compose run --rm cafe-discovery-backend-ci
 
-# Run CI checks for both scanners
-docker compose run --rm cafe-discovery-scanner-tls-ci
 ```
 
 **Method 2: Using Docker Directly**
@@ -326,14 +317,6 @@ docker build \
 
 # Run backend CI checks
 docker run --rm cafe-discovery-backend:ci
-
-# Build TLS scanner CI image
-docker build \
-  --target ci \
-  -f Dockerfile-discovery-scanner-tls \
-  -t cafe-discovery-scanner-tls:ci .
-
-docker run --rm cafe-discovery-scanner-tls:ci
 
 ```
 
@@ -395,7 +378,6 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 **Registry**: Images are published to Docker Hub (`oleglod/`):
 - `oleglod/cafe-discovery-backend:${VERSION}`
-- `oleglod/cafe-discovery-scanner-tls:${VERSION}`
 - `oleglod/cafe-scanner-wallet:${VERSION}` (published from `cafe-scanner-wallet`)
 
 **Process**:
@@ -406,8 +388,8 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 2. **Build images** (linux/amd64 only):
    - `oleglod/cafe-discovery-backend`
-   - `oleglod/cafe-discovery-scanner-tls`
-   - `oleglod/cafe-scanner-wallet` (external repository)
+   - `oleglod/cafe-discovery-persistence`
+   - scanner images are built in their dedicated repositories
 
 3. **Security scanning** (Docker Scout):
    - Scan both images for critical and high-severity vulnerabilities
@@ -469,7 +451,7 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
 **Security Enforcement**:
 - `govulncheck` blocks PR merges (prevents vulnerable code from entering `main`)
 - Docker Scout blocks image publication (prevents vulnerable images from being published)
-- Backend and both scanner images (scanner-tls, scanner-wallet) are always released together (ensures consistency).
+- Backend and persistence images are released together; scanner images are versioned independently in dedicated repositories.
 
 **Failure Handling**:
 - If any image fails scanning, **nothing is published**
@@ -485,7 +467,7 @@ All three images receive identical tags:
 - `sha-abc1234`: Commit SHA (for traceability)
 - `latest`: Latest release (points to most recent release)
 
-All tags are built for `linux/amd64` (and `linux/arm64` in RC/release). Images from this repository: `cafe-discovery-backend`, `cafe-discovery-scanner-tls`, `cafe-discovery-persistence`.
+All tags are built for `linux/amd64` (and `linux/arm64` in RC/release). Images from this repository: `cafe-discovery-backend`, `cafe-discovery-persistence`.
 
 ### Version Endpoint
 
@@ -701,7 +683,6 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 # Or start individually
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discovery-backend
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d cafe-discovery-scanner-tls
 ```
 
 **Docker Compose Configuration (local use only):**
@@ -716,7 +697,7 @@ The project uses a two-file Docker Compose setup for local development:
 - **`docker-compose.dev.yml`**: Local development overrides
   - Adds build contexts for local development
   - Exposes port `8080` for backend API access
-  - Builds images locally using `Dockerfile-discovery-backend` and `Dockerfile-discovery-scanner-tls`
+  - Builds images locally using `Dockerfile-discovery-backend`
 
 **Services:**
 
@@ -732,11 +713,9 @@ The project uses a two-file Docker Compose setup for local development:
    - Single writer for scan lifecycle: subscribes to `scan.started`, `scan.completed`, `scan.failed`; writes to PostgreSQL and Redis; publishes `scan.ready` and `persistence.ready`
    - Built with `Dockerfile-discovery-persistence`. Run it so the backend can complete startup and so GET requests return results after scans complete.
 
-3. **`cafe-discovery-scanner-tls`**:
-   - TLS scan scanner (consumes `cafe.discovery.tls.scan`). Health check on port `8081` (exposed as 8081 in dev).
-   - Health check: `wget http://localhost:8081/health` (every 30s). Restart policy: `unless-stopped`.
-
-4. **Wallet scanner**: externalized to `cafe-scanner-wallet` and deployed from `cafe-deploy`.
+3. **Scanners**: externalized to dedicated repositories and deployed from `cafe-deploy`:
+   - TLS scanner: `cafe-scanner-tls`
+   - Wallet scanner: `cafe-scanner-wallet`
 
 **Configuration:**
 
@@ -758,11 +737,9 @@ The services are configured with:
 - `Dockerfile-discovery-backend`: Builds the API server using `oqs:dev` as base
   - `runtime` target: Server image (used by cafe-deploy for staging/prod)
   - `ci` target: CI/CD image with linting and testing tools
-- `Dockerfile-discovery-scanner-tls`: TLS scanner image (OQS base); `ENV DISCOVERY_SCANNER_TYPE=tls`
-  - `runtime` target: TLS scanner (used by cafe-deploy when TLS scanner is a separate service)
-  - `ci` target: CI/CD image with linting and testing tools
-- Wallet scanner image is now built in `cafe-scanner-wallet` repository.
-  - `runtime` target: Wallet scanner (lighter image for Wallet-only scaling)
+- Scanner images are built in dedicated repositories:
+  - TLS scanner: `cafe-scanner-tls`
+  - Wallet scanner: `cafe-scanner-wallet`
 
 **Verify services are running:**
 ```bash
@@ -772,15 +749,12 @@ docker compose ps
 # Health check (backend)
 curl http://localhost:8080/health
 
-# Health check (scanner)
-curl http://localhost:8081/health
 
 # Metrics endpoint (Prometheus format)
 curl http://localhost:8080/metrics
 
 # View logs
 docker compose logs -f cafe-discovery-backend
-docker compose logs -f cafe-discovery-scanner-tls
 ```
 
 **Stop services:**
@@ -811,26 +785,6 @@ docker run --network cafe-infra_observability --rm \
   cafe-discovery-backend:latest
 ```
 
-**Start the TLS scanner:**  
-(Scanners do not use PostgreSQL; `POSTGRES_*` env vars are optional and may be omitted if not in your config.)
-```bash
-docker run --network cafe-infra_observability --rm \
-  -p 8081:8081 \
-  -v $(pwd)/config.yaml:/app/config.yaml:ro \
-  -e CONFIG_PATH=/app/config.yaml \
-  -e DISCOVERY_SCANNER_TYPE=tls \
-  -e SCANNER_HEALTH_PORT=8081 \
-  -e LOG_LEVEL=info \
-  -e POSTGRES_HOST=postgres \
-  -e POSTGRES_PORT=5432 \
-  -e POSTGRES_DATABASE=cafe \
-  -e POSTGRES_USER=cafe \
-  -e POSTGRES_PASSWORD=cafe \
-  -e NATS_URL=nats://nats:4222 \
-  -e REDIS_URL=redis://redis:6379 \
-  oleglod/cafe-discovery-scanner-tls:latest
-```
-
 **Start the Wallet scanner:**
 ```bash
 docker run --network cafe-infra_observability --rm \
@@ -852,7 +806,7 @@ docker run --network cafe-infra_observability --rm \
 ```
 
 **Note:** 
-- Replace image names with the actual tags you built (e.g. `oleglod/cafe-discovery-backend:latest`, `oleglod/cafe-discovery-scanner-tls:latest`, `oleglod/cafe-scanner-wallet:latest`)
+- Replace image names with the actual tags you built (e.g. `oleglod/cafe-discovery-backend:latest`, `oleglod/cafe-scanner-tls:latest`, `oleglod/cafe-scanner-wallet:latest`)
 - The network `cafe-infra_observability` must exist (created by `cafe-infra`)
 - All environment variables can be overridden as needed
 - Using Docker Compose (Step 3) is recommended for easier management
@@ -1498,9 +1452,7 @@ Note: For TLS endpoints, the URL must be URL-encoded when passed as a path param
 
 ### POST /discovery/tls/scan
 
-**Deprecated**: Use the unified `/discovery/scan` endpoint instead. This endpoint is kept for backward compatibility.
-
-Scans a TLS endpoint for quantum-safe certificate support. Requires authentication. The scan is processed asynchronously via NATS.
+Deprecated endpoint removed. Use the unified `/discovery/scan` endpoint for TLS and wallet requests.
 
 Request:
 ```json
@@ -2104,11 +2056,7 @@ curl http://localhost:8080/metrics
 
 ### Metric Collection
 
-Metrics are automatically recorded when:
-- Wallet scans are performed via `ScanWallet()` service method
-- TLS scans are performed via `ScanTLS()` service method
-
-Both API-initiated scans and scanner-processed scans are instrumented, as scanners call the same service methods.
+Metrics are automatically recorded on scan lifecycle processing paths.
 
 ### Prometheus Configuration
 
@@ -2172,7 +2120,7 @@ The application uses NATS for asynchronous message processing:
 
 - **Wallet scans**: API publishes to `cafe.discovery.wallet.scan`; the Wallet scanner (plugin) consumes messages, decodes with `plugin.DecodeMessage`, runs the scan with `plugin.Run`, and persists results.
 - **TLS scans**: API publishes to `cafe.discovery.tls.scan`; the TLS scanner (plugin) does the same. TLS scanning uses OQS for PQC support.
-- **Scalability**: TLS scanner image remains in this repository (`cafe-discovery-scanner-tls`). Wallet scanner image is now produced by `cafe-scanner-wallet`.
+- **Scalability**: scanner images are produced by dedicated repositories (`cafe-scanner-tls`, `cafe-scanner-wallet`).
 
 ## Development Tools
 

@@ -149,18 +149,15 @@ func (h *DiscoveryHandler) UnifiedScan(c *fiber.Ctx) error {
 		})
 	}
 
-	// Route to appropriate handler based on what was provided
+	// Route to appropriate queue path based on what was provided
 	if req.Address != "" {
-		// Wallet scan
-		return h.scanWallet(c, req.Address)
-	} else {
-		// TLS endpoint scan
-		return h.scanTLS(c, req.URL)
+		return h.queueWalletScan(c, req.Address)
 	}
+	return h.queueEndpointScan(c, req.URL)
 }
 
-// scanWallet handles wallet scanning (extracted from original Scan method)
-func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
+// queueWalletScan validates and queues wallet scans on NATS.
+func (h *DiscoveryHandler) queueWalletScan(c *fiber.Ctx, address string) error {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -225,8 +222,8 @@ func (h *DiscoveryHandler) scanWallet(c *fiber.Ctx, address string) error {
 	})
 }
 
-// scanTLS handles TLS endpoint scanning (uses TLSHandler logic)
-func (h *DiscoveryHandler) scanTLS(c *fiber.Ctx, endpointURL string) error {
+// queueEndpointScan validates and queues TLS endpoint scans on NATS.
+func (h *DiscoveryHandler) queueEndpointScan(c *fiber.Ctx, endpointURL string) error {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -303,24 +300,6 @@ func (h *DiscoveryHandler) scanTLS(c *fiber.Ctx, endpointURL string) error {
 		"type":     "tls",
 		"status":   "processing",
 	})
-}
-
-// Scan handles POST /discovery/scan/wallet (kept for backward compatibility)
-func (h *DiscoveryHandler) Scan(c *fiber.Ctx) error {
-	var req ScanRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
-	}
-
-	if req.Address == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "address is required",
-		})
-	}
-
-	return h.scanWallet(c, req.Address)
 }
 
 // ListRPCs handles GET /discovery/rpcs

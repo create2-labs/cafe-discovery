@@ -1,9 +1,0 @@
-CompileFlags:
-  Add:
-    - -I/opt/homebrew/opt/openssl@3/include
-    - -I/usr/local/opt/openssl@3/include
-    - -I/usr/include
-    - -std=c11
-    - -Wall
-    - -Wextra
-

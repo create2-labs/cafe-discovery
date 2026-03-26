@@ -9,11 +9,3 @@ services:
     ports:
       - "8080:8080"
 
-  cafe-discovery-scanner-tls:
-    build:
-      context: .
-      dockerfile: Dockerfile-discovery-scanner-tls
-      target: runtime
-    ports:
-      - "8081:8081"
-
