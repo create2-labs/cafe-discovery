@@ -1454,24 +1454,6 @@ Note: For TLS endpoints, the URL must be URL-encoded when passed as a path param
 
 Deprecated endpoint removed. Use the unified `/discovery/scan` endpoint for TLS and wallet requests.
 
-Request:
-```json
-{
-  "url": "https://example.com"
-}
-```
-
-Note: You can specify a custom port in the URL (e.g., `https://example.com:8443`). If no port is specified, port 443 is used by default for HTTPS URLs.
-
-Response:
-```json
-{
-  "message": "scan queued successfully",
-  "endpoint": "https://example.com",
-  "status": "processing"
-}
-```
-
 ### GET /discovery/tls/scans
 
 Returns a paginated list of **IDs only** (TLS endpoint URLs) for the authenticated user's TLS scans. Use each `id` with `GET /discovery/cbom/{id}` (URL-encode the URL in the path) to fetch the full CBOM. Requires authentication.
