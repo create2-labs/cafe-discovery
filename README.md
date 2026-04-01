@@ -4,7 +4,9 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 
 > **Deployment:** This repository is **DEV/BUILD only**. Staging and production are deployed only from [cafe-deploy](https://github.com/create2-labs/cafe-deploy). Use the Docker Compose files here for local development and testing only.
 
-> **Wallet scanner extraction status:** wallet worker runtime/images have been moved to [cafe-scanner-wallet](https://github.com/create2-labs/cafe-scanner-wallet). This repository now keeps backend + persistence + TLS scanner worker only.
+> Wallet worker runtime/images have been moved to [cafe-scanner-wallet](https://github.com/create2-labs/cafe-scanner-wallet).
+
+> TLS worker runtime/images have been moved to [cafe-scanner-tls](https://github.com/create2-labs/cafe-scanner-tls). 
 
 ## Features
 
