@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -44,11 +45,30 @@ func HTTPMiddleware() fiber.Handler {
 
 		path := routePath(c)
 		status := strconv.Itoa(c.Response().StatusCode())
-		method := c.Method()
+		method := canonicalHTTPMethod(c.Method())
 
 		httpRequestsTotal.WithLabelValues(method, status, path).Inc()
 		httpRequestDurationSeconds.WithLabelValues(method, status, path).Observe(time.Since(start).Seconds())
 		return err
+	}
+}
+
+// canonicalHTTPMethod maps the request method to a stable label (RFC 7231 methods only; unknown → OTHER).
+func canonicalHTTPMethod(m string) string {
+	s := strings.ToUpper(strings.TrimSpace(m))
+	switch s {
+	case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE":
+		return s
+	case "POS":
+		// Seen with some proxies/clients + fasthttp (truncated POST).
+		return "POST"
+	case "GETT":
+		return "GET"
+	default:
+		if s == "" {
+			return "UNKNOWN"
+		}
+		return "OTHER"
 	}
 }
 
