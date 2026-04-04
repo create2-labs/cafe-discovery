@@ -98,6 +98,7 @@ func Init() *ScanMetrics {
 		),
 	}
 
+	initHTTPMetrics()
 	return defaultMetrics
 }
 

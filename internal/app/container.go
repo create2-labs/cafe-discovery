@@ -156,6 +156,9 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		// MaxAge:           3600, // 1 hour - cache preflight requests (reduces OPTIONS requests)
 	}))
 
+	// HTTP request metrics (http_requests_total, http_request_duration_seconds) for Prometheus / Grafana
+	app.Use(metrics.HTTPMiddleware())
+
 	// Setup routes
 	setupRoutes(app, discoveryHandler, tlsHandler, authHandler, authService, cafeWalletHandler, planHandler)
 
