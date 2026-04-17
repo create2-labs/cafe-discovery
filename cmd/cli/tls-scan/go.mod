@@ -1,6 +1,6 @@
 module cafe/pq-scan
 
-go 1.26.1
+go 1.26.2
 
 replace github.com/consensys/gnark-crypto => github.com/consensys/gnark-crypto v0.19.2
 
