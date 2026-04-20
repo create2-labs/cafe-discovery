@@ -7,6 +7,7 @@ import (
 
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/persistence/storage"
+	"cafe-discovery/internal/walletobservation"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
@@ -15,20 +16,22 @@ import (
 )
 
 type ScanEventHandler struct {
-	tlsWriter    *storage.TLSWriter
-	walletWriter *storage.WalletWriter
-	redisCache   *storage.RedisCache
-	natsConn     nats.Connection // optional: when set, publish scan.ready after writing to Redis so API can return result on GET
+	tlsWriter         *storage.TLSWriter
+	walletWriter      *storage.WalletWriter
+	redisCache        *storage.RedisCache
+	natsConn          nats.Connection  // optional: when set, publish scan.ready after writing to Redis so API can return result on GET
+	chainIDsByNetwork map[string]int64 // blockchains[].name → chain_id; optional, from config.ChainConfig.ChainIDByNetwork()
 }
 
 const IGNORE_SCAN_MSG = "unknown scan kind, ignoring"
 
-func NewScanEventHandler(tlsWriter *storage.TLSWriter, walletWriter *storage.WalletWriter, redisCache *storage.RedisCache, natsConn nats.Connection) *ScanEventHandler {
+func NewScanEventHandler(tlsWriter *storage.TLSWriter, walletWriter *storage.WalletWriter, redisCache *storage.RedisCache, natsConn nats.Connection, chainIDsByNetwork map[string]int64) *ScanEventHandler {
 	return &ScanEventHandler{
-		tlsWriter:    tlsWriter,
-		walletWriter: walletWriter,
-		redisCache:   redisCache,
-		natsConn:     natsConn,
+		tlsWriter:         tlsWriter,
+		walletWriter:      walletWriter,
+		redisCache:        redisCache,
+		natsConn:          natsConn,
+		chainIDsByNetwork: chainIDsByNetwork,
 	}
 }
 
@@ -176,7 +179,32 @@ func (h *ScanEventHandler) handleWalletCompleted(ctx context.Context, msg *nats.
 		Str("user_id", msg.UserID.String()).
 		Msg("persistence: wallet Redis write OK")
 	h.publishScanReady(msg.UserID, "wallet", "", msg.Address, "success")
+	h.publishWalletObserved(msg, &result)
 	return nil
+}
+
+// publishWalletObserved emits discovery.wallet.observed v0.1 JSON (informational observation on the bus).
+// It is not a command and must not be treated by CPM as an implicit assessment trigger — see cafe_cpm_v1_prompts_0.7.md (policy.assessment.requested is the canonical trigger).
+// Best-effort; does not fail the scan write path.
+func (h *ScanEventHandler) publishWalletObserved(msg *nats.ScanCompletedMessage, result *domain.ScanResult) {
+	if h.natsConn == nil {
+		return
+	}
+	meta := walletobservation.ExportMetaForScanJob(msg.ScanID)
+	ev := walletobservation.ToWalletObservedEvent(meta, result, h.chainIDsByNetwork)
+	if err := ev.Validate(); err != nil {
+		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: wallet.observed export validation failed")
+		return
+	}
+	if err := nats.PublishJSON(h.natsConn, nats.SubjectDiscoveryWalletObserved, &ev); err != nil {
+		log.Error().Err(err).Str("subject", nats.SubjectDiscoveryWalletObserved).Msg("persistence: wallet.observed publish failed")
+		return
+	}
+	log.Info().
+		Str("subject", nats.SubjectDiscoveryWalletObserved).
+		Str("scan_id", msg.ScanID.String()).
+		Str("event_id", ev.EventID).
+		Msg("NATS → PUB discovery.wallet.observed v0.1")
 }
 
 func (h *ScanEventHandler) decodeResult(in interface{}, out interface{}) error {
