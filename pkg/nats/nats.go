@@ -104,6 +104,9 @@ const (
 	SubjectScanCompleted       = "scan.completed"
 	SubjectScanFailed          = "scan.failed"
 	SubjectScanReady           = "scan.ready" // published by persistence after writing to Redis/Postgres so API can return result on GET
+	// SubjectDiscoveryWalletObserved carries JSON matching cafe-contracts discovery.wallet.observed v0.1 (observation/informational).
+	// CPM must not use this stream as the canonical assessment trigger (v0.7: use policy.assessment.requested).
+	SubjectDiscoveryWalletObserved = "cafe.discovery.events.wallet.observed.v0_1"
 	SubjectScannerHeartbeatTLS    = "scanner.heartbeat.tls"
 	SubjectScannerHeartbeatWallet = "scanner.heartbeat.wallet"
 	SubjectPersistenceReady      = "persistence.ready"

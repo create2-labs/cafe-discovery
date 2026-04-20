@@ -3,16 +3,19 @@
 ##############################
 FROM golang:1.26.2-bookworm AS builder
 
+# Build context must be the parent directory that contains both ./cafe-discovery and ./cafe-contracts
+# (same as Dockerfile-discovery-backend).
 ENV CGO_ENABLED=0
 
 WORKDIR /app
 
 # ---- Go deps ----
-COPY go.mod go.sum ./
+COPY cafe-discovery/go.mod cafe-discovery/go.sum ./
+COPY cafe-contracts /cafe-contracts
 RUN go mod download
 
 # ---- Sources ----
-COPY . .
+COPY cafe-discovery/ .
 
 # ---- Build ----
 RUN go build -o persistence ./cmd/persistence/main.go

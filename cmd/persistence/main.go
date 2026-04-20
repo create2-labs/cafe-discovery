@@ -71,11 +71,20 @@ func main() {
 	}
 	defer nc.Close()
 
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+	cfgChain, err := config.LoadChainConfig(configPath)
+	if err != nil {
+		log.Fatal().Err(err).Str("path", configPath).Msg("chain config load failed (need blockchains[].chain_id)")
+	}
+
 	// Storage and handlers
 	tlsWriter := persistenceStorage.NewTLSWriter(db.GetDB())
 	walletWriter := persistenceStorage.NewWalletWriter(db.GetDB())
 	cache := persistenceStorage.NewRedisCache(redis)
-	scanHandler := handlers.NewScanEventHandler(tlsWriter, walletWriter, cache, nc)
+	scanHandler := handlers.NewScanEventHandler(tlsWriter, walletWriter, cache, nc, cfgChain.ChainIDByNetwork())
 
 	subs, err := persistenceNats.SubscribeScanEvents(nc, scanHandler)
 	if err != nil {

@@ -15,9 +15,18 @@ jobs:
     steps:
       # ------------------------------------------------------------
       # Checkout (images built with --target ci only; not pushed)
+      # go.mod replace => ../cafe-contracts — Docker build context is workspace root below.
       # ------------------------------------------------------------
-      - name: Checkout sources
+      - name: Checkout cafe-discovery
         uses: actions/checkout@v5
+        with:
+          path: cafe-discovery
+
+      - name: Checkout cafe-contracts
+        uses: actions/checkout@v5
+        with:
+          repository: create2-labs/cafe-contracts
+          path: cafe-contracts
 
       # ------------------------------------------------------------
       # Docker / Buildx
@@ -33,7 +42,7 @@ jobs:
           set -euo pipefail
           docker build \
             --target ci \
-            -f Dockerfile-discovery-backend \
+            -f cafe-discovery/Dockerfile-discovery-backend \
             -t cafe-discovery-backend:ci .
 
       - name: Run backend CI checks (inside CI image)

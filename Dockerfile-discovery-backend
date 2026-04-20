@@ -3,6 +3,8 @@
 ##############################
 FROM oleglod/cafe-crypto-backend:build-oqs AS builder
 
+# Build context must be the parent directory that contains both repos, e.g. create2-labs/
+# with ./cafe-discovery and ./cafe-contracts (go.mod replace => ../cafe-contracts).
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -37,11 +39,12 @@ ENV PKG_CONFIG_PATH=/opt/liboqs/lib/pkgconfig
 WORKDIR /app
 
 # ---- Go deps ----
-COPY go.mod go.sum ./
+COPY cafe-discovery/go.mod cafe-discovery/go.sum ./
+COPY cafe-contracts /cafe-contracts
 RUN go mod download
 
 # ---- Sources ----
-COPY . .
+COPY cafe-discovery/ .
 
 # ---- Build ----
 RUN go build -o server ./cmd/server/main.go
@@ -91,7 +94,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/server /app/server
 
 # Copy NGINX configuration
-COPY nginx-version.conf /etc/nginx/nginx.conf
+COPY cafe-discovery/nginx-version.conf /etc/nginx/nginx.conf
 
 # Create version.json at build time
 # If APP_VERSION is not set (dev mode), try to get <branch>-<sha> from git, otherwise use "dev"
@@ -111,7 +114,7 @@ RUN if [ -z "$APP_VERSION" ]; then \
     chown nginx:nginx /usr/share/nginx/html/version.json
 
 # Copy entrypoint script
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY cafe-discovery/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose only the application port (8080)
