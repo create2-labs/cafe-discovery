@@ -33,7 +33,7 @@ func ExportMetaForScanJob(scanID uuid.UUID) ExportMeta {
 // ToWalletObservedEvent maps a Discovery scan result to the shared wire contract.
 // The payload is an observation snapshot for shared types (e.g. embedded in policy.assessment.requested); it is not by itself a CPM command (see execution pack v0.7).
 //
-// current_pq_posture is always "unknown" in this revision (placeholder; derivation is PR5).
+// current_pq_posture is derived from normalized observed wallet data.
 // chainIDsByNetwork must come from config.ChainConfig.ChainIDByNetwork() (blockchains[].name -> chain_id).
 // If nil or empty, no chain IDs are emitted for network names. Unknown names are skipped (never 0 as a sentinel).
 func ToWalletObservedEvent(meta ExportMeta, scan *domain.ScanResult, chainIDsByNetwork map[string]int64) v01.Event {
@@ -68,9 +68,31 @@ func ToWalletObservedEvent(meta ExportMeta, scan *domain.ScanResult, chainIDsByN
 			PublicKeyExposed: scan.KeyExposed,
 			IsMultichain:     isMulti,
 			ObservedAt:       scan.ScannedAt,
-			// Placeholder until Discovery derives posture on the export path (see execution pack PR5).
-			CurrentPQPosture: string(v01.PQPostureUnknown),
+			CurrentPQPosture: string(deriveCurrentPQPosture(scan)),
 		},
+	}
+}
+
+func deriveCurrentPQPosture(scan *domain.ScanResult) v01.CurrentPQPosture {
+	if scan == nil {
+		return v01.PQPostureUnknown
+	}
+
+	// Deterministic posture derivation from normalized observation only.
+	// Rule set:
+	// - NIST level 1: classical_only (quantum-broken baseline)
+	// - NIST levels 2..4: hybrid (transitional/post-quantum strengthening)
+	// - NIST level 5: full_pq (PQC-ready target state)
+	// - any other value: unknown
+	switch scan.NISTLevel {
+	case domain.NISTLevel1:
+		return v01.PQPostureClassicalOnly
+	case domain.NISTLevel2, domain.NISTLevel3, domain.NISTLevel4:
+		return v01.PQPostureHybrid
+	case domain.NISTLevel5:
+		return v01.PQPostureFullPQ
+	default:
+		return v01.PQPostureUnknown
 	}
 }
 
