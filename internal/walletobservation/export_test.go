@@ -84,6 +84,64 @@ func TestToWalletObservedEvent_mapsScanToWire(t *testing.T) {
 	}
 }
 
+func TestToWalletObservedEvent_derivesCurrentPQPostureFromNISTLevel(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		nistLevel domain.NISTLevel
+		want      string
+	}{
+		{
+			name:      "classical_only at level 1",
+			nistLevel: domain.NISTLevel1,
+			want:      string(v01.PQPostureClassicalOnly),
+		},
+		{
+			name:      "hybrid at level 3",
+			nistLevel: domain.NISTLevel3,
+			want:      string(v01.PQPostureHybrid),
+		},
+		{
+			name:      "full_pq at level 5",
+			nistLevel: domain.NISTLevel5,
+			want:      string(v01.PQPostureFullPQ),
+		},
+		{
+			name:      "unknown at unsupported level",
+			nistLevel: domain.NISTLevel(0),
+			want:      string(v01.PQPostureUnknown),
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scan := &domain.ScanResult{
+				Address:    "0xabc0000000000000000000000000000000000009",
+				Type:       domain.AccountTypeEOA,
+				Algorithm:  domain.AlgorithmECDSAsecp256k1,
+				NISTLevel:  tc.nistLevel,
+				ScannedAt:  time.Now().UTC(),
+				Networks:   []string{"ethereum-mainnet"},
+			}
+
+			ev := ToWalletObservedEvent(ExportMeta{
+				EventID:       "evt_pq_1",
+				CorrelationID: "corr_pq_1",
+				CausationID:   "cause_pq_1",
+			}, scan, testChainMap)
+			if err := ev.Validate(); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+			if ev.Payload.CurrentPQPosture != tc.want {
+				t.Fatalf("posture: %q want %q", ev.Payload.CurrentPQPosture, tc.want)
+			}
+		})
+	}
+}
+
 func TestToWalletObservedEvent_emptyChainIDsUnknownNetwork(t *testing.T) {
 	t.Parallel()
 	ts := time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC)
