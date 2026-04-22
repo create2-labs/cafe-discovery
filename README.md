@@ -1,5 +1,117 @@
 # Cafe Discovery Service
 
+1. [Cafe Discovery Service](#cafe-discovery-service)
+   1. [Features](#features)
+   2. [Architecture](#architecture)
+      1. [Goals](#goals)
+      2. [System Components](#system-components)
+         1. [1. API Server (`cmd/server`)](#1-api-server-cmdserver)
+         2. [2. Scanners (`cmd/scanner`)](#2-scanners-cmdscanner)
+         3. [3. Persistence Service (`cmd/persistence`)](#3-persistence-service-cmdpersistence)
+         4. [4. NATS](#4-nats)
+         5. [5. PostgreSQL](#5-postgresql)
+         6. [6. Redis](#6-redis)
+      3. [Architecture Decisions](#architecture-decisions)
+      4. [Plugin-based scan architecture](#plugin-based-scan-architecture)
+      5. [Project Structure](#project-structure)
+      6. [Dockerfile Structure](#dockerfile-structure)
+      7. [Data Flow](#data-flow)
+         1. [Wallet Scan](#wallet-scan)
+         2. [TLS Scan](#tls-scan)
+      8. [Data structure (CPM export contract)](#data-structure-cpm-export-contract)
+      9. [Local Development](#local-development)
+   3. [CI/CD and Release Process](#cicd-and-release-process)
+      1. [Overview](#overview)
+      2. [Pipeline Separation](#pipeline-separation)
+         1. [1. Pull Request CI (`.github/workflows/ci.yml`)](#1-pull-request-ci-githubworkflowsciyml)
+            1. [Running CI Locally](#running-ci-locally)
+         2. [2. Docker Release Pipeline (`.github/workflows/docker-release.yml`)](#2-docker-release-pipeline-githubworkflowsdocker-releaseyml)
+      3. [Release Procedure](#release-procedure)
+      4. [Security and Auditability](#security-and-auditability)
+      5. [Image Tags](#image-tags)
+      6. [Version Endpoint](#version-endpoint)
+         1. [Version flow (end-to-end)](#version-flow-end-to-end)
+   4. [Configuration](#configuration)
+      1. [Configuration File (`config.yaml`)](#configuration-file-configyaml)
+   5. [Prerequisites](#prerequisites)
+   6. [Running the Service](#running-the-service)
+      1. [Development Mode (Local, Outside Docker)](#development-mode-local-outside-docker)
+      2. [Docker Compose Mode](#docker-compose-mode)
+      3. [Step 1: Build OQS base images](#step-1-build-oqs-base-images)
+      4. [Step 2: Start Infrastructure Services](#step-2-start-infrastructure-services)
+         1. [Step 3: Build and Start Cafe Discovery Services](#step-3-build-and-start-cafe-discovery-services)
+         2. [Step 3-bis: Start Services Independently (Advanced)](#step-3-bis-start-services-independently-advanced)
+      5. [Environment Variables](#environment-variables)
+      6. [Starting in debug mode](#starting-in-debug-mode)
+      7. [Verifying Everything Works](#verifying-everything-works)
+   7. [Post-Quantum Cryptography (PQC)](#post-quantum-cryptography-pqc)
+      1. [PQC JWT Authentication](#pqc-jwt-authentication)
+         1. [Prerequisites for PQC JWT](#prerequisites-for-pqc-jwt)
+         2. [JWT Token Format](#jwt-token-format)
+         3. [Configuration](#configuration-1)
+         4. [Security Considerations](#security-considerations)
+      2. [PQC TLS Certificate Scanning](#pqc-tls-certificate-scanning)
+         1. [Understanding NIST Security Levels and Risk Scores](#understanding-nist-security-levels-and-risk-scores)
+            1. [NIST Security Levels](#nist-security-levels)
+            2. [Overall NIST Level Calculation](#overall-nist-level-calculation)
+            3. [Risk Score Calculation](#risk-score-calculation)
+            4. [Understanding "N/A" in Detailed NIST Levels](#understanding-na-in-detailed-nist-levels)
+         2. [Generating PQC Certificates](#generating-pqc-certificates)
+         3. [Testing with PQC Certificates](#testing-with-pqc-certificates)
+         4. [Current Limitations](#current-limitations)
+   8. [API Endpoints](#api-endpoints)
+      1. [Authentication](#authentication)
+      2. [POST /auth/signup](#post-authsignup)
+      3. [POST /auth/signin](#post-authsignin)
+      4. [POST /discovery/scan](#post-discoveryscan)
+      5. [GET /discovery/scans](#get-discoveryscans)
+      6. [GET /discovery/cbom/\*](#get-discoverycbom)
+      7. [POST /discovery/tls/scan](#post-discoverytlsscan)
+      8. [GET /discovery/tls/scans](#get-discoverytlsscans)
+      9. [GET /discovery/rpcs](#get-discoveryrpcs)
+      10. [GET /discovery/scanners](#get-discoveryscanners)
+      11. [GET /version](#get-version)
+      12. [GET /health](#get-health)
+      13. [GET /metrics](#get-metrics)
+   9. [Subscription Plans](#subscription-plans)
+      1. [Available Plans](#available-plans)
+      2. [Plan Management Endpoints](#plan-management-endpoints)
+         1. [GET /plans](#get-plans)
+         2. [GET /plans/current](#get-planscurrent)
+         3. [GET /plans/usage](#get-plansusage)
+      3. [Plan Enforcement](#plan-enforcement)
+      4. [Worker Health Check](#worker-health-check)
+   10. [Testing](#testing)
+       1. [1. Register and Authenticate](#1-register-and-authenticate)
+       2. [2. Test Unified Scanning](#2-test-unified-scanning)
+       3. [3. List Scan IDs and Retrieve CBOMs](#3-list-scan-ids-and-retrieve-cboms)
+       4. [4. Retrieve CBOM (Cryptographic Bill of Materials)](#4-retrieve-cbom-cryptographic-bill-of-materials)
+          1. [List wallet scan IDs and fetch CBOMs](#list-wallet-scan-ids-and-fetch-cboms)
+          2. [List TLS scan IDs and fetch CBOMs](#list-tls-scan-ids-and-fetch-cboms)
+          3. [Get Specific CBOM by Address/URL](#get-specific-cbom-by-addressurl)
+          4. [CBOM Structure](#cbom-structure)
+       5. [5. Public Endpoints](#5-public-endpoints)
+   11. [Risk Scoring](#risk-scoring)
+       1. [Wallet Risk Score](#wallet-risk-score)
+       2. [TLS Risk Score](#tls-risk-score)
+          1. [Calculation Method](#calculation-method)
+          2. [Final Score](#final-score)
+          3. [Risk Categories](#risk-categories)
+   12. [Observability](#observability)
+       1. [Metrics Endpoint](#metrics-endpoint)
+       2. [Available Metrics](#available-metrics)
+          1. [Wallet Scan Metrics](#wallet-scan-metrics)
+          2. [TLS Scan Metrics](#tls-scan-metrics)
+       3. [Metric Collection](#metric-collection)
+       4. [Prometheus Configuration](#prometheus-configuration)
+       5. [Metric Design Principles](#metric-design-principles)
+   13. [Background Processing](#background-processing)
+   14. [Development Tools](#development-tools)
+       1. [Public Key Recovery Utility (`cmd/cli/publickey`)](#public-key-recovery-utility-cmdclipublickey)
+   15. [Security Notes](#security-notes)
+   16. [Stopping Discovery services](#stopping-discovery-services)
+   17. [Additional Resources](#additional-resources)
+
 A Discovery service for identifying cryptographic exposures and quantum vulnerabilities on the Ethereum network and related infrastructure.
 
 > **Deployment:** This repository is **DEV/BUILD only**. Staging and production are deployed only from [cafe-deploy](https://github.com/create2-labs/cafe-deploy). Use the Docker Compose files here for local development and testing only.
@@ -68,8 +180,10 @@ The application is designed to be scalable with a focus on performance.
   - Subscribing to NATS subjects `scan.started`, `scan.completed`, `scan.failed` (queue `cafe.persistence`)
   - Writing scan results idempotently to PostgreSQL (TLS and wallet scan tables) and to Redis (write-through cache for performance)
   - When a scan result has been written to Redis (and PostgreSQL), publishing a NATS message (`scan.ready`); the **backend consumes this message** so GET requests can return the result
+  - After a **successful wallet** `scan.completed` write, publishing a **normative observation** JSON on `cafe.discovery.events.wallet.observed.v0_1` (see [Data structure (CPM export contract)](#data-structure-cpm-export-contract)); best-effort, does not roll back the scan if publish fails
   - Enforcing valid scan state transitions
   - Publishing `persistence.ready` on startup so the backend can wait for persistence before initializing default endpoints
+  - Loading `config.yaml` at startup for **`blockchains[].chain_id`** (required for the observation export mapping; see configuration notes in that section)
 - **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run the persistence service before or with the backend for full functionality.
 - **Deployment**: Built with `Dockerfile-discovery-persistence`; can be run as a separate process or container (e.g. in cafe-deploy).
 
@@ -82,6 +196,7 @@ The application is designed to be scalable with a focus on performance.
   - `cafe.discovery.tls.scan`: TLS scan requests
   - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
   - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
+  - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
   - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
 - Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
 
@@ -241,6 +356,56 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
 
 **Note:** All backend API calls require authentication. Unauthenticated users cannot call the API.
 
+### Data structure (CPM export contract)
+
+Discovery remains the **owner** of internal scan models and persistence (for example wallet CBOMs and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`discoverywalletobserved/v01`, `event_type` `discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
+
+**Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafe.discovery.events.wallet.observed.v0_1`** after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
+
+**Integration semantics (execution pack v0.7):** that message is an **observation / informational** event on the bus. **Crypto Policy Management (CPM)** must **not** treat it as an automatic trigger for policy assessment. Assessment is started only from an explicit command (e.g. **`policy.assessment.requested.v0.1`**) or equivalent API, as described in [`cafe_cpm_v1_prompts_0.7.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/cafe_cpm_v1_prompts_0.7.md) in repository **`cafe-crypto-policy-mgt`**. The same wire types may be **embedded** in that command as a snapshot.
+
+| Topic | Rule |
+| --- | --- |
+| Contract ID | `discovery.wallet.observed` at version **`v0.1`** (`event_type` / `event_version` on the wire) |
+| Wire types & vocabulary | Packaged in **`cafe-contracts`**; CPM owns semantics; exported strings are stable enums / patterns |
+| Producer label | JSON field `producer` must be `cafe-discovery` where the contract requires it |
+| Chain identity | **Numeric EVM chain IDs** in `chain_ids`, from config mapping; omit unknown networks (no sentinel `0`) |
+| Discovery-only fields | User rows, plan limits, scanner job internals, raw CBOM blobs — **not** part of this export |
+
+**Envelope (observation event)** — top-level fields CPM validates for v0.1:
+
+- `event_id`, `event_type`, `event_version`, `occurred_at`, `correlation_id`, `causation_id`, `producer`
+- `subject`: `{ "type": "wallet", "id": "<stable wallet subject id>" }`
+- `payload`: policy-relevant observation block (see below)
+
+**Payload — observed (policy inputs)**:
+
+| Field | Meaning |
+| --- | --- |
+| `chain_ids` | Active chains for this observation (numeric IDs) |
+| `account_kind` | Normalized account model (see vocabulary) |
+| `current_algorithm` | Normalized algorithm identifier (see vocabulary) |
+| `public_key_exposed` | Whether the public key is considered exposed for policy purposes |
+| `is_multichain` | Whether the wallet is observed across more than one chain |
+| `observed_at` | Timestamp of the observation |
+
+**Payload — derived**:
+
+| Field | Meaning |
+| --- | --- |
+| `current_pq_posture` | Summary `classical_only` \| `hybrid` \| `full_pq` \| `unknown` — in current Discovery export this may be placeholder `unknown` until posture derivation lands; see execution pack |
+
+**Exported vocabulary** — values Discovery must map to when emitting this contract:
+
+- **Account kinds:** `eoa`, `erc4337_smart_account`, `delegated_eoa_7702`, `contract_account`, `unknown`
+- **Algorithms:** `secp256k1_ecrecover`, `mldsa44`, `mldsa65`, `falcon512`, and any non-empty string with prefix `hybrid_` for hybrid profiles
+- **Subject type (v0.1):** `wallet`
+- **PQ posture:** `classical_only`, `hybrid`, `full_pq`, `unknown`
+
+**Canonical JSON fixture:** [`cafe-contracts` `discoverywalletobserved/v01/testdata/discovery_wallet_observed_v01.json`](https://github.com/create2-labs/cafe-contracts/blob/main/discoverywalletobserved/v01/testdata/discovery_wallet_observed_v01.json) (module `github.com/create2-labs/cafe-contracts`). Local placeholder tests also use `internal/walletobservation/testdata/`.
+
+**Further reading:** [cafe-crypto-policy-mgt `cafe_cpm_v1_prompts_0.7.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/cafe_cpm_v1_prompts_0.7.md) — authoritative pack for CPM integration (explicit assessment trigger, not auto-consume of observation stream).
+
 ### Local Development
 
 - Infrastructure services (PostgreSQL, NATS, Redis) are managed in [cafe-infra](https://github.com/kantika-tech/cafe-infra)
@@ -308,16 +473,14 @@ docker compose run --rm cafe-discovery-backend-ci
 
 **Method 2: Using Docker Directly**
 
-You can also build and run the CI images directly with Docker:
+You can also build and run the CI images directly with Docker (build context = this repo root, where `Dockerfile-discovery-backend` lives):
 
 ```bash
-# Build backend CI image
 docker build \
   --target ci \
   -f Dockerfile-discovery-backend \
   -t cafe-discovery-backend:ci .
 
-# Run backend CI checks
 docker run --rm cafe-discovery-backend:ci
 
 ```
@@ -562,9 +725,11 @@ blockchains:
   - name: ethereum-mainnet
     rpc: "https://ethereum-rpc.publicnode.com"
     moralis_chain_name: "eth"
+    chain_id: 1   # EIP-155; required for wallet observation export (persistence); must be unique per row
   - name: polygon
     rpc: "https://polygon-bor-rpc.publicnode.com"
     moralis_chain_name: "polygon amoy"
+    chain_id: 137
   # ... more networks
 ```
 
@@ -572,6 +737,7 @@ Note:
 - Environment variables always override values from `config.yaml` 
 - For local Docker Compose, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
 - The `CONFIG_PATH` environment variable can be used to specify a custom config file path (default: `config.yaml`)
+- Each **`blockchains[]`** entry must include a positive **`chain_id`** (validated when `LoadChainConfig` runs — used by API/scanner **and** persistence for `discovery.wallet.observed` `chain_ids` mapping)
 
 ## Prerequisites
 
