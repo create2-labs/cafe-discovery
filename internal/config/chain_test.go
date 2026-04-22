@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -67,7 +68,11 @@ func TestLoadChainConfig_repoConfigYAML(t *testing.T) {
 	if !ok {
 		t.Fatal("unable to resolve test file path")
 	}
-	cfgPath := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "config.yaml"))
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	cfgPath := filepath.Join(repoRoot, "config.yaml")
+	if _, err := os.Stat(cfgPath); err != nil {
+		cfgPath = filepath.Join(repoRoot, "config.local-example.yaml")
+	}
 
 	cfg, err := LoadChainConfig(cfgPath)
 	if err != nil {
