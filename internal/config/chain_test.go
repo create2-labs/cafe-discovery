@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,8 +63,13 @@ func TestChainConfig_Validate_badChainID(t *testing.T) {
 
 func TestLoadChainConfig_repoConfigYAML(t *testing.T) {
 	t.Parallel()
-	// go test runs with working directory = module root (cafe-discovery).
-	cfg, err := LoadChainConfig(filepath.Clean(filepath.Join("..", "..", "config.yaml")))
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("unable to resolve test file path")
+	}
+	cfgPath := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "config.yaml"))
+
+	cfg, err := LoadChainConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
