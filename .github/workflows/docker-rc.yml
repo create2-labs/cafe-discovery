@@ -39,20 +39,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          path: cafe-discovery
 
       - name: Checkout default ref
         if: github.event_name != 'pull_request_target'
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          path: cafe-discovery
-
-      - name: Checkout cafe-contracts
-        uses: actions/checkout@v5
-        with:
-          repository: create2-labs/cafe-contracts
-          path: cafe-contracts
 
       # ------------------------------------------------------------
       # Docker / Buildx setup
@@ -71,7 +63,6 @@ jobs:
       # ------------------------------------------------------------
       - name: Extract version and SHA
         id: version
-        working-directory: cafe-discovery
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
@@ -112,7 +103,7 @@ jobs:
             --load \
             --platform linux/amd64 \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
-            -f cafe-discovery/Dockerfile-discovery-backend \
+            -f Dockerfile-discovery-backend \
             -t oleglod/cafe-discovery-backend:scan-local \
             .
 
@@ -121,7 +112,7 @@ jobs:
           docker buildx build \
             --load \
             --platform linux/amd64 \
-            -f cafe-discovery/Dockerfile-discovery-persistence \
+            -f Dockerfile-discovery-persistence \
             -t oleglod/cafe-discovery-persistence:scan-local \
             .
 
@@ -162,7 +153,7 @@ jobs:
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            -f cafe-discovery/Dockerfile-discovery-backend \
+            -f Dockerfile-discovery-backend \
             $TAGS \
             --push .
 
@@ -176,6 +167,6 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            -f cafe-discovery/Dockerfile-discovery-persistence \
+            -f Dockerfile-discovery-persistence \
             $TAGS \
             --push .

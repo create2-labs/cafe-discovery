@@ -3,8 +3,8 @@
 services:
   cafe-discovery-backend:
     build:
-      context: ..
-      dockerfile: cafe-discovery/Dockerfile-discovery-backend
+      context: .
+      dockerfile: Dockerfile-discovery-backend
       target: runtime
     ports:
       - "8080:8080"

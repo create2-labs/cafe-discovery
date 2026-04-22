@@ -473,14 +473,12 @@ docker compose run --rm cafe-discovery-backend-ci
 
 **Method 2: Using Docker Directly**
 
-You can also build and run the CI images directly with Docker. The backend Dockerfile expects the **build context** to be the monorepo parent that contains both `cafe-discovery/` and `cafe-contracts/` (see `go.mod` `replace`).
+You can also build and run the CI images directly with Docker (build context = this repo root, where `Dockerfile-discovery-backend` lives):
 
 ```bash
-cd ..   # parent of cafe-discovery (e.g. create2-labs with sibling cafe-contracts)
-
 docker build \
   --target ci \
-  -f cafe-discovery/Dockerfile-discovery-backend \
+  -f Dockerfile-discovery-backend \
   -t cafe-discovery-backend:ci .
 
 docker run --rm cafe-discovery-backend:ci

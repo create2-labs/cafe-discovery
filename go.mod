@@ -3,7 +3,7 @@ module cafe-discovery
 go 1.26.2
 
 require (
-	github.com/create2-labs/cafe-contracts v0.0.0
+	github.com/create2-labs/cafe-contracts v0.0.1
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -72,6 +72,3 @@ require (
 
 // Force use of patched gnark-crypto version to fix CVE
 replace github.com/consensys/gnark-crypto => github.com/consensys/gnark-crypto v0.19.2
-
-// Local path for development and Docker/CI (see Dockerfile-discovery-backend: build context = parent of cafe-discovery)
-replace github.com/create2-labs/cafe-contracts => ../cafe-contracts
