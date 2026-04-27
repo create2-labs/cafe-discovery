@@ -10,7 +10,7 @@ import (
 
 	"cafe-discovery/internal/domain"
 
-	v01 "github.com/create2-labs/cafe-contracts/discoverywalletobserved/v01"
+	v01 "github.com/create2-labs/cafe-contracts/observation/wallet/v01"
 	"github.com/google/uuid"
 )
 

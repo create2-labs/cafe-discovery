@@ -183,7 +183,7 @@ func (h *ScanEventHandler) handleWalletCompleted(ctx context.Context, msg *nats.
 	return nil
 }
 
-// publishWalletObserved emits discovery.wallet.observed v0.1 JSON (informational observation on the bus).
+// publishWalletObserved emits cafe.discovery.wallet.observed v0.1 JSON (informational observation on the bus).
 // It is not a command and must not be treated by CPM as an implicit assessment trigger — see cafe_cpm_v1_prompts_0.7.md (policy.assessment.requested is the canonical trigger).
 // Best-effort; does not fail the scan write path.
 func (h *ScanEventHandler) publishWalletObserved(msg *nats.ScanCompletedMessage, result *domain.ScanResult) {
@@ -204,7 +204,7 @@ func (h *ScanEventHandler) publishWalletObserved(msg *nats.ScanCompletedMessage,
 		Str("subject", nats.SubjectDiscoveryWalletObserved).
 		Str("scan_id", msg.ScanID.String()).
 		Str("event_id", ev.EventID).
-		Msg("NATS → PUB discovery.wallet.observed v0.1")
+		Msg("NATS → PUB cafe.discovery.wallet.observed v0.1")
 }
 
 func (h *ScanEventHandler) decodeResult(in interface{}, out interface{}) error {

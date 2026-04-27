@@ -7,11 +7,11 @@ import (
 
 	"cafe-discovery/internal/domain"
 
-	v01 "github.com/create2-labs/cafe-contracts/discoverywalletobserved/v01"
+	v01 "github.com/create2-labs/cafe-contracts/observation/wallet/v01"
 	"github.com/google/uuid"
 )
 
-// ExportMeta carries envelope identifiers for discovery.wallet.observed v0.1.
+// ExportMeta carries envelope identifiers for cafe.discovery.wallet.observed v0.1.
 // OccurredAt, if zero, defaults to scan.ScannedAt.
 type ExportMeta struct {
 	EventID       string

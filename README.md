@@ -196,7 +196,7 @@ The application is designed to be scalable with a focus on performance.
   - `cafe.discovery.tls.scan`: TLS scan requests
   - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
   - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
-  - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
+  - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `cafe.discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
   - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
 - Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
 
@@ -358,7 +358,7 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
 
 ### Data structure (CPM export contract)
 
-Discovery remains the **owner** of internal scan models and persistence (for example wallet CBOMs and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`discoverywalletobserved/v01`, `event_type` `discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
+Discovery remains the **owner** of internal scan models and persistence (for example wallet CBOMs and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
 
 **Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafe.discovery.events.wallet.observed.v0_1`** after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
 
@@ -366,7 +366,7 @@ Discovery remains the **owner** of internal scan models and persistence (for exa
 
 | Topic | Rule |
 | --- | --- |
-| Contract ID | `discovery.wallet.observed` at version **`v0.1`** (`event_type` / `event_version` on the wire) |
+| Contract ID | `cafe.discovery.wallet.observed` at version **`v0.1`** (`event_type` / `event_version` on the wire) |
 | Wire types & vocabulary | Packaged in **`cafe-contracts`**; CPM owns semantics; exported strings are stable enums / patterns |
 | Producer label | JSON field `producer` must be `cafe-discovery` where the contract requires it |
 | Chain identity | **Numeric EVM chain IDs** in `chain_ids`, from config mapping; omit unknown networks (no sentinel `0`) |
@@ -402,7 +402,7 @@ Discovery remains the **owner** of internal scan models and persistence (for exa
 - **Subject type (v0.1):** `wallet`
 - **PQ posture:** `classical_only`, `hybrid`, `full_pq`, `unknown`
 
-**Canonical JSON fixture:** [`cafe-contracts` `discoverywalletobserved/v01/testdata/discovery_wallet_observed_v01.json`](https://github.com/create2-labs/cafe-contracts/blob/main/discoverywalletobserved/v01/testdata/discovery_wallet_observed_v01.json) (module `github.com/create2-labs/cafe-contracts`). Local placeholder tests also use `internal/walletobservation/testdata/`.
+**Canonical JSON fixture:** [`cafe-contracts` `observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json`](https://github.com/create2-labs/cafe-contracts/blob/main/observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json) (module `github.com/create2-labs/cafe-contracts`). Local placeholder tests also use `internal/walletobservation/testdata/`.
 
 **Further reading:** [cafe-crypto-policy-mgt `cafe_cpm_v1_prompts_0.7.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/cafe_cpm_v1_prompts_0.7.md) — authoritative pack for CPM integration (explicit assessment trigger, not auto-consume of observation stream).
 
@@ -737,7 +737,7 @@ Note:
 - Environment variables always override values from `config.yaml` 
 - For local Docker Compose, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
 - The `CONFIG_PATH` environment variable can be used to specify a custom config file path (default: `config.yaml`)
-- Each **`blockchains[]`** entry must include a positive **`chain_id`** (validated when `LoadChainConfig` runs — used by API/scanner **and** persistence for `discovery.wallet.observed` `chain_ids` mapping)
+- Each **`blockchains[]`** entry must include a positive **`chain_id`** (validated when `LoadChainConfig` runs — used by API/scanner **and** persistence for `cafe.discovery.wallet.observed` `chain_ids` mapping)
 
 ## Prerequisites
 
