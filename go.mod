@@ -3,7 +3,7 @@ module cafe-discovery
 go 1.26.2
 
 require (
-	github.com/create2-labs/cafe-contracts v0.0.1
+	github.com/create2-labs/cafe-contracts v0.0.2-0.20260427135040-13e8ec5f9ea0
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -72,3 +72,4 @@ require (
 
 // Force use of patched gnark-crypto version to fix CVE
 replace github.com/consensys/gnark-crypto => github.com/consensys/gnark-crypto v0.19.2
+
