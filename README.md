@@ -64,15 +64,16 @@
       2. [POST /auth/signup](#post-authsignup)
       3. [POST /auth/signin](#post-authsignin)
       4. [POST /discovery/scan](#post-discoveryscan)
-      5. [GET /discovery/scans](#get-discoveryscans)
-      6. [GET /discovery/cbom/\*](#get-discoverycbom)
-      7. [POST /discovery/tls/scan](#post-discoverytlsscan)
-      8. [GET /discovery/tls/scans](#get-discoverytlsscans)
-      9. [GET /discovery/rpcs](#get-discoveryrpcs)
-      10. [GET /discovery/scanners](#get-discoveryscanners)
-      11. [GET /version](#get-version)
-      12. [GET /health](#get-health)
-      13. [GET /metrics](#get-metrics)
+      5. [POST /discovery/assessments/request](#post-discoveryassessmentsrequest)
+      6. [GET /discovery/scans](#get-discoveryscans)
+      7. [GET /discovery/cbom/\*](#get-discoverycbom)
+      8. [POST /discovery/tls/scan](#post-discoverytlsscan)
+      9. [GET /discovery/tls/scans](#get-discoverytlsscans)
+      10. [GET /discovery/rpcs](#get-discoveryrpcs)
+      11. [GET /discovery/scanners](#get-discoveryscanners)
+      12. [GET /version](#get-version)
+      13. [GET /health](#get-health)
+      14. [GET /metrics](#get-metrics)
    9. [Subscription Plans](#subscription-plans)
       1. [Available Plans](#available-plans)
       2. [Plan Management Endpoints](#plan-management-endpoints)
@@ -197,6 +198,7 @@ The application is designed to be scalable with a focus on performance.
   - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
   - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
   - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `cafe.discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
+  - `cafe.policy.events.policy.assessment.requested.v0_1`: Published by backend only on explicit authenticated user action (`POST /discovery/assessments/request`); JSON matches `cafe-contracts` `cafenatsv01.PolicyAssessmentRequested`
   - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
 - Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
 
@@ -1449,6 +1451,43 @@ Response:
 ```
 
 Note: The endpoint automatically detects the scan type based on the provided field (`address` for wallets, `url` for TLS endpoints). You cannot specify both fields in the same request.
+
+### POST /discovery/assessments/request
+
+Publishes the explicit assessment command `policy.assessment.requested.v0.1` on NATS from an authenticated user action. Requires authentication.
+
+Request:
+```json
+{
+  "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  "selection_request": {
+    "target_posture": "hybrid",
+    "target_chain_ids": [1, 137],
+    "allow_new_wallet": true,
+    "address_continuity_required": true,
+    "approval_mode": "manual"
+  },
+  "client_request_id": "frontend-click-42"
+}
+```
+
+Response:
+```json
+{
+  "message": "assessment request published",
+  "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  "event_id": "evt_par_...",
+  "correlation_id": "corr_par_...",
+  "causation_id": "cause_par_...",
+  "subject": "cafe.policy.events.policy.assessment.requested.v0_1",
+  "status": "queued"
+}
+```
+
+Notes:
+- Discovery does **not** auto-trigger CPM from `cafe.discovery.wallet.observed.v0_1`.
+- The command embeds a normalized wallet observation snapshot and the policy selection request.
+- Identifier mapping is deterministic for the same input tuple (`user_id`, normalized address, observation id, normalized selection request, `client_request_id`).
 
 ### GET /discovery/scans
 

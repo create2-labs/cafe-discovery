@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -11,8 +14,10 @@ import (
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/walletobservation"
 	"cafe-discovery/pkg/nats"
 
+	contracts "github.com/create2-labs/cafe-contracts/cafenatsv01"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -62,6 +67,13 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService 
 type ScanRequest struct {
 	Address string `json:"address,omitempty"` // For wallet scans
 	URL     string `json:"url,omitempty"`     // For TLS endpoint scans
+}
+
+// AssessmentRequest represents an explicit user-triggered policy assessment request.
+type AssessmentRequest struct {
+	Address         string                               `json:"address"`
+	Selection       contracts.PolicySelectionRequestWire `json:"selection_request"`
+	ClientRequestID string                               `json:"client_request_id,omitempty"`
 }
 
 // ListAvailableScanners returns the list of scanner types currently available (announced via NATS).
@@ -154,6 +166,150 @@ func (h *DiscoveryHandler) UnifiedScan(c *fiber.Ctx) error {
 		return h.queueWalletScan(c, req.Address)
 	}
 	return h.queueEndpointScan(c, req.URL)
+}
+
+// RequestAssessment handles POST /discovery/assessments/request.
+// It publishes the explicit policy.assessment.requested.v0.1 command from authenticated user action.
+func (h *DiscoveryHandler) RequestAssessment(c *fiber.Ctx) error {
+	userID, err := h.getAuthenticatedUserID(c)
+	if err != nil {
+		return err
+	}
+
+	var req AssessmentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if strings.TrimSpace(req.Address) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "address is required"})
+	}
+
+	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(req.Address)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	req.Selection.Normalize()
+	if err := req.Selection.Validate(); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("invalid selection_request: %v", err)})
+	}
+
+	scan, err := h.userScanCache.GetWalletScan(c.Context(), userID, normalizedAddress)
+	if err != nil || scan == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "wallet observation not found for this address; run discovery scan first",
+		})
+	}
+
+	ev, subject, err := h.buildPolicyAssessmentRequestedEvent(userID, normalizedAddress, scan, req.Selection, req.ClientRequestID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to build assessment request event"})
+	}
+	if err := nats.PublishJSON(h.natsConn, subject, ev); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to publish assessment request"})
+	}
+
+	log.Info().
+		Str("subject", subject).
+		Str("event_id", ev.EventID).
+		Str("correlation_id", ev.CorrelationID).
+		Str("causation_id", ev.CausationID).
+		Str("wallet", normalizedAddress).
+		Str("user_id", userID.String()).
+		Msg("NATS → PUB policy.assessment.requested.v0.1")
+
+	return c.JSON(fiber.Map{
+		"message":        "assessment request published",
+		"address":        normalizedAddress,
+		"event_id":       ev.EventID,
+		"correlation_id": ev.CorrelationID,
+		"causation_id":   ev.CausationID,
+		"subject":        subject,
+		"status":         "queued",
+	})
+}
+
+func (h *DiscoveryHandler) buildPolicyAssessmentRequestedEvent(
+	userID uuid.UUID,
+	normalizedAddress string,
+	scan *domain.ScanResult,
+	selection contracts.PolicySelectionRequestWire,
+	clientRequestID string,
+) (*contracts.PolicyAssessmentRequested, string, error) {
+	obsMeta := h.buildWalletObservedMeta(userID, normalizedAddress, scan)
+	observation := walletobservation.ToWalletObservedEvent(obsMeta, scan, h.cfgChain.ChainIDByNetwork())
+	if err := observation.Validate(); err != nil {
+		return nil, "", err
+	}
+
+	selection.Normalize()
+	seed := deterministicSeed(
+		"policy.assessment.requested.v0.1",
+		userID.String(),
+		normalizedAddress,
+		observation.EventID,
+		mustJSON(selection),
+		strings.TrimSpace(clientRequestID),
+	)
+
+	cmd := &contracts.PolicyAssessmentRequested{
+		EnvelopeV01: contracts.EnvelopeV01{
+			EventID:       deterministicID("evt_par_", seed),
+			EventType:     contracts.EventTypePolicyAssessmentRequested,
+			EventVersion:  contracts.EventVersionV01,
+			OccurredAt:    time.Now().UTC(),
+			CorrelationID: deterministicID("corr_par_", seed),
+			CausationID:   deterministicID("cause_par_", seed),
+			Producer:      contracts.ProducerCafeDiscovery,
+		},
+		Subject: contracts.SubjectRef{
+			Type: contracts.SubjectTypeWallet,
+			ID:   "wallet:" + strings.ToLower(normalizedAddress),
+		},
+		Payload: contracts.PolicyAssessmentRequestedPayload{
+			Observation:      observation,
+			SelectionRequest: selection,
+			ClientRequestID:  strings.TrimSpace(clientRequestID),
+		},
+	}
+	if err := cmd.Validate(); err != nil {
+		return nil, "", err
+	}
+
+	return cmd, contracts.NATSSubjectPolicyAssessmentRequestedV01, nil
+}
+
+func (h *DiscoveryHandler) buildWalletObservedMeta(userID uuid.UUID, normalizedAddress string, scan *domain.ScanResult) walletobservation.ExportMeta {
+	seed := deterministicSeed(
+		"cafe.discovery.wallet.observed.v0.1",
+		userID.String(),
+		normalizedAddress,
+		scan.TransactionHash,
+		scan.ScannedAt.UTC().Format(time.RFC3339Nano),
+	)
+	return walletobservation.ExportMeta{
+		EventID:       deterministicID("evt_disc_", seed),
+		CorrelationID: deterministicID("corr_disc_", seed),
+		CausationID:   deterministicID("cause_disc_", seed),
+		OccurredAt:    scan.ScannedAt.UTC(),
+	}
+}
+
+func deterministicSeed(parts ...string) string {
+	return strings.Join(parts, "|")
+}
+
+func deterministicID(prefix, seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	// Keep IDs compact and stable while preserving entropy for dedupe keys.
+	return prefix + hex.EncodeToString(sum[:12])
+}
+
+func mustJSON(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // queueWalletScan validates and queues wallet scans on NATS.
@@ -538,25 +694,25 @@ func (h *DiscoveryHandler) getTLSCBOM(c *fiber.Ctx, url string, userID uuid.UUID
 
 	// Build CBOM response with CycloneDX v1.7 metadata and lifecycle
 	cbom := fiber.Map{
-		"url":             tlsScanResult.URL,
-		"host":            tlsScanResult.Host,
-		"port":            tlsScanResult.Port,
+		"url":              tlsScanResult.URL,
+		"host":             tlsScanResult.Host,
+		"port":             tlsScanResult.Port,
 		"protocol_version": tlsScanResult.ProtocolVersion,
-		"nist_level":      tlsScanResult.NISTLevel,
-		"risk_score":      tlsScanResult.RiskScore,
-		"pqc_risk":        tlsScanResult.PQCRisk,
-		"pqc_mode":        tlsScanResult.PQCMode,
-		"supported_pqc":   tlsScanResult.SupportedPQCs,
-		"recommendations": tlsScanResult.Recommendations,
-		"scanned_at":      tlsScanResult.ScannedAt,
-		"default":         tlsScanResult.Default,
-		"certificate":     cert,
-		"cipher_suites":   tlsScanResult.CipherSuites,
-		"kex_algorithm":   tlsScanResult.KexAlgorithm,
-		"kex_pqc_ready":   tlsScanResult.KexPQCReady,
-		"pfs":             tlsScanResult.PFS,
-		"ocsp_stapled":    tlsScanResult.OCSPStapled,
-		"nist_levels":     tlsScanResult.NISTLevels,
+		"nist_level":       tlsScanResult.NISTLevel,
+		"risk_score":       tlsScanResult.RiskScore,
+		"pqc_risk":         tlsScanResult.PQCRisk,
+		"pqc_mode":         tlsScanResult.PQCMode,
+		"supported_pqc":    tlsScanResult.SupportedPQCs,
+		"recommendations":  tlsScanResult.Recommendations,
+		"scanned_at":       tlsScanResult.ScannedAt,
+		"default":          tlsScanResult.Default,
+		"certificate":      cert,
+		"cipher_suites":    tlsScanResult.CipherSuites,
+		"kex_algorithm":    tlsScanResult.KexAlgorithm,
+		"kex_pqc_ready":    tlsScanResult.KexPQCReady,
+		"pfs":              tlsScanResult.PFS,
+		"ocsp_stapled":     tlsScanResult.OCSPStapled,
+		"nist_levels":      tlsScanResult.NISTLevels,
 		"cbom": fiber.Map{
 			"bomFormat":   "CycloneDX",
 			"specVersion": "1.7",
