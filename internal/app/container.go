@@ -21,10 +21,10 @@ import (
 	redisconn "cafe-discovery/pkg/redis"
 
 	"github.com/gofiber/fiber/v2"
-	natsio "github.com/nats-io/nats.go"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 )
@@ -35,20 +35,20 @@ const (
 
 // Container holds all application dependencies
 type Container struct {
-	ChainConfig          *config.ChainConfig
-	DiscoveryService     *service.DiscoveryService
-	DiscoveryHandler     *handler.DiscoveryHandler
-	TLSService           *service.TLSService
-	TLSHandler           *handler.TLSHandler
-	AuthService          *service.AuthService
-	AuthHandler          *handler.AuthHandler
-	CafeWalletService    *service.CafeWalletService
-	CafeWalletHandler    *handler.CafeWalletHandler
-	App                  *fiber.App
-	DB                   postgresdb.PostgreSQLConnection
-	NATSConn             nats.Connection
-	RedisConn            redisconn.Connection
-	MoralisClient        *moralis.MoralisClient
+	ChainConfig            *config.ChainConfig
+	DiscoveryService       *service.DiscoveryService
+	DiscoveryHandler       *handler.DiscoveryHandler
+	TLSService             *service.TLSService
+	TLSHandler             *handler.TLSHandler
+	AuthService            *service.AuthService
+	AuthHandler            *handler.AuthHandler
+	CafeWalletService      *service.CafeWalletService
+	CafeWalletHandler      *handler.CafeWalletHandler
+	App                    *fiber.App
+	DB                     postgresdb.PostgreSQLConnection
+	NATSConn               nats.Connection
+	RedisConn              redisconn.Connection
+	MoralisClient          *moralis.MoralisClient
 	ScannerPresenceTracker *service.ScannerPresenceTracker
 }
 
@@ -163,20 +163,20 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	setupRoutes(app, discoveryHandler, tlsHandler, authHandler, authService, cafeWalletHandler, planHandler)
 
 	container := &Container{
-		ChainConfig:       cfgChain,
-		DiscoveryService:  discoveryService,
-		DiscoveryHandler:  discoveryHandler,
-		TLSService:        tlsService,
-		TLSHandler:        tlsHandler,
-		AuthService:       authService,
-		AuthHandler:       authHandler,
-		CafeWalletService: cafeWalletService,
-		CafeWalletHandler: cafeWalletHandler,
-		App:                   app,
-		DB:                    db,
-		NATSConn:              natsConn,
-		RedisConn:             redisConn,
-		MoralisClient:         moralisClient,
+		ChainConfig:            cfgChain,
+		DiscoveryService:       discoveryService,
+		DiscoveryHandler:       discoveryHandler,
+		TLSService:             tlsService,
+		TLSHandler:             tlsHandler,
+		AuthService:            authService,
+		AuthHandler:            authHandler,
+		CafeWalletService:      cafeWalletService,
+		CafeWalletHandler:      cafeWalletHandler,
+		App:                    app,
+		DB:                     db,
+		NATSConn:               natsConn,
+		RedisConn:              redisConn,
+		MoralisClient:          moralisClient,
 		ScannerPresenceTracker: scannerPresence,
 	}
 
@@ -233,6 +233,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	// Protected discovery routes - require JWT authentication
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
 	api.Post("/scan", discoveryHandler.UnifiedScan) // Unified scan endpoint - automatically detects wallet or TLS endpoint
+	api.Post("/assessments/request", discoveryHandler.RequestAssessment)
 	api.Get("/scans", discoveryHandler.ListScans)
 	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 	api.Get("/tls/scans", tlsHandler.ListScans)
