@@ -306,28 +306,28 @@ func isEOAAddress(code string) bool {
 	return code == "" || code == "0x" || len(code) <= 2
 }
 
-// normalizeAddress ensures the address has the 0x prefix
+// normalizeAddress ensures a 0x-prefixed lowercase address for internal keys/comparisons.
 func normalizeAddress(address string) string {
-	address = strings.TrimSpace(address)
-	if !strings.HasPrefix(address, "0x") {
-		address = "0x" + address
+	a := strings.TrimSpace(address)
+	if strings.HasPrefix(a, "0X") {
+		a = "0x" + a[2:]
 	}
-	return strings.ToLower(address)
+	if !strings.HasPrefix(a, "0x") {
+		a = "0x" + a
+	}
+	return strings.ToLower(a)
 }
 
-// isValidAddress performs basic address validation
+// isValidAddress performs basic 20-byte EVM hex validation.
 func isValidAddress(address string) bool {
 	if len(address) != 42 || !strings.HasPrefix(address, "0x") {
 		return false
 	}
-
-	// Check if remaining characters are valid hex
 	for _, c := range address[2:] {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
-
 	return true
 }
 
