@@ -488,6 +488,10 @@ func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
 	}
 	results := make([]fiber.Map, len(addresses))
 	for i, a := range addresses {
+		if normalized, err := h.discoveryService.ValidateAndNormalizeAddress(a); err == nil {
+			results[i] = fiber.Map{"id": normalized}
+			continue
+		}
 		results[i] = fiber.Map{"id": a}
 	}
 	return c.JSON(fiber.Map{
@@ -501,6 +505,11 @@ func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
 
 // scanResultToCBOM converts a ScanResult to a CBOM format (CycloneDX v1.7 compliant)
 func (h *DiscoveryHandler) scanResultToCBOM(scanResult *domain.ScanResult) fiber.Map {
+	address := scanResult.Address
+	if normalized, err := h.discoveryService.ValidateAndNormalizeAddress(scanResult.Address); err == nil {
+		address = normalized
+	}
+
 	// Build CBOM component with NIST SP 800-57 key states
 	component := fiber.Map{
 		"type":               "cryptographic-primitive",
@@ -531,7 +540,7 @@ func (h *DiscoveryHandler) scanResultToCBOM(scanResult *domain.ScanResult) fiber
 	}
 
 	return fiber.Map{
-		"address":     scanResult.Address,
+		"address":     address,
 		"type":        scanResult.Type,
 		"algorithm":   scanResult.Algorithm,
 		"nist_level":  scanResult.NISTLevel,
@@ -576,7 +585,8 @@ func (h *DiscoveryHandler) GetCBOM(c *fiber.Ctx) error {
 	}
 
 	// Detect if it's a wallet address (starts with 0x) or a URL (starts with http:// or https://)
-	if strings.HasPrefix(param, "0x") {
+	lowerParam := strings.ToLower(param)
+	if strings.HasPrefix(lowerParam, "0x") {
 		// It's a wallet address
 		return h.getWalletCBOM(c, param, userID)
 	} else if strings.HasPrefix(param, schemeHTTP) || strings.HasPrefix(param, schemeHTTPS) {

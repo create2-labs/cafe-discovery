@@ -1513,6 +1513,8 @@ Response:
 
 Fetch the full CBOM for each wallet: `GET /discovery/cbom/0x742d35Cc6634C0532925a3b844Bc454e4438f44e` (with JWT).
 
+Address contract note: wallet addresses are accepted in any valid EVM hex casing, and Discovery returns canonical lowercase addresses in machine-oriented API fields.
+
 ### GET /discovery/cbom/*
 
 Returns a CBOM (Cryptographic Bill of Materials) JSON record for a wallet address or TLS endpoint. Automatically detects the type based on the parameter format. Requires authentication.
@@ -1527,7 +1529,7 @@ Path Parameters:
 Response:
 ```json
 {
-  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "address": "0x742d35cc6634c0532925a3b844bc9e7595f0beb",
   "type": "EOA",
   "algorithm": "ECDSA-secp256k1",
   "nist_level": 1,

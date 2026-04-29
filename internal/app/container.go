@@ -211,15 +211,16 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	auth.Post("/signup", authHandler.Signup)
 	auth.Post("/signin", authHandler.Signin)
 
-	// Health check endpoint (public)
-	app.Get("/health", func(c *fiber.Ctx) error {
+	// Health check endpoint (public).
+	healthHandler := func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":    "ok",
 			"app_name":  "Cafe Discovery Service",
 			"version":   "1.0.0",
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
-	})
+	}
+	app.Get("/health", healthHandler)
 
 	// Prometheus metrics endpoint (public)
 	// This endpoint exposes metrics in Prometheus format for scraping
