@@ -35,21 +35,23 @@ const (
 
 // Container holds all application dependencies
 type Container struct {
-	ChainConfig            *config.ChainConfig
-	DiscoveryService       *service.DiscoveryService
-	DiscoveryHandler       *handler.DiscoveryHandler
-	TLSService             *service.TLSService
-	TLSHandler             *handler.TLSHandler
-	AuthService            *service.AuthService
-	AuthHandler            *handler.AuthHandler
-	CafeWalletService      *service.CafeWalletService
-	CafeWalletHandler      *handler.CafeWalletHandler
-	App                    *fiber.App
-	DB                     postgresdb.PostgreSQLConnection
-	NATSConn               nats.Connection
-	RedisConn              redisconn.Connection
-	MoralisClient          *moralis.MoralisClient
-	ScannerPresenceTracker *service.ScannerPresenceTracker
+	ChainConfig              *config.ChainConfig
+	DiscoveryService         *service.DiscoveryService
+	DiscoveryHandler         *handler.DiscoveryHandler
+	TLSService               *service.TLSService
+	TLSHandler               *handler.TLSHandler
+	AuthService              *service.AuthService
+	AuthHandler              *handler.AuthHandler
+	CafeWalletService        *service.CafeWalletService
+	CafeWalletHandler        *handler.CafeWalletHandler
+	ScanAuthorizationService *service.ScanAuthorizationService
+	ScanAuthorizationHandler *handler.ScanAuthorizationHandler
+	App                      *fiber.App
+	DB                       postgresdb.PostgreSQLConnection
+	NATSConn                 nats.Connection
+	RedisConn                redisconn.Connection
+	MoralisClient            *moralis.MoralisClient
+	ScannerPresenceTracker   *service.ScannerPresenceTracker
 }
 
 // NewContainer creates and initializes the application container
@@ -131,6 +133,17 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)
 
+	// AUTH-05: internal scan-authorization service consumed by CPM (AUTH-02).
+	// Discovery remains the authoritative source for scan visibility; CPM
+	// must not access Discovery persistence directly.
+	scanAuthzService := service.NewScanAuthorizationService(scanResultRepo, tlsScanResultRepo)
+	scanAuthzEnabled := viper.GetBool(config.DiscoveryInternalAuthzEnabled)
+	scanAuthzHandler := handler.NewScanAuthorizationHandler(scanAuthzService, scanAuthzEnabled)
+	scanAuthzServiceToken := viper.GetString(config.DiscoveryInternalAuthzServiceToken)
+	if scanAuthzEnabled && scanAuthzServiceToken == "" {
+		log.Printf("Warning: AUTH-05 internal scan-authorization endpoint enabled without %s; the endpoint will reject every caller until a service token is configured", config.DiscoveryInternalAuthzServiceToken)
+	}
+
 	// Initialize Prometheus metrics
 	// This must be called before starting the server to register all metrics
 	metrics.Init()
@@ -160,24 +173,26 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	app.Use(metrics.HTTPMiddleware())
 
 	// Setup routes
-	setupRoutes(app, discoveryHandler, tlsHandler, authHandler, authService, cafeWalletHandler, planHandler)
+	setupRoutes(app, discoveryHandler, tlsHandler, authHandler, authService, cafeWalletHandler, planHandler, scanAuthzHandler, scanAuthzServiceToken)
 
 	container := &Container{
-		ChainConfig:            cfgChain,
-		DiscoveryService:       discoveryService,
-		DiscoveryHandler:       discoveryHandler,
-		TLSService:             tlsService,
-		TLSHandler:             tlsHandler,
-		AuthService:            authService,
-		AuthHandler:            authHandler,
-		CafeWalletService:      cafeWalletService,
-		CafeWalletHandler:      cafeWalletHandler,
-		App:                    app,
-		DB:                     db,
-		NATSConn:               natsConn,
-		RedisConn:              redisConn,
-		MoralisClient:          moralisClient,
-		ScannerPresenceTracker: scannerPresence,
+		ChainConfig:              cfgChain,
+		DiscoveryService:         discoveryService,
+		DiscoveryHandler:         discoveryHandler,
+		TLSService:               tlsService,
+		TLSHandler:               tlsHandler,
+		AuthService:              authService,
+		AuthHandler:              authHandler,
+		CafeWalletService:        cafeWalletService,
+		CafeWalletHandler:        cafeWalletHandler,
+		ScanAuthorizationService: scanAuthzService,
+		ScanAuthorizationHandler: scanAuthzHandler,
+		App:                      app,
+		DB:                       db,
+		NATSConn:                 natsConn,
+		RedisConn:                redisConn,
+		MoralisClient:            moralisClient,
+		ScannerPresenceTracker:   scannerPresence,
 	}
 
 	// Wait for persistence and scanners, then initialize default endpoints via NATS and wait until they are in Redis
@@ -205,7 +220,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 }
 
 // setupRoutes configures all HTTP routes
-func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tlsHandler *handler.TLSHandler, authHandler *handler.AuthHandler, authService *service.AuthService, cafeWalletHandler *handler.CafeWalletHandler, planHandler *handler.PlanHandler) {
+func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tlsHandler *handler.TLSHandler, authHandler *handler.AuthHandler, authService *service.AuthService, cafeWalletHandler *handler.CafeWalletHandler, planHandler *handler.PlanHandler, scanAuthzHandler *handler.ScanAuthorizationHandler, scanAuthzServiceToken string) {
 	// Public auth routes
 	auth := app.Group("/auth")
 	auth.Post("/signup", authHandler.Signup)
@@ -252,6 +267,16 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	plans.Get("/", planHandler.GetAllPlans)
 	plans.Get("/current", planHandler.GetUserPlan)
 	plans.Get("/usage", planHandler.GetPlanUsage)
+
+	// AUTH-05: internal scan-authorization endpoint consumed by CPM AUTH-02.
+	// This route is gated by an internal service-token middleware; the
+	// X-User-Id, X-Tenant-Id, and X-Request-Id headers are only trusted
+	// after the service-auth check has passed. The endpoint must not be
+	// reachable through public ingress.
+	internalAuthz := app.Group("/internal/authz", middleware.InternalServiceAuth(middleware.InternalServiceAuthConfig{
+		ExpectedToken: scanAuthzServiceToken,
+	}))
+	internalAuthz.Post("/scans/:scanId/can-read", scanAuthzHandler.CanReadScan)
 }
 
 // runMigrations runs database migrations

@@ -10,16 +10,22 @@ import (
 // ScanMetrics holds all Prometheus metrics for scan operations
 type ScanMetrics struct {
 	// Wallet scan metrics
-	WalletScansTotal      *prometheus.CounterVec
-	WalletScanDuration    *prometheus.HistogramVec
+	WalletScansTotal       *prometheus.CounterVec
+	WalletScanDuration     *prometheus.HistogramVec
 	WalletScanSuccessTotal *prometheus.CounterVec
-	WalletScanErrorTotal  *prometheus.CounterVec
+	WalletScanErrorTotal   *prometheus.CounterVec
 
 	// TLS scan metrics
-	TLSScansTotal      *prometheus.CounterVec
-	TLSScanDuration    *prometheus.HistogramVec
+	TLSScansTotal       *prometheus.CounterVec
+	TLSScanDuration     *prometheus.HistogramVec
 	TLSScanSuccessTotal *prometheus.CounterVec
-	TLSScanErrorTotal  *prometheus.CounterVec
+	TLSScanErrorTotal   *prometheus.CounterVec
+
+	// Scan authorization metrics (AUTH-05)
+	// Low-cardinality counter for the internal scan-authorization endpoint.
+	// Labels are intentionally restricted to outcome, reason_code, and route
+	// pattern; user_id, tenant_id, scan_id, and request_id MUST NOT be added.
+	ScanAuthzDecisionsTotal *prometheus.CounterVec
 }
 
 var (
@@ -96,10 +102,28 @@ func Init() *ScanMetrics {
 			},
 			[]string{"scan_type", "result"}, // scan_type: tls, result: failure
 		),
+
+		ScanAuthzDecisionsTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "discovery_scan_authz_decisions_total",
+				Help: "Total number of scan authorization decisions evaluated by the AUTH-05 internal endpoint",
+			},
+			[]string{"outcome", "reason_code", "route"},
+		),
 	}
 
 	initHTTPMetrics()
 	return defaultMetrics
+}
+
+// RecordScanAuthzDecision records a single scan-authorization decision.
+// outcome must be one of "allowed", "denied", "malformed", or "unavailable".
+// route is the static route pattern (e.g. "/internal/authz/scans/:scanId/can-read").
+func (m *ScanMetrics) RecordScanAuthzDecision(outcome, reasonCode, route string) {
+	if m == nil || m.ScanAuthzDecisionsTotal == nil {
+		return
+	}
+	m.ScanAuthzDecisionsTotal.WithLabelValues(outcome, reasonCode, route).Inc()
 }
 
 // Get returns the default metrics instance, initializing it if necessary
@@ -114,13 +138,13 @@ func Get() *ScanMetrics {
 // This is a convenience method that records all related metrics atomically
 func (m *ScanMetrics) RecordWalletScan(duration time.Duration, success bool) {
 	scanType := "wallet"
-	
+
 	// Increment total scans counter
 	m.WalletScansTotal.WithLabelValues(scanType).Inc()
-	
+
 	// Record duration
 	m.WalletScanDuration.WithLabelValues(scanType).Observe(duration.Seconds())
-	
+
 	// Record success or error
 	if success {
 		m.WalletScanSuccessTotal.WithLabelValues(scanType, "success").Inc()
@@ -133,13 +157,13 @@ func (m *ScanMetrics) RecordWalletScan(duration time.Duration, success bool) {
 // This is a convenience method that records all related metrics atomically
 func (m *ScanMetrics) RecordTLSScan(duration time.Duration, success bool) {
 	scanType := "tls"
-	
+
 	// Increment total scans counter
 	m.TLSScansTotal.WithLabelValues(scanType).Inc()
-	
+
 	// Record duration
 	m.TLSScanDuration.WithLabelValues(scanType).Observe(duration.Seconds())
-	
+
 	// Record success or error
 	if success {
 		m.TLSScanSuccessTotal.WithLabelValues(scanType, "success").Inc()
