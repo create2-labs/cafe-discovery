@@ -28,6 +28,15 @@ MORALIS_API_URL: "https://deep-index.moralis.io"
 TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
 TURNSTILE_SITE_KEY: "1x00000000000000000AA"
 
+# AUTH-05: internal scan-authorization lookup consumed by CPM (AUTH-02).
+# When DISCOVERY_INTERNAL_AUTHZ_ENABLED is false the endpoint replies with
+# 503 SCAN_AUTHZ_DISABLED so CPM fails closed.
+# DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN is the shared service token CPM must
+# present in the Authorization header. Treat it as a secret. This is a
+# temporary measure until mTLS or a signed service JWT is available.
+DISCOVERY_INTERNAL_AUTHZ_ENABLED: true
+# DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN: "set-this-in-staging-and-prod"
+
 # Logging
 LOG_LEVEL: "debug"
 

@@ -74,6 +74,7 @@
       12. [GET /version](#get-version)
       13. [GET /health](#get-health)
       14. [GET /metrics](#get-metrics)
+      15. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
    9. [Subscription Plans](#subscription-plans)
       1. [Available Plans](#available-plans)
       2. [Plan Management Endpoints](#plan-management-endpoints)
@@ -1795,6 +1796,114 @@ cafe_discovery_wallet_scan_duration_seconds_bucket{scan_type="wallet",le="0.01"}
 ```
 
 Note: This endpoint is used by Prometheus (or other monitoring systems) to scrape metrics. The infrastructure stack in `cafe-infra` includes Prometheus configured to scrape this endpoint.
+
+### AUTH-05: Internal scan authorization lookup for CPM
+
+Discovery exposes an **internal-only** authorization endpoint that the Crypto Policy Management service (CPM) calls to determine whether an authenticated principal may read or use a given scan. This is the Discovery-side counterpart of CPM AUTH-02: CPM authenticates the caller (AUTH-01) and **delegates scan visibility decisions to Discovery**. **Discovery remains the authoritative source for scan visibility. CPM authenticates the caller and delegates scan visibility decisions to Discovery. CPM must not read Discovery persistence directly.**
+
+**Endpoint:** `POST /internal/authz/scans/{scanId}/can-read`
+
+**Privacy & isolation:**
+
+- The endpoint is internal-only. It must not be exposed through public ingress; the production deployment routes only known service callers (currently CPM) to this path.
+- The response envelope is intentionally minimal: it contains only `allowed`, `reason_code`, and `request_id`. Discovery never returns the scan owner, tenant id, wallet address, endpoint URL, scan target, email, or any other scan attribute on this endpoint. Deny responses leak nothing about whether the scan exists.
+- Service credentials, raw session tokens, and the `Authorization` header are never logged. Logs include `request_id`, `route`, `outcome`, `reason_code`, `user_id`, and `tenant_id`; they do not include scan metadata or request bodies.
+
+**Required headers:**
+
+| Header | Required | Notes |
+| --- | --- | --- |
+| `Authorization: Bearer <service-token>` | yes | Static internal service token configured via `DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN`. **Temporary** until mTLS or a signed service JWT is available; comparison is constant-time. |
+| `X-User-Id` | yes | The authenticated principal id propagated by CPM from its session. **Discovery only trusts this header after the service-auth check passes.** Missing header returns `401 SCAN_AUTHZ_PRINCIPAL_REQUIRED`. |
+| `X-Tenant-Id` | optional | Propagated by CPM when present. Currently informational because the Discovery scan model has no tenant column; a TODO tracks future enforcement (`AUTH-05 tenant scoping`). |
+| `X-Request-Id` | optional | Sanitized and echoed in both the response body (`request_id`) and the `X-Request-Id` response header. When missing, Discovery generates a random opaque id so logs and responses always carry one. |
+
+The endpoint expects an empty body; the `scanId` is taken from the URL path.
+
+**Reason codes and HTTP status mapping:**
+
+| Outcome | HTTP | `reason_code` | Meaning |
+| --- | --- | --- | --- |
+| Allowed | `200` | `SCAN_AUTHZ_ALLOWED` | The principal owns or otherwise has visibility on the scan. |
+| Denied (cross-user / not authorized) | `403` | `SCAN_AUTHZ_FORBIDDEN` | The scan exists but the principal is not allowed to read it. |
+| Denied (scan not visible / unknown) | `403` | `SCAN_AUTHZ_NOT_VISIBLE` | The scan does not exist or is not visible. Returned as `403` for this rollout to align with CPM AUTH-02. Anti-enumeration `404` hardening is deferred to a later PR. |
+| Malformed scan id | `400` | `SCAN_AUTHZ_SCAN_ID_MALFORMED` | The path segment is not a valid identifier (UUID). |
+| Missing principal | `401` | `SCAN_AUTHZ_PRINCIPAL_REQUIRED` | `X-User-Id` is absent or unusable. |
+| Missing/invalid service auth | `401` | `SCAN_AUTHZ_SERVICE_AUTH_REQUIRED` | The `Authorization` bearer token is missing, malformed, or does not match `DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN`. |
+| Endpoint disabled | `503` | `SCAN_AUTHZ_DISABLED` | `DISCOVERY_INTERNAL_AUTHZ_ENABLED=false`. CPM is expected to fail closed. |
+| Decision unavailable | `503` | `SCAN_AUTHZ_UNAVAILABLE` | The repository or downstream lookup failed. CPM is expected to fail closed. |
+
+**Response examples:**
+
+Allow:
+
+```json
+{
+  "allowed": true,
+  "reason_code": "SCAN_AUTHZ_ALLOWED",
+  "request_id": "trace-abc-123"
+}
+```
+
+Deny (forbidden / not visible — both shapes are identical except for `reason_code`):
+
+```json
+{
+  "allowed": false,
+  "reason_code": "SCAN_AUTHZ_FORBIDDEN",
+  "request_id": "trace-abc-123"
+}
+```
+
+Decision unavailable:
+
+```json
+{
+  "allowed": false,
+  "reason_code": "SCAN_AUTHZ_UNAVAILABLE",
+  "request_id": "trace-abc-123"
+}
+```
+
+**Fail-closed semantics (CPM AUTH-02 perspective):**
+
+- `200 + allowed=true` is the only success signal. Any other response (including transport errors) **must be treated by CPM as a deny** for the requested action.
+- `5xx` responses indicate that the decision could not be resolved. CPM fails closed (returns `503` to its caller) and does not cache the outcome.
+- `403` is the canonical deny for both "forbidden" and "not visible" in this rollout. CPM does not differentiate; the reason code is provided for traceability and metrics.
+
+**Authorization rule (current):**
+
+- A principal can read a scan if and only if Discovery's authoritative scan model says so:
+  - Wallet scans: `scan.user_id == principal.user_id`.
+  - TLS scans: `scan.user_id == principal.user_id`, plus default endpoints (`scan.default = true`) which are visible to any authenticated principal.
+- The `X-Tenant-Id` header is propagated to the decision service; Discovery's scan model has no tenant column today, so tenant scoping is currently a no-op. A `TODO(auth-05-tenant)` in `internal/service/scan_authz.go` tracks adding the comparison once the model carries `tenant_id`.
+
+**Configuration:**
+
+```bash
+# default true; when false, the endpoint replies 503 SCAN_AUTHZ_DISABLED so CPM fails closed.
+export DISCOVERY_INTERNAL_AUTHZ_ENABLED=true
+
+# REQUIRED in any environment that exposes the endpoint to CPM. Treat as a secret.
+# TODO: replace this static token with mTLS or a signed service JWT.
+export DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN=<shared-secret-with-cpm>
+```
+
+**Observability:**
+
+- Counter `discovery_scan_authz_decisions_total{outcome,reason_code,route}` records every decision. Labels are deliberately low-cardinality; `user_id`, `tenant_id`, `scan_id`, and `request_id` are never used as labels.
+- Structured logs are emitted at `info` for `allowed`/`denied` and `warn` for `malformed`/`unavailable`, carrying `request_id`, `route`, `outcome`, `reason_code`, `user_id`, and `tenant_id`. Service tokens, session tokens, scan metadata, emails, and request bodies are never logged.
+
+**Relationship to CPM AUTH-02:**
+
+CPM's scan-authorization adapter (`POST <ScanAuthorizationURL>/{scanId}/can-read`) is wired to this endpoint. CPM:
+
+1. Authenticates the bearer token from its own caller.
+2. Extracts `scanId` from the request payload (selection, validation, wallet challenge, draft save, persist, etc.).
+3. Calls Discovery with the propagated `X-User-Id`, optional `X-Tenant-Id`, and `X-Request-Id`, plus the configured service bearer token.
+4. Maps the response to its own `403`/`503` outcomes per AUTH-02.
+
+This endpoint is the only sanctioned integration mode between CPM and Discovery for scan visibility; CPM **must not** read Discovery's PostgreSQL or Redis directly.
 
 ## Subscription Plans
 
