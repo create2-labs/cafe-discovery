@@ -3,8 +3,10 @@ package handler
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
+	"cafe-discovery/internal/authz"
 	"cafe-discovery/internal/service"
 
 	"github.com/gofiber/fiber/v2"
@@ -81,3 +83,53 @@ func (h *AuthHandler) Signin(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// ValidateSessionForCPM handles POST /internal/auth/session/validate (CPM AUTH-01).
+// It is protected by InternalServiceAuth; CPM must send the shared service bearer token.
+// Body: JSON {"token":"<Discovery-issued session token>"}.
+// Success body matches cafe-crypto-policy-mgt discoveryValidationResponse (`accepted`, `claims`).
+func (h *AuthHandler) ValidateSessionForCPM(c *fiber.Ctx) error {
+	requestID := authz.EnsureRequestID(c.Get(authz.HeaderRequestID))
+	c.Set(authz.HeaderRequestID, requestID)
+
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"accepted":   false,
+			"request_id": requestID,
+			"error":      "invalid JSON body",
+		})
+	}
+	raw := strings.TrimSpace(body.Token)
+	if raw == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"accepted":   false,
+			"request_id": requestID,
+			"error":      "token is required",
+		})
+	}
+	if h.authService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"accepted":   false,
+			"request_id": requestID,
+			"error":      "auth service unavailable",
+		})
+	}
+	claims, err := h.authService.ValidateToken(raw)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"accepted":      false,
+			"request_id":    requestID,
+			"error_message": err.Error(),
+		})
+	}
+	return c.JSON(fiber.Map{
+		"accepted": true,
+		"claims": fiber.Map{
+			"user_id": claims.UserID.String(),
+			"email":   claims.Email,
+		},
+		"request_id": requestID,
+	})
+}
