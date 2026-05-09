@@ -273,6 +273,11 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	// X-User-Id, X-Tenant-Id, and X-Request-Id headers are only trusted
 	// after the service-auth check has passed. The endpoint must not be
 	// reachable through public ingress.
+	internalAuth := app.Group("/internal/auth", middleware.InternalServiceAuth(middleware.InternalServiceAuthConfig{
+		ExpectedToken: scanAuthzServiceToken,
+	}))
+	internalAuth.Post("/session/validate", authHandler.ValidateSessionForCPM)
+
 	internalAuthz := app.Group("/internal/authz", middleware.InternalServiceAuth(middleware.InternalServiceAuthConfig{
 		ExpectedToken: scanAuthzServiceToken,
 	}))
