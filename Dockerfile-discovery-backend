@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go manually (multi-arch)
-ENV GO_VERSION=1.26.2
+ENV GO_VERSION=1.26.3
 RUN set -eux; \
     case "$TARGETARCH" in \
     amd64)  GO_ARCH=amd64 ;; \
