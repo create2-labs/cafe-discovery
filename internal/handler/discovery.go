@@ -503,6 +503,33 @@ func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
 	})
 }
 
+// ListWalletPolicyContexts handles GET /discovery/wallet-policy-contexts.
+// JWT is required (same protected /discovery group as ListScans): no token → 401.
+// Results are strictly filtered by the authenticated user id at the repository layer
+// (owner-scoped list, no other user’s rows). Binary allow/deny for a specific scan_id
+// without listing is handled by CPM via AUTH-05 /internal/authz/... (see scan_authz tests).
+func (h *DiscoveryHandler) ListWalletPolicyContexts(c *fiber.Ctx) error {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		return err
+	}
+	limit, offset := parsePaginationParams(c)
+	if h.userScanCache == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "user scan cache not available"})
+	}
+	ctxs, total, svcErr := h.userScanCache.ListWalletPolicyContexts(c.Context(), userID, limit, offset)
+	if svcErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": svcErr.Error()})
+	}
+	return c.JSON(fiber.Map{
+		"contexts": ctxs,
+		"total":    total,
+		"limit":    limit,
+		"offset":   offset,
+		"count":    len(ctxs),
+	})
+}
+
 // scanResultToCBOM converts a ScanResult to a CBOM format (CycloneDX v1.7 compliant)
 func (h *DiscoveryHandler) scanResultToCBOM(scanResult *domain.ScanResult) fiber.Map {
 	address := scanResult.Address

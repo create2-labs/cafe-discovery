@@ -1433,6 +1433,8 @@ Response:
 }
 ```
 
+Implementation note: this HTTP response intentionally does **not** include the internal **`scan_id`** (UUID) emitted on NATS for the job. Clients should correlate follow-up work using the returned **canonical wallet address**: poll **`GET /discovery/cbom/{address}`** (authenticated) until a result appears, then drive **Crypto Policy Management** with that observation-shaped data (REST or NATS)—see **`cafe-crypto-policy-mgt`** [`scripts/wallet-scan-and-cpm-policy.sh`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/scripts/wallet-scan-and-cpm-policy.sh) and [`cafe-documentation` developer guide](https://github.com/create2-labs/cafe-documentation/blob/main/03-cafe-developer-guide.md).
+
 **For TLS Endpoint Scans:**
 Request:
 ```json
