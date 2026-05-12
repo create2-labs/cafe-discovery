@@ -16,12 +16,14 @@ import (
 // over persisted wallet rows (authenticated user-owned data only).
 //
 // ScanID semantics (Option A, short-term):
-// Today this is the primary key (UUID) of the wallet row in scan_results. It is
-// owner-scoped via the authenticated user, opaque to other tenants, and stable
-// for re-fetch and for CPM scan binding / AUTH-02 checks when that flow is wired.
+// Today this is the primary key (UUID) of one persisted wallet scan result row in
+// scan_results. Each new scan execution that persists a new result creates a new row
+// with its own scan_id; the id is stable for the lifetime of that row (re-fetch,
+// CPM scan binding, AUTH-02 when wired). It is owner-scoped via the authenticated user
+// and opaque to other tenants.
 // A future iteration may introduce a distinct identifier (e.g. walletObservationId
-// or policySubjectRef); clients should treat scan_id as an opaque correlation id,
-// not as a persistence schema leak.
+// or policySubjectRef); clients should treat scan_id as an opaque correlation id for
+// that result row, not as a permanent wallet identity or as a persistence schema leak.
 //
 // ChainIDs: populated only from known persisted network labels; unknown networks add
 // no synthetic chain id (in particular never default to [1]).
