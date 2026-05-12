@@ -259,14 +259,6 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	apiV1 := app.Group("/discovery/v1", middleware.JWTMiddleware(authService))
 	registerDiscoveryV1Routes(apiV1, discoveryHandler, tlsHandler, cafeWalletHandler)
 
-	// Wallet management routes
-	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))
-	wallets.Get("/", cafeWalletHandler.GetAllWallets)
-	wallets.Post("/", cafeWalletHandler.CreateWallet)
-	wallets.Get(walletPubKeyHashPath, cafeWalletHandler.GetWallet)
-	wallets.Put(walletPubKeyHashPath, cafeWalletHandler.UpdateWallet)
-	wallets.Delete(walletPubKeyHashPath, cafeWalletHandler.DeleteWallet)
-
 	// Plan routes
 	plans := app.Group("/plans", middleware.JWTMiddleware(authService))
 	plans.Get("/", planHandler.GetAllPlans)

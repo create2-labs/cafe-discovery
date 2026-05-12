@@ -20,7 +20,7 @@ func NewCafeWalletHandler(walletService *service.CafeWalletService) *CafeWalletH
 	}
 }
 
-// CreateWallet handles POST /wallets
+// CreateWallet handles POST /discovery/v1/wallets
 func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
@@ -49,7 +49,7 @@ func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(wallet)
 }
 
-// GetWallet handles GET /wallets/:pubKeyHash
+// GetWallet handles GET /discovery/v1/wallets/:pubKeyHash
 func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
@@ -78,7 +78,7 @@ func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
 	return c.JSON(wallet)
 }
 
-// GetAllWallets handles GET /wallets
+// GetAllWallets handles GET /discovery/v1/wallets
 func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
@@ -98,7 +98,7 @@ func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
 	})
 }
 
-// UpdateWallet handles PUT /wallets/:pubKeyHash
+// UpdateWallet handles PUT /discovery/v1/wallets/:pubKeyHash
 func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
@@ -134,7 +134,7 @@ func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
 	return c.JSON(wallet)
 }
 
-// DeleteWallet handles DELETE /wallets/:pubKeyHash
+// DeleteWallet handles DELETE /discovery/v1/wallets/:pubKeyHash
 func (h *CafeWalletHandler) DeleteWallet(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {

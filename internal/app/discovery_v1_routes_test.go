@@ -18,8 +18,18 @@ func (t *testV1WalletHandlers) GetAllWallets(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
+func (t *testV1WalletHandlers) CreateWallet(c *fiber.Ctx) error {
+	t.last.Store("create")
+	return c.SendStatus(fiber.StatusCreated)
+}
+
 func (t *testV1WalletHandlers) GetWallet(c *fiber.Ctx) error {
 	t.last.Store("get:" + c.Params("pubKeyHash"))
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func (t *testV1WalletHandlers) UpdateWallet(c *fiber.Ctx) error {
+	t.last.Store("put:" + c.Params("pubKeyHash"))
 	return c.SendStatus(fiber.StatusOK)
 }
 

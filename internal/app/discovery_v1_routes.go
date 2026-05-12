@@ -10,7 +10,9 @@ import (
 // /discovery/v1/wallets (WORKPLAN_API.md §0.1). Implemented by *handler.CafeWalletHandler.
 type discoveryV1WalletHandlers interface {
 	GetAllWallets(c *fiber.Ctx) error
+	CreateWallet(c *fiber.Ctx) error
 	GetWallet(c *fiber.Ctx) error
+	UpdateWallet(c *fiber.Ctx) error
 	DeleteWallet(c *fiber.Ctx) error
 }
 
@@ -34,10 +36,12 @@ func registerDiscoveryV1Routes(
 ) {
 	w := v1.Group("/wallets")
 	w.Get("/", wallets.GetAllWallets)
+	w.Post("/", wallets.CreateWallet)
 	w.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans"))
 	w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans/:scan_id"))
 	w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/wallets/scans/:scan_id"))
 	w.Get(walletPubKeyHashPath, wallets.GetWallet)
+	w.Put(walletPubKeyHashPath, wallets.UpdateWallet)
 	w.Delete(walletPubKeyHashPath, wallets.DeleteWallet)
 
 	tls := v1.Group("/tls")
