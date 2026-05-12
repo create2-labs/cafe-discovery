@@ -28,9 +28,10 @@ func discoveryV1NotImplemented(feature string) fiber.Handler {
 // registerDiscoveryV1Routes registers WORKPLAN §0.1 paths under prefix (typically /discovery/v1 with JWT).
 // Static segments /wallets/scans and /wallets/scans/:scan_id MUST be registered before /wallets/:pubKeyHash
 // so "scans" is never captured as a wallet id (Fiber route order).
+// discovery may be nil in tests that only exercise wallet route wiring; POST /scan falls back to a 501 stub.
 func registerDiscoveryV1Routes(
 	v1 fiber.Router,
-	_ *handler.DiscoveryHandler,
+	discovery *handler.DiscoveryHandler,
 	_ *handler.TLSHandler,
 	wallets discoveryV1WalletHandlers,
 ) {
@@ -49,5 +50,9 @@ func registerDiscoveryV1Routes(
 	tls.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
 	tls.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
 
-	v1.Post("/scan", discoveryV1NotImplemented("POST /discovery/v1/scan"))
+	if discovery != nil {
+		v1.Post("/scan", discovery.PostDiscoveryScanV1)
+	} else {
+		v1.Post("/scan", discoveryV1NotImplemented("POST /discovery/v1/scan"))
+	}
 }
