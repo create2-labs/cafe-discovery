@@ -255,6 +255,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 	api.Get("/tls/scans", tlsHandler.ListScans)
 
+	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton; PR3–PR6 fill behaviour). Route order: /wallets/scans before /wallets/:pubKeyHash.
+	apiV1 := app.Group("/discovery/v1", middleware.JWTMiddleware(authService))
+	registerDiscoveryV1Routes(apiV1, discoveryHandler, tlsHandler, cafeWalletHandler)
+
 	// Wallet management routes
 	wallets := app.Group("/wallets", middleware.JWTMiddleware(authService))
 	wallets.Get("/", cafeWalletHandler.GetAllWallets)
