@@ -12,6 +12,8 @@ info:
     **Public URL prefix:** `/api/discovery/v1` (edge). Upstream Discovery may receive paths under
     `/discovery/v1/...` after ingress strips `/api` — see `cafe-deploy` / **WORKPLAN_API_PR.md** PR9.
 
+    **CAFE wallets:** HTTP surface is only under **`/wallets`** in this spec (i.e. **`/api/discovery/v1/wallets/...`** at the edge). Discovery does **not** serve a legacy root **`/wallets`** path without the **`/discovery/v1`** prefix.
+
     **Companion spec (policies):** `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` (PR1b); correlation
     key is **`scan_id`** (UUID) for Discovery ↔ CPM Option A.
 
@@ -53,6 +55,34 @@ paths:
                   $ref: "#/components/schemas/WalletListEntry"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [wallets]
+      summary: Create a CAFE wallet (owner)
+      operationId: createWallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "201":
+          description: Wallet created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Wallet already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /wallets/{wallet_id}:
     parameters:
@@ -68,6 +98,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WalletDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [wallets]
+      summary: Update CAFE wallet (owner)
+      operationId: updateWallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Wallet updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

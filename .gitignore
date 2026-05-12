@@ -30,6 +30,8 @@ go.work.sum
 
 config.local.yaml
 
+.DS_Store
+
 # Editor/IDE
 # .idea/
 # .vscode/
