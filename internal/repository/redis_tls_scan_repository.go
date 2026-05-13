@@ -36,6 +36,7 @@ type RedisTLSScanRepository interface {
 	// ListURLsByUserIDOrDefault returns user's URLs plus default endpoints (null UUID), deduped (user first).
 	ListURLsByUserIDOrDefault(ctx context.Context, userID string) ([]string, error)
 	CountByUserID(ctx context.Context, userID string) (int64, error)
+	DeleteByUserIDAndURL(ctx context.Context, userID string, url string) error
 }
 
 // HashToken creates a SHA256 hash of the JWT token for use as a unique identifier
@@ -170,6 +171,15 @@ func (r *redisTLSScanRepository) FindByUserIDAndURL(ctx context.Context, userID 
 		return nil, fmt.Errorf("failed to unmarshal scan result: %w", err)
 	}
 	return &result, nil
+}
+
+// DeleteByUserIDAndURL removes the persistence-style cache key for a user's TLS scan at url.
+func (r *redisTLSScanRepository) DeleteByUserIDAndURL(ctx context.Context, userID string, url string) error {
+	key := r.getUserKey(userID, url)
+	if err := r.redis.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("redis del tls user scan: %w", err)
+	}
+	return nil
 }
 
 // ListURLsByUserID lists all TLS scan URLs for a user (persistence-service keys)

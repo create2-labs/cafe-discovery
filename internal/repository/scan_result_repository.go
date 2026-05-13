@@ -18,6 +18,7 @@ type ScanResultRepository interface {
 	FindByID(id uuid.UUID) (*domain.ScanResultEntity, error)
 	FindByUserIDAndAddress(userID uuid.UUID, address string) (*domain.ScanResultEntity, error)
 	FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error)
+	DeleteOwnedWalletScan(userID, scanID uuid.UUID) (deleted bool, err error)
 	ListOwnerWalletScansDiscoveryV1(userID uuid.UUID, address string, limit, offset int) ([]*domain.ScanResultEntity, int64, error)
 	CountByUserID(userID uuid.UUID) (int64, error)
 }
@@ -67,6 +68,15 @@ func (r *scanResultRepository) FindOwnedWalletScanByID(userID, scanID uuid.UUID)
 		return nil, err
 	}
 	return &ent, nil
+}
+
+// DeleteOwnedWalletScan soft-deletes a wallet scan row owned by userID. Returns whether a row was deleted.
+func (r *scanResultRepository) DeleteOwnedWalletScan(userID, scanID uuid.UUID) (bool, error) {
+	res := r.db.Where("id = ? AND user_id = ?", scanID, userID).Delete(&domain.ScanResultEntity{})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
 }
 
 // ListOwnerWalletScansDiscoveryV1 lists owner wallet scans ordered by created_at DESC, id DESC (WORKPLAN_API §2.2).

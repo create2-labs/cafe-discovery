@@ -12,6 +12,7 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/internal/walletobservation"
@@ -48,10 +49,11 @@ type DiscoveryHandler struct {
 	userScanCache    *service.UserScanCacheService
 	scanResultRepo   repository.ScanResultRepository
 	pendingV1        repository.PendingV1ScanRepository
+	policyRef        policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler (read-through for scan data).
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, pendingV1 repository.PendingV1ScanRepository) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		tlsService:       tlsService,
@@ -64,6 +66,7 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService 
 		userScanCache:    userScanCache,
 		scanResultRepo:   scanResultRepo,
 		pendingV1:        pendingV1,
+		policyRef:        policyRef,
 	}
 }
 

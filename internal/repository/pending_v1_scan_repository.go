@@ -29,6 +29,7 @@ type PendingV1ScanRecord struct {
 type PendingV1ScanRepository interface {
 	Put(ctx context.Context, rec *PendingV1ScanRecord) error
 	Get(ctx context.Context, scanID uuid.UUID) (*PendingV1ScanRecord, error)
+	Delete(ctx context.Context, scanID uuid.UUID) error
 }
 
 type redisPendingV1ScanRepository struct {
@@ -75,4 +76,11 @@ func (r *redisPendingV1ScanRepository) Get(ctx context.Context, scanID uuid.UUID
 		return nil, fmt.Errorf("decode pending v1 scan: %w", err)
 	}
 	return &rec, nil
+}
+
+func (r *redisPendingV1ScanRepository) Delete(ctx context.Context, scanID uuid.UUID) error {
+	if err := r.redis.Del(ctx, pendingV1RedisKey(scanID)).Err(); err != nil {
+		return fmt.Errorf("redis del pending v1 scan: %w", err)
+	}
+	return nil
 }

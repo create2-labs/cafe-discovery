@@ -17,6 +17,7 @@ type TLSScanResultRepository interface {
 	FindByUserIDOrDefault(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error)
 	FindOwnedUserTLSScanByID(userID, scanID uuid.UUID) (*domain.TLSScanResultEntity, error)
+	DeleteOwnedUserTLSScan(userID, scanID uuid.UUID) (deleted bool, err error)
 	ListOwnerUserTLSScansDiscoveryV1(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, int64, error)
 	FindByUserIDAndURL(userID uuid.UUID, url string) (*domain.TLSScanResultEntity, error)
 	FindByURL(url string) (*domain.TLSScanResultEntity, error)
@@ -65,6 +66,15 @@ func (r *tlsScanResultRepository) FindOwnedUserTLSScanByID(userID, scanID uuid.U
 		return nil, err
 	}
 	return &ent, nil
+}
+
+// DeleteOwnedUserTLSScan soft-deletes a non-default TLS scan row owned by userID.
+func (r *tlsScanResultRepository) DeleteOwnedUserTLSScan(userID, scanID uuid.UUID) (bool, error) {
+	res := r.db.Where("id = ? AND user_id = ? AND \"default\" = ?", scanID, userID, false).Delete(&domain.TLSScanResultEntity{})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
 }
 
 // ListOwnerUserTLSScansDiscoveryV1 lists TLS scans for the owner excluding catalog defaults (WORKPLAN_API §0.1).

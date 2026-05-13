@@ -52,6 +52,10 @@ func (s *stubScanResultRepository) CountByUserID(uuid.UUID) (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
+func (s *stubScanResultRepository) DeleteOwnedWalletScan(uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("not implemented")
+}
+
 type stubTLSScanResultRepository struct {
 	byID    map[uuid.UUID]*domain.TLSScanResultEntity
 	findErr error
@@ -109,6 +113,10 @@ func (s *stubTLSScanResultRepository) CountByUserID(uuid.UUID) (int64, error) {
 
 func (s *stubTLSScanResultRepository) CountByUserIDOrDefault(uuid.UUID) (int64, error) {
 	return 0, errors.New("not implemented")
+}
+
+func (s *stubTLSScanResultRepository) DeleteOwnedUserTLSScan(uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("not implemented")
 }
 
 func TestCanReadScan_AllowedOwner_Wallet(t *testing.T) {

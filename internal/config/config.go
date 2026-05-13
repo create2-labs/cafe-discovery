@@ -62,6 +62,12 @@ const (
 	// #nosec G101 -- This is a configuration key name, not a hardcoded credential
 	DiscoveryInternalAuthzServiceToken = "DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN"
 
+	// CafeCPMInternalBaseURL is the CPM HTTP root on the service network (e.g. http://cafe-cpm:8080), not the browser /api edge.
+	// Used with CafePolicyReferenceInternalServiceToken for POST /internal/policies/references/scan before DELETE v1 scans (PR6).
+	CafeCPMInternalBaseURL = "CAFE_CPM_INTERNAL_BASE_URL"
+	// #nosec G101 -- configuration key name
+	CafePolicyReferenceInternalServiceToken = "CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN"
+
 	defaultProduction         = true
 	defaultPostgreSQLHost     = "127.0.0.1"
 	defaultPostgreSQLPort     = "5432"

@@ -58,6 +58,16 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 		t.Fatalf("wallet handler should not run for .../wallets/scans, last=%v", got)
 	}
 	_ = resp.Body.Close()
+
+	del := httptest.NewRequest("DELETE", "/discovery/v1/wallets/scans/550e8400-e29b-41d4-a716-446655440000", nil)
+	respDel, err := app.Test(del, -1)
+	if err != nil {
+		t.Fatalf("DELETE wallets/scans: %v", err)
+	}
+	if respDel.StatusCode != fiber.StatusNotImplemented {
+		t.Fatalf("DELETE .../wallets/scans/:id status = %d, want %d", respDel.StatusCode, fiber.StatusNotImplemented)
+	}
+	_ = respDel.Body.Close()
 }
 
 func TestDiscoveryV1Routes_WalletByPubKeyHashUsesParamRoute(t *testing.T) {
@@ -102,6 +112,17 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}
+
+	delTLS := httptest.NewRequest("DELETE", "/discovery/v1/tls/scans/550e8400-e29b-41d4-a716-446655440000", nil)
+	respDel, err := app.Test(delTLS, -1)
+	if err != nil {
+		t.Fatalf("DELETE tls scan: %v", err)
+	}
+	if respDel.StatusCode != fiber.StatusNotImplemented {
+		t.Fatalf("DELETE .../tls/scans/:id status = %d, want %d", respDel.StatusCode, fiber.StatusNotImplemented)
+	}
+	_, _ = io.Copy(io.Discard, respDel.Body)
+	_ = respDel.Body.Close()
 
 	post := httptest.NewRequest("POST", "/discovery/v1/scan", nil)
 	resp, err := app.Test(post, -1)

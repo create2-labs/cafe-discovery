@@ -1051,6 +1051,10 @@ export CORS_ALLOW_ORIGINS="http://localhost:3000,http://localhost:3001,http://lo
 export CORS_ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS"
 ```
 
+#### Discovery → CPM internal policy reference (WORKPLAN PR5 / PR6)
+
+CPM (`cafe-crypto-policy-mgt`, **PR5**) exposes **`POST /internal/policies/references/scan`**, gated by **`CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN`** (Bearer). When **PR6** lands in Discovery, this service will call CPM over the **Docker/service network** (e.g. `http://cafe-cpm:8080`, not the browser-facing **`/api`** edge); the outbound **`Authorization: Bearer`** must match that secret. Until then, only CPM needs the variable — see **`cafe-deploy`** `compose/25-cpm.yml` and `env/dev.env.template`. Central reference: **`cafe-documentation/docs/security/cpm-auth-only-contract.md`** (§9–§10).
+
 Using config.yaml vs Environment Variables:
 
 - For local Docker Compose: Use `config.yaml` with Docker service names (postgres, nats, redis)
