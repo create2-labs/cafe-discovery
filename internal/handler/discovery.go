@@ -46,10 +46,12 @@ type DiscoveryHandler struct {
 	redisWalletRepo  repository.RedisWalletScanRepository
 	redisTLSRepo     repository.RedisTLSScanRepository
 	userScanCache    *service.UserScanCacheService
+	scanResultRepo   repository.ScanResultRepository
+	pendingV1        repository.PendingV1ScanRepository
 }
 
 // NewDiscoveryHandler creates a new discovery handler (read-through for scan data).
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, pendingV1 repository.PendingV1ScanRepository) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		tlsService:       tlsService,
@@ -60,6 +62,8 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService 
 		redisWalletRepo:  redisWalletRepo,
 		redisTLSRepo:     redisTLSRepo,
 		userScanCache:    userScanCache,
+		scanResultRepo:   scanResultRepo,
+		pendingV1:        pendingV1,
 	}
 }
 
@@ -199,20 +203,56 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 		})
 	}
 	if req.Address != "" {
-		scanID, _, qe := h.tryQueueWalletScan(c, req.Address)
+		scanID, userID, normalized, qe := h.prepareWalletScanQueue(c, req.Address)
 		if qe != nil {
 			if qe.committed {
 				return nil
 			}
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
+		if h.pendingV1 != nil {
+			if err := h.pendingV1.Put(c.Context(), &repository.PendingV1ScanRecord{
+				ScanID:    scanID,
+				UserID:    userID,
+				Family:    "wallet",
+				Address:   normalized,
+				CreatedAt: time.Now().UTC(),
+			}); err != nil {
+				log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 wallet scan put failed before NATS")
+				return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+					"error":   "service_unavailable",
+					"message": "The scan could not be accepted; please try again.",
+				}))
+			}
+		}
+		if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
+			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
+		}
 		return c.JSON(postScanV1AcceptedJSON(scanID, "wallet"))
 	}
-	scanID, _, qe := h.tryQueueEndpointScan(c, req.URL)
+	scanID, userID, endpoint, qe := h.prepareTLSScanQueue(c, req.URL)
 	if qe != nil {
 		if qe.committed {
 			return nil
 		}
+		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
+	}
+	if h.pendingV1 != nil {
+		if err := h.pendingV1.Put(c.Context(), &repository.PendingV1ScanRecord{
+			ScanID:    scanID,
+			UserID:    userID,
+			Family:    "tls",
+			Endpoint:  endpoint,
+			CreatedAt: time.Now().UTC(),
+		}); err != nil {
+			log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 TLS scan put failed before NATS")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+				"error":   "service_unavailable",
+				"message": "The scan could not be accepted; please try again.",
+			}))
+		}
+	}
+	if qe := h.publishTLSScanRequested(scanID, userID, endpoint); qe != nil {
 		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 	}
 	return c.JSON(postScanV1AcceptedJSON(scanID, "tls"))
@@ -393,24 +433,22 @@ func mustJSON(v interface{}) string {
 	return string(b)
 }
 
-// tryQueueWalletScan validates, allocates scan_id, publishes to NATS for wallet scans.
-// On success returns (scanID, normalizedAddress, nil). On failure returns (uuid.Nil, "", qe) with qe.committed
-// true if the HTTP response was already written (JWT missing).
-func (h *DiscoveryHandler) tryQueueWalletScan(c *fiber.Ctx, address string) (uuid.UUID, string, *queueScanError) {
+// prepareWalletScanQueue validates and allocates scan_id; does not publish to NATS.
+func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) (scanID uuid.UUID, userID uuid.UUID, normalized string, qe *queueScanError) {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{committed: true}
+		return uuid.Nil, uuid.Nil, "", &queueScanError{committed: true}
 	}
 
 	if address == "" {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": "address is required"},
 		}
 	}
 
 	if h.scannerPresence != nil && !h.scannerPresence.HasScanner("wallet") {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusServiceUnavailable,
 			body:   fiber.Map{"error": "no wallet scanner available, please try again later"},
 		}
@@ -418,13 +456,13 @@ func (h *DiscoveryHandler) tryQueueWalletScan(c *fiber.Ctx, address string) (uui
 
 	limitReached, limitMsg, err := h.checkScanLimits(c.Context(), userID, "wallet")
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)},
 		}
 	}
 	if limitReached {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusForbidden,
 			body:   fiber.Map{"error": limitMsg},
 		}
@@ -432,36 +470,53 @@ func (h *DiscoveryHandler) tryQueueWalletScan(c *fiber.Ctx, address string) (uui
 
 	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(address)
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": err.Error()},
 		}
 	}
 
+	return uuid.New(), userID, normalizedAddress, nil
+}
+
+func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, normalized string) *queueScanError {
 	scanMsg := nats.WalletScanMessage{
-		ScanID:  uuid.New(),
+		ScanID:  scanID,
 		UserID:  userID,
-		Address: normalizedAddress,
+		Address: normalized,
 	}
 	log.Info().
 		Str("subject", nats.SubjectScanRequestedWallet).
 		Str("scan_id", scanMsg.ScanID.String()).
-		Str("address", normalizedAddress).
+		Str("address", normalized).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.wallet")
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedWallet, scanMsg); err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},
 		}
 	}
+	return nil
+}
 
-	return scanMsg.ScanID, normalizedAddress, nil
+// tryQueueWalletScan validates, allocates scan_id, publishes to NATS for wallet scans.
+// On success returns (scanID, userID, normalizedAddress, nil). On failure returns (uuid.Nil, uuid.Nil, "", qe) with qe.committed
+// true if the HTTP response was already written (JWT missing).
+func (h *DiscoveryHandler) tryQueueWalletScan(c *fiber.Ctx, address string) (uuid.UUID, uuid.UUID, string, *queueScanError) {
+	scanID, userID, normalized, qe := h.prepareWalletScanQueue(c, address)
+	if qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
+	if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
+	return scanID, userID, normalized, nil
 }
 
 // queueWalletScan validates and queues wallet scans on NATS (legacy POST /discovery/scan response).
 func (h *DiscoveryHandler) queueWalletScan(c *fiber.Ctx, address string) error {
-	_, normalizedAddress, qe := h.tryQueueWalletScan(c, address)
+	_, _, normalizedAddress, qe := h.tryQueueWalletScan(c, address)
 	if qe != nil {
 		if qe.committed {
 			return nil
@@ -476,22 +531,22 @@ func (h *DiscoveryHandler) queueWalletScan(c *fiber.Ctx, address string) error {
 	})
 }
 
-// tryQueueEndpointScan validates, allocates scan_id, publishes to NATS for TLS scans.
-func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string) (uuid.UUID, string, *queueScanError) {
+// prepareTLSScanQueue validates and allocates scan_id; does not publish to NATS.
+func (h *DiscoveryHandler) prepareTLSScanQueue(c *fiber.Ctx, endpointURL string) (scanID uuid.UUID, userID uuid.UUID, endpoint string, qe *queueScanError) {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{committed: true}
+		return uuid.Nil, uuid.Nil, "", &queueScanError{committed: true}
 	}
 
 	if h.scannerPresence != nil && !h.scannerPresence.HasScanner("tls") {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusServiceUnavailable,
 			body:   fiber.Map{"error": "no TLS scanner available, please try again later"},
 		}
 	}
 
 	if !strings.HasPrefix(endpointURL, schemeHTTPS) && !strings.HasPrefix(endpointURL, schemeHTTP) {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": "url must use http:// or https:// protocol"},
 		}
@@ -499,14 +554,14 @@ func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string
 
 	parsedURL, err := url.Parse(endpointURL)
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": fmt.Sprintf("invalid URL format: %v", err)},
 		}
 	}
 
 	if parsedURL.Host == "" {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": "url must include a valid hostname"},
 		}
@@ -514,7 +569,7 @@ func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string
 
 	hostname := parsedURL.Hostname()
 	if hostname == "" {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": "url must include a valid hostname"},
 		}
@@ -522,20 +577,24 @@ func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string
 
 	limitReached, limitMsg, err := h.checkScanLimits(c.Context(), userID, "endpoint")
 	if err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)},
 		}
 	}
 	if limitReached {
-		return uuid.Nil, "", &queueScanError{
+		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusForbidden,
 			body:   fiber.Map{"error": limitMsg},
 		}
 	}
 
+	return uuid.New(), userID, endpointURL, nil
+}
+
+func (h *DiscoveryHandler) publishTLSScanRequested(scanID, userID uuid.UUID, endpointURL string) *queueScanError {
 	scanMsg := nats.TLSScanMessage{
-		ScanID:   uuid.New(),
+		ScanID:   scanID,
 		UserID:   userID,
 		Endpoint: endpointURL,
 	}
@@ -546,18 +605,29 @@ func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.tls")
 	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
-		return uuid.Nil, "", &queueScanError{
+		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},
 		}
 	}
+	return nil
+}
 
-	return scanMsg.ScanID, endpointURL, nil
+// tryQueueEndpointScan validates, allocates scan_id, publishes to NATS for TLS scans.
+func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string) (uuid.UUID, uuid.UUID, string, *queueScanError) {
+	scanID, userID, endpoint, qe := h.prepareTLSScanQueue(c, endpointURL)
+	if qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
+	if qe := h.publishTLSScanRequested(scanID, userID, endpoint); qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
+	return scanID, userID, endpoint, nil
 }
 
 // queueEndpointScan validates and queues TLS endpoint scans on NATS (legacy POST /discovery/scan response).
 func (h *DiscoveryHandler) queueEndpointScan(c *fiber.Ctx, endpointURL string) error {
-	_, endpoint, qe := h.tryQueueEndpointScan(c, endpointURL)
+	_, _, endpoint, qe := h.tryQueueEndpointScan(c, endpointURL)
 	if qe != nil {
 		if qe.committed {
 			return nil

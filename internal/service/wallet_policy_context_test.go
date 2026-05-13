@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +45,49 @@ func (s *listWalletScanRepoStub) FindByID(uuid.UUID) (*domain.ScanResultEntity, 
 
 func (s *listWalletScanRepoStub) FindByUserIDAndAddress(uuid.UUID, string) (*domain.ScanResultEntity, error) {
 	return nil, nil
+}
+
+func (s *listWalletScanRepoStub) FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error) {
+	if s.byUser == nil {
+		return nil, nil
+	}
+	for _, e := range s.byUser[userID] {
+		if e.ID == scanID {
+			return e, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *listWalletScanRepoStub) ListOwnerWalletScansDiscoveryV1(userID uuid.UUID, address string, limit, offset int) ([]*domain.ScanResultEntity, int64, error) {
+	if s.byUser == nil {
+		return nil, 0, nil
+	}
+	rows := s.byUser[userID]
+	addrFilter := strings.TrimSpace(address)
+	var filtered []*domain.ScanResultEntity
+	for _, e := range rows {
+		if addrFilter == "" || strings.EqualFold(strings.TrimSpace(e.Address), addrFilter) {
+			filtered = append(filtered, e)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		ci, cj := filtered[i].CreatedAt, filtered[j].CreatedAt
+		if !ci.Equal(cj) {
+			return ci.After(cj)
+		}
+		return strings.Compare(filtered[i].ID.String(), filtered[j].ID.String()) > 0
+	})
+	total := int64(len(filtered))
+	if offset >= len(filtered) {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(filtered) {
+		end = len(filtered)
+	}
+	out := append([]*domain.ScanResultEntity(nil), filtered[offset:end]...)
+	return out, total, nil
 }
 
 func (s *listWalletScanRepoStub) CountByUserID(userID uuid.UUID) (int64, error) {

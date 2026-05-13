@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +63,47 @@ func (m *memoryWalletListRepo) FindByUserIDAndAddress(uuid.UUID, string) (*domai
 	return nil, nil
 }
 
+func (m *memoryWalletListRepo) FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error) {
+	for _, e := range m.byUser[userID] {
+		if e.ID == scanID {
+			return e, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *memoryWalletListRepo) ListOwnerWalletScansDiscoveryV1(userID uuid.UUID, address string, limit, offset int) ([]*domain.ScanResultEntity, int64, error) {
+	rows := m.byUser[userID]
+	addrFilter := strings.TrimSpace(address)
+	var filtered []*domain.ScanResultEntity
+	for _, e := range rows {
+		if addrFilter == "" || strings.EqualFold(strings.TrimSpace(e.Address), addrFilter) {
+			filtered = append(filtered, e)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		ci, cj := filtered[i].CreatedAt, filtered[j].CreatedAt
+		if !ci.Equal(cj) {
+			return ci.After(cj)
+		}
+		return bytesCompareUUID(filtered[i].ID, filtered[j].ID) > 0
+	})
+	total := int64(len(filtered))
+	if offset >= len(filtered) {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(filtered) {
+		end = len(filtered)
+	}
+	out := append([]*domain.ScanResultEntity(nil), filtered[offset:end]...)
+	return out, total, nil
+}
+
+func bytesCompareUUID(a, b uuid.UUID) int {
+	return strings.Compare(a.String(), b.String())
+}
+
 func (m *memoryWalletListRepo) CountByUserID(uid uuid.UUID) (int64, error) {
 	return int64(len(m.byUser[uid])), nil
 }
@@ -75,6 +118,12 @@ func (noopTLSListRepo) FindByUserIDOrDefault(uuid.UUID, int, int) ([]*domain.TLS
 	return nil, nil
 }
 func (noopTLSListRepo) FindByID(uuid.UUID) (*domain.TLSScanResultEntity, error) { return nil, nil }
+func (noopTLSListRepo) FindOwnedUserTLSScanByID(uuid.UUID, uuid.UUID) (*domain.TLSScanResultEntity, error) {
+	return nil, nil
+}
+func (noopTLSListRepo) ListOwnerUserTLSScansDiscoveryV1(uuid.UUID, int, int) ([]*domain.TLSScanResultEntity, int64, error) {
+	return nil, 0, nil
+}
 func (noopTLSListRepo) FindByUserIDAndURL(uuid.UUID, string) (*domain.TLSScanResultEntity, error) {
 	return nil, nil
 }
