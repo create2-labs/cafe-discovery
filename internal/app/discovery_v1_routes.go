@@ -41,11 +41,12 @@ func registerDiscoveryV1Routes(
 	if discovery != nil {
 		w.Get("/scans", discovery.ListDiscoveryV1WalletScans)
 		w.Get("/scans/:scan_id", discovery.GetDiscoveryV1WalletScan)
+		w.Delete("/scans/:scan_id", discovery.DeleteDiscoveryV1WalletScan)
 	} else {
 		w.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans"))
 		w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans/:scan_id"))
+		w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/wallets/scans/:scan_id"))
 	}
-	w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/wallets/scans/:scan_id"))
 	w.Get(walletPubKeyHashPath, wallets.GetWallet)
 	w.Put(walletPubKeyHashPath, wallets.UpdateWallet)
 	w.Delete(walletPubKeyHashPath, wallets.DeleteWallet)
@@ -54,11 +55,12 @@ func registerDiscoveryV1Routes(
 	if tls != nil {
 		tlsGroup.Get("/scans", tls.ListDiscoveryV1TLSScans)
 		tlsGroup.Get("/scans/:scan_id", tls.GetDiscoveryV1TLSScan)
+		tlsGroup.Delete("/scans/:scan_id", tls.DeleteDiscoveryV1TLSScan)
 	} else {
 		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/tls/scans"))
 		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
+		tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
 	}
-	tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
 
 	if discovery != nil {
 		v1.Post("/scan", discovery.PostDiscoveryScanV1)

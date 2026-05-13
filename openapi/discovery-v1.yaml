@@ -207,8 +207,9 @@ paths:
         **204** | **404** | **409**. **409** if a persisted CPM policy instance references this
         **`scan_id`**. Idempotent second delete → **404**.
 
-        **503 fail-closed** when the authoritative policy reference check is unavailable is planned
-        in implementation (**WORKPLAN_API_PR.md** PR6) — optional surface in this spec.
+        **503 fail-closed** when the authoritative policy reference check is unavailable (**Discovery**
+        returns **`POLICY_REFERENCE_CHECK_UNAVAILABLE`**); requires **`CAFE_CPM_INTERNAL_BASE_URL`**
+        and **`CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN`** on Discovery (see WORKPLAN_API_PR PR6 / PR9).
       operationId: deleteWalletScan
       responses:
         "204":

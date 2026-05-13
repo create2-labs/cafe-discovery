@@ -8,6 +8,7 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/scan"
 
 	"github.com/gofiber/fiber/v2"
@@ -439,4 +440,183 @@ func tlsScanResultBodyV1(dto *domain.TLSScanResult) fiber.Map {
 		"current_pq_posture":   nistLevelToPQPosture(dto.NISTLevel),
 		"observations":         []any{},
 	}
+}
+
+func tenantIDFromDiscoveryV1Request(c *fiber.Ctx) string {
+	return strings.TrimSpace(c.Get("X-Tenant-Id"))
+}
+
+func respondPolicyReferenceCheckUnavailable(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+		"error":   "POLICY_REFERENCE_CHECK_UNAVAILABLE",
+		"message": "The scan cannot be deleted because policy references could not be verified.",
+	}))
+}
+
+// DeleteDiscoveryV1WalletScan handles DELETE /discovery/v1/wallets/scans/:scan_id (WORKPLAN_API_PR PR6).
+func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
+	userID, err := h.getAuthenticatedUserID(c)
+	if err != nil {
+		return err
+	}
+	scanID, err := uuid.Parse(strings.TrimSpace(c.Params("scan_id")))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
+			"error":   "invalid_request",
+			"message": "scan_id must be a UUID",
+		}))
+	}
+	tenantID := tenantIDFromDiscoveryV1Request(c)
+
+	var walletEnt *domain.ScanResultEntity
+	var pendingRec *repository.PendingV1ScanRecord
+
+	if h.scanResultRepo != nil {
+		ent, qerr := h.scanResultRepo.FindOwnedWalletScanByID(userID, scanID)
+		if qerr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+				"error":   "internal_error",
+				"message": qerr.Error(),
+			}))
+		}
+		walletEnt = ent
+	}
+	if walletEnt == nil && h.pendingV1 != nil {
+		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+		if perr != nil {
+			return respondPolicyReferenceCheckUnavailable(c)
+		}
+		if rec != nil && rec.UserID == userID && rec.Family == "wallet" {
+			pendingRec = rec
+		}
+	}
+	if walletEnt == nil && pendingRec == nil {
+		return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
+			"error":   "not_found",
+			"message": "scan not found",
+		}))
+	}
+
+	if h.policyRef == nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	ref, err := h.policyRef.PersistedPoliciesReferenceScan(c.Context(), userID, tenantID, scanID)
+	if err != nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	if ref {
+		return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(fiber.Map{
+			"error":   "SCAN_REFERENCED_BY_POLICY",
+			"message": "This scan is referenced by one or more persisted crypto policies.",
+		}))
+	}
+
+	if walletEnt != nil {
+		deleted, derr := h.scanResultRepo.DeleteOwnedWalletScan(userID, scanID)
+		if derr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+				"error":   "internal_error",
+				"message": derr.Error(),
+			}))
+		}
+		if !deleted {
+			return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
+				"error":   "not_found",
+				"message": "scan not found",
+			}))
+		}
+		if h.redisWalletRepo != nil {
+			_ = h.redisWalletRepo.DeleteByUserIDAndAddress(c.Context(), userID.String(), walletEnt.Address)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+
+	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// DeleteDiscoveryV1TLSScan handles DELETE /discovery/v1/tls/scans/:scan_id (WORKPLAN_API_PR PR6).
+func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
+		return err
+	}
+	scanID, err := uuid.Parse(strings.TrimSpace(c.Params("scan_id")))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
+			"error":   "invalid_request",
+			"message": "scan_id must be a UUID",
+		}))
+	}
+	tenantID := tenantIDFromDiscoveryV1Request(c)
+
+	var tlsEnt *domain.TLSScanResultEntity
+	var pendingRec *repository.PendingV1ScanRecord
+
+	if h.tlsScanResultRepo != nil {
+		ent, qerr := h.tlsScanResultRepo.FindOwnedUserTLSScanByID(userID, scanID)
+		if qerr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+				"error":   "internal_error",
+				"message": qerr.Error(),
+			}))
+		}
+		tlsEnt = ent
+	}
+	if tlsEnt == nil && h.pendingV1 != nil {
+		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+		if perr != nil {
+			return respondPolicyReferenceCheckUnavailable(c)
+		}
+		if rec != nil && rec.UserID == userID && rec.Family == "tls" {
+			pendingRec = rec
+		}
+	}
+	if tlsEnt == nil && pendingRec == nil {
+		return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
+			"error":   "not_found",
+			"message": "scan not found",
+		}))
+	}
+
+	if h.policyRef == nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	ref, err := h.policyRef.PersistedPoliciesReferenceScan(c.Context(), userID, tenantID, scanID)
+	if err != nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	if ref {
+		return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(fiber.Map{
+			"error":   "SCAN_REFERENCED_BY_POLICY",
+			"message": "This scan is referenced by one or more persisted crypto policies.",
+		}))
+	}
+
+	if tlsEnt != nil {
+		deleted, derr := h.tlsScanResultRepo.DeleteOwnedUserTLSScan(userID, scanID)
+		if derr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+				"error":   "internal_error",
+				"message": derr.Error(),
+			}))
+		}
+		if !deleted {
+			return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
+				"error":   "not_found",
+				"message": "scan not found",
+			}))
+		}
+		if h.redisTLSRepo != nil {
+			_ = h.redisTLSRepo.DeleteByUserIDAndURL(c.Context(), userID.String(), tlsEnt.URL)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+
+	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

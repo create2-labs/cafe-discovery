@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
 	"cafe-discovery/internal/config"
+	"cafe-discovery/internal/cpmpolicyref"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
 	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/middleware"
+	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/evm"
@@ -131,9 +135,20 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to create pending v1 scan repository: %w", err)
 	}
 
+	cpmInternalBase := strings.TrimSpace(viper.GetString(config.CafeCPMInternalBaseURL))
+	policyRefToken := strings.TrimSpace(viper.GetString(config.CafePolicyReferenceInternalServiceToken))
+	var policyRef policyref.Checker
+	if cpmInternalBase != "" && policyRefToken != "" {
+		policyRef = cpmpolicyref.NewHTTPClient(cpmInternalBase, policyRefToken, &http.Client{Timeout: 5 * time.Second})
+	} else {
+		policyRef = nil
+		log.Printf("Warning: %s and %s must both be set for DELETE /discovery/v1/.../scans to verify CPM policy references; otherwise DELETE returns 503 fail-closed",
+			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
+	}
+
 	// Initialize handlers (read-through for scan list/get; plan usage from Redis counts)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, pendingV1Repo)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, pendingV1Repo, policyRef)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)

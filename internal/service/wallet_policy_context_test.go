@@ -97,6 +97,10 @@ func (s *listWalletScanRepoStub) CountByUserID(userID uuid.UUID) (int64, error) 
 	return int64(len(s.byUser[userID])), nil
 }
 
+func (s *listWalletScanRepoStub) DeleteOwnedWalletScan(uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("not implemented")
+}
+
 func TestListWalletPolicyContexts_OwnerIsolation(t *testing.T) {
 	t.Parallel()
 

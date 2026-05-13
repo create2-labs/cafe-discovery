@@ -29,6 +29,7 @@ type RedisWalletScanRepository interface {
 	FindByUserIDAndAddress(ctx context.Context, userID string, address string) (*domain.ScanResult, error)
 	ListAddressesByUserID(ctx context.Context, userID string) ([]string, error)
 	CountByUserID(ctx context.Context, userID string) (int64, error)
+	DeleteByUserIDAndAddress(ctx context.Context, userID string, address string) error
 }
 
 type redisWalletScanRepository struct {
@@ -168,6 +169,15 @@ func (r *redisWalletScanRepository) FindByUserIDAndAddress(ctx context.Context, 
 		return nil, fmt.Errorf("failed to unmarshal scan result: %w", err)
 	}
 	return &result, nil
+}
+
+// DeleteByUserIDAndAddress removes the persistence-style cache key for a user's wallet scan at address.
+func (r *redisWalletScanRepository) DeleteByUserIDAndAddress(ctx context.Context, userID string, address string) error {
+	key := r.getUserKey(userID, address)
+	if err := r.redis.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("redis del wallet user scan: %w", err)
+	}
+	return nil
 }
 
 // ListAddressesByUserID lists all wallet scan addresses for a user (persistence-service keys)
