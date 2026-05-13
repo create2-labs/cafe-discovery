@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,11 +74,13 @@ func (c *HTTPClient) PersistedPoliciesReferenceScan(ctx context.Context, userID 
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if err != nil {
-		return false, err
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return false, errors.Join(readErr, closeErr)
+	}
+	if closeErr != nil {
+		return false, fmt.Errorf("cpm policy reference: close response body: %w", closeErr)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("cpm policy reference: unexpected status %d", resp.StatusCode)

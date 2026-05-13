@@ -108,6 +108,10 @@ func (m *memoryWalletListRepo) CountByUserID(uid uuid.UUID) (int64, error) {
 	return int64(len(m.byUser[uid])), nil
 }
 
+func (m *memoryWalletListRepo) DeleteOwnedWalletScan(uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errStub
+}
+
 type noopTLSListRepo struct{}
 
 func (noopTLSListRepo) Create(*domain.TLSScanResultEntity) error { return errStub }
@@ -132,6 +136,9 @@ func (noopTLSListRepo) FindDefaultByURL(string) (*domain.TLSScanResultEntity, er
 func (noopTLSListRepo) FindAllDefault() ([]*domain.TLSScanResultEntity, error) { return nil, nil }
 func (noopTLSListRepo) CountByUserID(uuid.UUID) (int64, error) { return 0, nil }
 func (noopTLSListRepo) CountByUserIDOrDefault(uuid.UUID) (int64, error) { return 0, nil }
+func (noopTLSListRepo) DeleteOwnedUserTLSScan(uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errStub
+}
 
 // errStub is returned from repository stub methods not exercised by these tests.
 var errStub = errors.New("repository stub: not implemented")
