@@ -126,9 +126,14 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// User scan cache: read-through and warm cache on sign-in
 	userScanCache := service.NewUserScanCacheService(scanResultRepo, tlsScanResultRepo, redisWalletRepo, redisTLSRepo)
 
+	pendingV1Repo, err := repository.NewRedisPendingV1ScanRepository(redisConn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pending v1 scan repository: %w", err)
+	}
+
 	// Initialize handlers (read-through for scan list/get; plan usage from Redis counts)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, pendingV1Repo)
+	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)

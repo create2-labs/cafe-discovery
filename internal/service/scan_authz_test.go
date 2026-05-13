@@ -40,6 +40,14 @@ func (s *stubScanResultRepository) FindByUserIDAndAddress(uuid.UUID, string) (*d
 	return nil, errors.New("not implemented")
 }
 
+func (s *stubScanResultRepository) FindOwnedWalletScanByID(uuid.UUID, uuid.UUID) (*domain.ScanResultEntity, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubScanResultRepository) ListOwnerWalletScansDiscoveryV1(uuid.UUID, string, int, int) ([]*domain.ScanResultEntity, int64, error) {
+	return nil, 0, errors.New("not implemented")
+}
+
 func (s *stubScanResultRepository) CountByUserID(uuid.UUID) (int64, error) {
 	return 0, errors.New("not implemented")
 }
@@ -69,6 +77,14 @@ func (s *stubTLSScanResultRepository) FindByID(id uuid.UUID) (*domain.TLSScanRes
 		return entity, nil
 	}
 	return nil, nil
+}
+
+func (s *stubTLSScanResultRepository) FindOwnedUserTLSScanByID(uuid.UUID, uuid.UUID) (*domain.TLSScanResultEntity, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubTLSScanResultRepository) ListOwnerUserTLSScansDiscoveryV1(uuid.UUID, int, int) ([]*domain.TLSScanResultEntity, int64, error) {
+	return nil, 0, errors.New("not implemented")
 }
 
 func (s *stubTLSScanResultRepository) FindByUserIDAndURL(uuid.UUID, string) (*domain.TLSScanResultEntity, error) {

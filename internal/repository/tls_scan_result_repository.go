@@ -2,6 +2,8 @@
 package repository
 
 import (
+	"errors"
+
 	"cafe-discovery/internal/domain"
 
 	"github.com/google/uuid"
@@ -14,6 +16,8 @@ type TLSScanResultRepository interface {
 	FindByUserID(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByUserIDOrDefault(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error)
+	FindOwnedUserTLSScanByID(userID, scanID uuid.UUID) (*domain.TLSScanResultEntity, error)
+	ListOwnerUserTLSScansDiscoveryV1(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, int64, error)
 	FindByUserIDAndURL(userID uuid.UUID, url string) (*domain.TLSScanResultEntity, error)
 	FindByURL(url string) (*domain.TLSScanResultEntity, error)
 	FindDefaultByURL(url string) (*domain.TLSScanResultEntity, error)
@@ -48,6 +52,37 @@ func (r *tlsScanResultRepository) FindByUserID(userID uuid.UUID, limit, offset i
 func (r *tlsScanResultRepository) FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error) {
 	var result domain.TLSScanResultEntity
 	return r.findByID(id, &result)
+}
+
+// FindOwnedUserTLSScanByID returns a non-default TLS scan owned by userID, or nil.
+func (r *tlsScanResultRepository) FindOwnedUserTLSScanByID(userID, scanID uuid.UUID) (*domain.TLSScanResultEntity, error) {
+	var ent domain.TLSScanResultEntity
+	err := r.db.Where("id = ? AND user_id = ? AND \"default\" = ?", scanID, userID, false).First(&ent).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &ent, nil
+}
+
+// ListOwnerUserTLSScansDiscoveryV1 lists TLS scans for the owner excluding catalog defaults (WORKPLAN_API §0.1).
+func (r *tlsScanResultRepository) ListOwnerUserTLSScansDiscoveryV1(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, int64, error) {
+	q := r.db.Model(&domain.TLSScanResultEntity{}).Where("user_id = ? AND \"default\" = ?", userID, false)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var out []*domain.TLSScanResultEntity
+	err := r.db.Where("user_id = ? AND \"default\" = ?", userID, false).
+		Order("created_at DESC, id DESC").
+		Limit(limit).Offset(offset).
+		Find(&out).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
 }
 
 // FindByUserIDAndURL finds a TLS scan result by user ID and URL

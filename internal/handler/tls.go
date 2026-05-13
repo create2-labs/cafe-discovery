@@ -16,21 +16,25 @@ import (
 
 // TLSHandler handles TLS-related HTTP requests. Scan list uses read-through (Redis then Postgres).
 type TLSHandler struct {
-	tlsService    *service.TLSService
-	natsConn      nats.Connection
-	redisTLSRepo  repository.RedisTLSScanRepository
-	planService   *service.PlanService
-	userScanCache *service.UserScanCacheService
+	tlsService          *service.TLSService
+	natsConn            nats.Connection
+	redisTLSRepo        repository.RedisTLSScanRepository
+	planService         *service.PlanService
+	userScanCache       *service.UserScanCacheService
+	tlsScanResultRepo   repository.TLSScanResultRepository
+	pendingV1           repository.PendingV1ScanRepository
 }
 
 // NewTLSHandler creates a new TLS handler (read-through for scan list).
-func NewTLSHandler(tlsService *service.TLSService, natsConn nats.Connection, redisTLSRepo repository.RedisTLSScanRepository, planService *service.PlanService, userScanCache *service.UserScanCacheService) *TLSHandler {
+func NewTLSHandler(tlsService *service.TLSService, natsConn nats.Connection, redisTLSRepo repository.RedisTLSScanRepository, planService *service.PlanService, userScanCache *service.UserScanCacheService, tlsScanResultRepo repository.TLSScanResultRepository, pendingV1 repository.PendingV1ScanRepository) *TLSHandler {
 	return &TLSHandler{
-		tlsService:    tlsService,
-		natsConn:      natsConn,
-		redisTLSRepo:  redisTLSRepo,
-		planService:   planService,
-		userScanCache: userScanCache,
+		tlsService:        tlsService,
+		natsConn:          natsConn,
+		redisTLSRepo:      redisTLSRepo,
+		planService:       planService,
+		userScanCache:     userScanCache,
+		tlsScanResultRepo: tlsScanResultRepo,
+		pendingV1:         pendingV1,
 	}
 }
 

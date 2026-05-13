@@ -32,23 +32,33 @@ func discoveryV1NotImplemented(feature string) fiber.Handler {
 func registerDiscoveryV1Routes(
 	v1 fiber.Router,
 	discovery *handler.DiscoveryHandler,
-	_ *handler.TLSHandler,
+	tls *handler.TLSHandler,
 	wallets discoveryV1WalletHandlers,
 ) {
 	w := v1.Group("/wallets")
 	w.Get("/", wallets.GetAllWallets)
 	w.Post("/", wallets.CreateWallet)
-	w.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans"))
-	w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans/:scan_id"))
+	if discovery != nil {
+		w.Get("/scans", discovery.ListDiscoveryV1WalletScans)
+		w.Get("/scans/:scan_id", discovery.GetDiscoveryV1WalletScan)
+	} else {
+		w.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans"))
+		w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans/:scan_id"))
+	}
 	w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/wallets/scans/:scan_id"))
 	w.Get(walletPubKeyHashPath, wallets.GetWallet)
 	w.Put(walletPubKeyHashPath, wallets.UpdateWallet)
 	w.Delete(walletPubKeyHashPath, wallets.DeleteWallet)
 
-	tls := v1.Group("/tls")
-	tls.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/tls/scans"))
-	tls.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
-	tls.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
+	tlsGroup := v1.Group("/tls")
+	if tls != nil {
+		tlsGroup.Get("/scans", tls.ListDiscoveryV1TLSScans)
+		tlsGroup.Get("/scans/:scan_id", tls.GetDiscoveryV1TLSScan)
+	} else {
+		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/tls/scans"))
+		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
+	}
+	tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
 
 	if discovery != nil {
 		v1.Post("/scan", discovery.PostDiscoveryScanV1)
