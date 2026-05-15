@@ -145,36 +145,6 @@ func scanLimitErrorMessage(scanType string, usage *service.PlanUsage) string {
 	return fmt.Sprintf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
 }
 
-// UnifiedScan handles POST /discovery/scan
-// Automatically detects if the request is for a wallet (address) or TLS endpoint (url)
-func (h *DiscoveryHandler) UnifiedScan(c *fiber.Ctx) error {
-	var req ScanRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
-	}
-
-	// Determine scan type based on provided fields
-	if req.Address != "" && req.URL != "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "cannot specify both address and url, please provide only one",
-		})
-	}
-
-	if req.Address == "" && req.URL == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "either address (for wallet) or url (for TLS endpoint) is required",
-		})
-	}
-
-	// Route to appropriate queue path based on what was provided
-	if req.Address != "" {
-		return h.queueWalletScan(c, req.Address)
-	}
-	return h.queueEndpointScan(c, req.URL)
-}
-
 // queueScanError carries HTTP error details from tryQueue* helpers.
 // committed is true when the response was already written (e.g. 401 from JWT context).
 type queueScanError struct {
@@ -503,37 +473,6 @@ func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, 
 	return nil
 }
 
-// tryQueueWalletScan validates, allocates scan_id, publishes to NATS for wallet scans.
-// On success returns (scanID, userID, normalizedAddress, nil). On failure returns (uuid.Nil, uuid.Nil, "", qe) with qe.committed
-// true if the HTTP response was already written (JWT missing).
-func (h *DiscoveryHandler) tryQueueWalletScan(c *fiber.Ctx, address string) (uuid.UUID, uuid.UUID, string, *queueScanError) {
-	scanID, userID, normalized, qe := h.prepareWalletScanQueue(c, address)
-	if qe != nil {
-		return uuid.Nil, uuid.Nil, "", qe
-	}
-	if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
-		return uuid.Nil, uuid.Nil, "", qe
-	}
-	return scanID, userID, normalized, nil
-}
-
-// queueWalletScan validates and queues wallet scans on NATS (legacy POST /discovery/scan response).
-func (h *DiscoveryHandler) queueWalletScan(c *fiber.Ctx, address string) error {
-	_, _, normalizedAddress, qe := h.tryQueueWalletScan(c, address)
-	if qe != nil {
-		if qe.committed {
-			return nil
-		}
-		return c.Status(qe.status).JSON(qe.body)
-	}
-	return c.JSON(fiber.Map{
-		"message": "scan queued successfully",
-		"address": normalizedAddress,
-		"type":    "wallet",
-		"status":  "processing",
-	})
-}
-
 // prepareTLSScanQueue validates and allocates scan_id; does not publish to NATS.
 func (h *DiscoveryHandler) prepareTLSScanQueue(c *fiber.Ctx, endpointURL string) (scanID uuid.UUID, userID uuid.UUID, endpoint string, qe *queueScanError) {
 	userID, err := h.getAuthenticatedUserID(c)
@@ -616,35 +555,6 @@ func (h *DiscoveryHandler) publishTLSScanRequested(scanID, userID uuid.UUID, end
 	return nil
 }
 
-// tryQueueEndpointScan validates, allocates scan_id, publishes to NATS for TLS scans.
-func (h *DiscoveryHandler) tryQueueEndpointScan(c *fiber.Ctx, endpointURL string) (uuid.UUID, uuid.UUID, string, *queueScanError) {
-	scanID, userID, endpoint, qe := h.prepareTLSScanQueue(c, endpointURL)
-	if qe != nil {
-		return uuid.Nil, uuid.Nil, "", qe
-	}
-	if qe := h.publishTLSScanRequested(scanID, userID, endpoint); qe != nil {
-		return uuid.Nil, uuid.Nil, "", qe
-	}
-	return scanID, userID, endpoint, nil
-}
-
-// queueEndpointScan validates and queues TLS endpoint scans on NATS (legacy POST /discovery/scan response).
-func (h *DiscoveryHandler) queueEndpointScan(c *fiber.Ctx, endpointURL string) error {
-	_, _, endpoint, qe := h.tryQueueEndpointScan(c, endpointURL)
-	if qe != nil {
-		if qe.committed {
-			return nil
-		}
-		return c.Status(qe.status).JSON(qe.body)
-	}
-	return c.JSON(fiber.Map{
-		"message":  "scan queued successfully",
-		"endpoint": endpoint,
-		"type":     "tls",
-		"status":   "processing",
-	})
-}
-
 // ListRPCs handles GET /discovery/rpcs
 // Returns the list of configured RPC endpoints
 func (h *DiscoveryHandler) ListRPCs(c *fiber.Ctx) error {
@@ -659,61 +569,6 @@ func (h *DiscoveryHandler) ListRPCs(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"blockchains": rpcs,
 		"count":       len(rpcs),
-	})
-}
-
-// ListScans handles GET /discovery/scans. Read-through: Redis then Postgres.
-func (h *DiscoveryHandler) ListScans(c *fiber.Ctx) error {
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		return err
-	}
-	limit, offset := parsePaginationParams(c)
-	addresses, total, err := h.userScanCache.ListWalletAddresses(c.Context(), userID, limit, offset)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-	results := make([]fiber.Map, len(addresses))
-	for i, a := range addresses {
-		if normalized, err := h.discoveryService.ValidateAndNormalizeAddress(a); err == nil {
-			results[i] = fiber.Map{"id": normalized}
-			continue
-		}
-		results[i] = fiber.Map{"id": a}
-	}
-	return c.JSON(fiber.Map{
-		"results": results,
-		"total":   total,
-		"limit":   limit,
-		"offset":  offset,
-		"count":   len(results),
-	})
-}
-
-// ListWalletPolicyContexts handles GET /discovery/wallet-policy-contexts.
-// JWT is required (same protected /discovery group as ListScans): no token → 401.
-// Results are strictly filtered by the authenticated user id at the repository layer
-// (owner-scoped list, no other user’s rows). Binary allow/deny for a specific scan_id
-// without listing is handled by CPM via AUTH-05 /internal/authz/... (see scan_authz tests).
-func (h *DiscoveryHandler) ListWalletPolicyContexts(c *fiber.Ctx) error {
-	userID, err := getUserIDFromContext(c)
-	if err != nil {
-		return err
-	}
-	limit, offset := parsePaginationParams(c)
-	if h.userScanCache == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "user scan cache not available"})
-	}
-	ctxs, total, svcErr := h.userScanCache.ListWalletPolicyContexts(c.Context(), userID, limit, offset)
-	if svcErr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": svcErr.Error()})
-	}
-	return c.JSON(fiber.Map{
-		"contexts": ctxs,
-		"total":    total,
-		"limit":    limit,
-		"offset":   offset,
-		"count":    len(ctxs),
 	})
 }
 

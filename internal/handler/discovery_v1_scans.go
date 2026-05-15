@@ -297,6 +297,42 @@ func nistLevelToPQPosture(l domain.NISTLevel) string {
 	}
 }
 
+// ListDiscoveryV1TLSDefaultScans handles GET /discovery/v1/tls/scans/defaults.
+// Returns the shared catalog of default TLS endpoints (not owner-scoped user scans).
+func (h *TLSHandler) ListDiscoveryV1TLSDefaultScans(c *fiber.Ctx) error {
+	if _, err := requireAuthenticatedUserID(c); err != nil {
+		return err
+	}
+	if h.tlsScanResultRepo == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+			"error":   "service_unavailable",
+			"message": "TLS default scan catalog is temporarily unavailable",
+		}))
+	}
+	entities, err := h.tlsScanResultRepo.FindAllDefault()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+			"error":   "internal_error",
+			"message": err.Error(),
+		}))
+	}
+	items := make([]fiber.Map, 0, len(entities))
+	for _, e := range entities {
+		if e == nil {
+			continue
+		}
+		item := tlsScanListItemV1(e)
+		item["is_default"] = true
+		items = append(items, item)
+	}
+	return c.JSON(fiber.Map{
+		"items":  items,
+		"total":  len(items),
+		"limit":  len(items),
+		"offset": 0,
+	})
+}
+
 // ListDiscoveryV1TLSScans handles GET /discovery/v1/tls/scans.
 func (h *TLSHandler) ListDiscoveryV1TLSScans(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)

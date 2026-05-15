@@ -8,7 +8,7 @@ import (
 )
 
 // Exercises hybrid PQC issue + validate path used by JWTMiddleware in production,
-// without HTTP. Complements wallet_policy_context JWT handler tests (401 only).
+// without HTTP.
 func TestAuthService_generateToken_ValidateToken_roundTrip(t *testing.T) {
 	t.Parallel()
 
