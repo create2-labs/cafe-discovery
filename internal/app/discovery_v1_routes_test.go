@@ -99,6 +99,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 
 	for _, path := range []string{
 		"/discovery/v1/tls/scans",
+		"/discovery/v1/tls/scans/defaults",
 		"/discovery/v1/tls/scans/550e8400-e29b-41d4-a716-446655440000",
 	} {
 		req := httptest.NewRequest("GET", path, nil)

@@ -54,10 +54,12 @@ func registerDiscoveryV1Routes(
 	tlsGroup := v1.Group("/tls")
 	if tls != nil {
 		tlsGroup.Get("/scans", tls.ListDiscoveryV1TLSScans)
+		tlsGroup.Get("/scans/defaults", tls.ListDiscoveryV1TLSDefaultScans)
 		tlsGroup.Get("/scans/:scan_id", tls.GetDiscoveryV1TLSScan)
 		tlsGroup.Delete("/scans/:scan_id", tls.DeleteDiscoveryV1TLSScan)
 	} else {
 		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/tls/scans"))
+		tlsGroup.Get("/scans/defaults", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/defaults"))
 		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
 		tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
 	}

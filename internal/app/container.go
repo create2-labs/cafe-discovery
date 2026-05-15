@@ -266,14 +266,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	discoveryPublic.Get("/rpcs", discoveryHandler.ListRPCs)
 	discoveryPublic.Get("/scanners", discoveryHandler.ListAvailableScanners)
 
-	// Protected discovery routes - require JWT authentication
+	// Protected discovery routes - require JWT authentication (non-v1 paths kept for CBOM hydration; see PR11b/PR12).
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
-	api.Post("/scan", discoveryHandler.UnifiedScan) // Unified scan endpoint - automatically detects wallet or TLS endpoint
 	api.Post("/assessments/request", discoveryHandler.RequestAssessment)
-	api.Get("/scans", discoveryHandler.ListScans)
-	api.Get("/wallet-policy-contexts", discoveryHandler.ListWalletPolicyContexts)
 	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
-	api.Get("/tls/scans", tlsHandler.ListScans)
 
 	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton, PR3 POST /scan, PR4–PR6 list/detail/delete).
 	apiV1 := app.Group("/discovery/v1", middleware.JWTMiddleware(authService))
