@@ -261,16 +261,6 @@ func walletScanDetailV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 	return out
 }
 
-func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fiber.Map {
-	return fiber.Map{
-		"target_address":      e.Address,
-		"chain_ids":           chainIDsForNetworks(e.Networks, cfg),
-		"wallet_type":         walletAccountTypeV1(e.Type, e.IsEOA, e.IsERC4337),
-		"current_pq_posture":  nistLevelToPQPosture(e.NISTLevel),
-		"observations":        []any{},
-	}
-}
-
 func walletAccountTypeV1(t domain.AccountType, isEOA, is4337 bool) string {
 	if is4337 || t == domain.AccountTypeAA {
 		return "smart_account"
@@ -393,6 +383,15 @@ func (h *TLSHandler) GetDiscoveryV1TLSScan(c *fiber.Ctx) error {
 				"message": qerr.Error(),
 			}))
 		}
+		if ent == nil {
+			ent, qerr = h.tlsScanResultRepo.FindDefaultTLSScanByID(scanID)
+			if qerr != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+					"error":   "internal_error",
+					"message": qerr.Error(),
+				}))
+			}
+		}
 		if ent != nil {
 			return c.JSON(tlsScanDetailV1(ent))
 		}
@@ -440,42 +439,18 @@ func tlsScanListItemV1(e *domain.TLSScanResultEntity) fiber.Map {
 }
 
 func tlsScanDetailV1(e *domain.TLSScanResultEntity) fiber.Map {
-	dto := e.ToTLSScanResult()
 	st := walletScanLifecycleStatusV1(e.Status)
 	out := fiber.Map{
 		"scan_id": e.ID.String(),
 		"status":  st,
 	}
+	if e.Default {
+		out["is_default"] = true
+	}
 	if scan.IsTerminal(e.Status) {
-		out["result"] = tlsScanResultBodyV1(dto)
+		out["result"] = tlsScanResultBodyV1(e)
 	}
 	return out
-}
-
-func tlsScanResultBodyV1(dto *domain.TLSScanResult) fiber.Map {
-	certSummary := fiber.Map{
-		"subject":            dto.Certificate.Subject,
-		"issuer":             dto.Certificate.Issuer,
-		"signature_algorithm": dto.Certificate.SignatureAlgorithm,
-		"not_after":          dto.Certificate.NotAfter.UTC().Format(time.RFC3339Nano),
-	}
-	kex := ""
-	if len(dto.CipherSuites) > 0 {
-		kex = dto.CipherSuites[0].KeyExchange
-	}
-	cipher := ""
-	if len(dto.CipherSuites) > 0 {
-		cipher = dto.CipherSuites[0].Name
-	}
-	return fiber.Map{
-		"endpoint":             dto.URL,
-		"tls_version":          dto.ProtocolVersion,
-		"cipher_suite":         cipher,
-		"key_exchange":         kex,
-		"certificate_summary":  certSummary,
-		"current_pq_posture":   nistLevelToPQPosture(dto.NISTLevel),
-		"observations":         []any{},
-	}
 }
 
 func tenantIDFromDiscoveryV1Request(c *fiber.Ctx) string {

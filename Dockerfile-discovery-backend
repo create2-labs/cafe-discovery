@@ -78,14 +78,12 @@ LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app
 
-# Install NGINX (lightweight, production-ready)
+# Install NGINX (Debian package runs workers as www-data; no custom nginx user)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r nginx || true \
-    && useradd -r -g nginx -s /sbin/nologin -d /var/cache/nginx nginx || true \
     && mkdir -p /var/log/nginx /var/cache/nginx /usr/share/nginx/html \
-    && chown -R nginx:nginx /var/log/nginx /var/cache/nginx /usr/share/nginx/html
+    && chown -R www-data:www-data /var/log/nginx /var/cache/nginx /usr/share/nginx/html
 
 # Copy application binary
 COPY --from=builder /app/server /app/server
@@ -108,7 +106,7 @@ RUN if [ -z "$APP_VERSION" ]; then \
     fi && \
     echo "{\"version\": \"$VERSION\"}" > /usr/share/nginx/html/version.json && \
     chmod 644 /usr/share/nginx/html/version.json && \
-    chown nginx:nginx /usr/share/nginx/html/version.json
+    chown www-data:www-data /usr/share/nginx/html/version.json
 
 # Copy entrypoint script
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

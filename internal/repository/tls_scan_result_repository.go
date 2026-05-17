@@ -16,6 +16,7 @@ type TLSScanResultRepository interface {
 	FindByUserID(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByUserIDOrDefault(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, error)
 	FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error)
+	FindDefaultTLSScanByID(scanID uuid.UUID) (*domain.TLSScanResultEntity, error)
 	FindOwnedUserTLSScanByID(userID, scanID uuid.UUID) (*domain.TLSScanResultEntity, error)
 	DeleteOwnedUserTLSScan(userID, scanID uuid.UUID) (deleted bool, err error)
 	ListOwnerUserTLSScansDiscoveryV1(userID uuid.UUID, limit, offset int) ([]*domain.TLSScanResultEntity, int64, error)
@@ -53,6 +54,19 @@ func (r *tlsScanResultRepository) FindByUserID(userID uuid.UUID, limit, offset i
 func (r *tlsScanResultRepository) FindByID(id uuid.UUID) (*domain.TLSScanResultEntity, error) {
 	var result domain.TLSScanResultEntity
 	return r.findByID(id, &result)
+}
+
+// FindDefaultTLSScanByID returns a shared-catalog default TLS scan by scan_id, or nil.
+func (r *tlsScanResultRepository) FindDefaultTLSScanByID(scanID uuid.UUID) (*domain.TLSScanResultEntity, error) {
+	var ent domain.TLSScanResultEntity
+	err := r.db.Where("id = ? AND \"default\" = ?", scanID, true).First(&ent).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &ent, nil
 }
 
 // FindOwnedUserTLSScanByID returns a non-default TLS scan owned by userID, or nil.
