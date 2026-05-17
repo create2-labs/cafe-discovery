@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cafe-discovery/internal/config"
+	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
@@ -234,9 +235,9 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 func postScanV1AcceptedJSON(scanID uuid.UUID, family string) fiber.Map {
 	var base string
 	if family == "wallet" {
-		base = "/api/discovery/v1/wallets/scans/"
+		base = discoveryroutes.EdgeWalletScans
 	} else {
-		base = "/api/discovery/v1/tls/scans/"
+		base = discoveryroutes.EdgeTLSScans
 	}
 	return fiber.Map{
 		"scan_id":     scanID.String(),
