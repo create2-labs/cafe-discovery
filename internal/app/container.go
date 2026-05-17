@@ -11,6 +11,7 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/cpmpolicyref"
+	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
 	"cafe-discovery/internal/metrics"
@@ -272,7 +273,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 
 	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton, PR3 POST /scan, PR4–PR6 list/detail/delete).
-	apiV1 := app.Group("/discovery/v1", middleware.JWTMiddleware(authService))
+	apiV1 := app.Group(discoveryroutes.V1Base, middleware.JWTMiddleware(authService))
 	registerDiscoveryV1Routes(apiV1, discoveryHandler, tlsHandler, cafeWalletHandler)
 
 	// Plan routes

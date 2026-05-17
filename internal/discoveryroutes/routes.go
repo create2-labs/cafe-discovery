@@ -1,0 +1,28 @@
+// Package discoveryroutes defines canonical HTTP path constants for Discovery API v1 (WORKPLAN_API_PR PR11c).
+package discoveryroutes
+
+const (
+	// V1Base is the in-process Fiber group prefix (edge strips /api and proxies /api/discovery/v1 → /discovery/v1).
+	V1Base = "/discovery/v1"
+
+	Wallets          = V1Base + "/wallets"
+	WalletScans      = Wallets + "/scans"
+	TLSScans         = V1Base + "/tls/scans"
+	TLSScansDefaults = TLSScans + "/defaults"
+	PostScan         = V1Base + "/scan"
+
+	// EdgeV1Base is the public Location prefix returned in POST /scan responses (browser-facing).
+	EdgeV1Base      = "/api/discovery/v1"
+	EdgeWalletScans = EdgeV1Base + "/wallets/scans/"
+	EdgeTLSScans    = EdgeV1Base + "/tls/scans/"
+)
+
+// WalletScanByID returns the upstream path for a wallet scan detail/delete.
+func WalletScanByID(scanID string) string {
+	return WalletScans + "/" + scanID
+}
+
+// TLSScanByID returns the upstream path for a TLS scan detail/delete.
+func TLSScanByID(scanID string) string {
+	return TLSScans + "/" + scanID
+}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/handler"
 
 	"github.com/gofiber/fiber/v2"
@@ -43,9 +44,9 @@ func registerDiscoveryV1Routes(
 		w.Get("/scans/:scan_id", discovery.GetDiscoveryV1WalletScan)
 		w.Delete("/scans/:scan_id", discovery.DeleteDiscoveryV1WalletScan)
 	} else {
-		w.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans"))
-		w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/wallets/scans/:scan_id"))
-		w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/wallets/scans/:scan_id"))
+		w.Get("/scans", discoveryV1NotImplemented("GET "+discoveryroutes.WalletScans))
+		w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET "+discoveryroutes.WalletScans+"/:scan_id"))
+		w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE "+discoveryroutes.WalletScans+"/:scan_id"))
 	}
 	w.Get(walletPubKeyHashPath, wallets.GetWallet)
 	w.Put(walletPubKeyHashPath, wallets.UpdateWallet)
@@ -58,15 +59,15 @@ func registerDiscoveryV1Routes(
 		tlsGroup.Get("/scans/:scan_id", tls.GetDiscoveryV1TLSScan)
 		tlsGroup.Delete("/scans/:scan_id", tls.DeleteDiscoveryV1TLSScan)
 	} else {
-		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET /discovery/v1/tls/scans"))
-		tlsGroup.Get("/scans/defaults", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/defaults"))
-		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET /discovery/v1/tls/scans/:scan_id"))
-		tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE /discovery/v1/tls/scans/:scan_id"))
+		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScans))
+		tlsGroup.Get("/scans/defaults", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScansDefaults))
+		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScans+"/:scan_id"))
+		tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE "+discoveryroutes.TLSScans+"/:scan_id"))
 	}
 
 	if discovery != nil {
 		v1.Post("/scan", discovery.PostDiscoveryScanV1)
 	} else {
-		v1.Post("/scan", discoveryV1NotImplemented("POST /discovery/v1/scan"))
+		v1.Post("/scan", discoveryV1NotImplemented("POST "+discoveryroutes.PostScan))
 	}
 }

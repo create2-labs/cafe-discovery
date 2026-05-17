@@ -8,12 +8,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
 
-	natsio "github.com/nats-io/nats.go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 )
 
 type mockNATSConn struct {
@@ -65,13 +66,13 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 		scannerPresence:  alwaysScanners{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post("/discovery/v1/scan", func(c *fiber.Ctx) error {
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	body := []byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)
-	req := httptest.NewRequest(http.MethodPost, "/discovery/v1/scan", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req, -1)
 	if err != nil {
@@ -99,7 +100,7 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	if scanID == "" {
 		t.Fatalf("missing scan_id")
 	}
-	wantLoc := "/api/discovery/v1/wallets/scans/" + scanID
+	wantLoc := discoveryroutes.EdgeWalletScans + scanID
 	if out["location"] != wantLoc {
 		t.Fatalf("location = %q, want %q", out["location"], wantLoc)
 	}
@@ -128,12 +129,12 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 		scannerPresence:  alwaysScanners{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post("/discovery/v1/scan", func(c *fiber.Ctx) error {
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
 		return h.PostDiscoveryScanV1(c)
 	})
 	body := []byte(`{"url":"https://example.com/path"}`)
-	req := httptest.NewRequest(http.MethodPost, "/discovery/v1/scan", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req, -1)
 	if err != nil {
@@ -155,7 +156,7 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 		t.Fatalf("response = %#v", out)
 	}
 	scanID, _ := out["scan_id"].(string)
-	wantLoc := "/api/discovery/v1/tls/scans/" + scanID
+	wantLoc := discoveryroutes.EdgeTLSScans + scanID
 	if out["location"] != wantLoc {
 		t.Fatalf("location = %q, want %q", out["location"], wantLoc)
 	}
