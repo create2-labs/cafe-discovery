@@ -83,6 +83,10 @@ func (s *stubTLSScanResultRepository) FindByID(id uuid.UUID) (*domain.TLSScanRes
 	return nil, nil
 }
 
+func (s *stubTLSScanResultRepository) FindDefaultTLSScanByID(uuid.UUID) (*domain.TLSScanResultEntity, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (s *stubTLSScanResultRepository) FindOwnedUserTLSScanByID(uuid.UUID, uuid.UUID) (*domain.TLSScanResultEntity, error) {
 	return nil, errors.New("not implemented")
 }

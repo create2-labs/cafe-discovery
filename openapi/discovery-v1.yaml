@@ -265,12 +265,40 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /tls/scans/defaults:
+    get:
+      tags: [tls-scans]
+      summary: List shared default TLS endpoint scans (catalog)
+      description: |
+        Returns the shared catalog of default TLS endpoints (`default=true`). These scans are **not**
+        included in `GET /tls/scans` (owner history). Each item may include `is_default: true`.
+        Detail for a catalog row is available via `GET /tls/scans/{scan_id}` using the same `scan_id`.
+      operationId: listTlsDefaultScans
+      responses:
+        "200":
+          description: Catalog list (paginated envelope; defaults are not owner-scoped).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedTlsScanList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: Catalog temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /tls/scans/{scan_id}:
     parameters:
       - $ref: "#/components/parameters/ScanId"
     get:
       tags: [tls-scans]
       summary: Get TLS scan detail
+      description: |
+        Resolves **owner** TLS scans (`default=false`) and **shared catalog** defaults (`default=true`)
+        by `scan_id`. When the row is a catalog default, the response includes `is_default: true`.
       operationId: getTlsScan
       responses:
         "200":
@@ -458,6 +486,9 @@ components:
           format: date-time
         status:
           $ref: "#/components/schemas/ScanLifecycleStatus"
+        is_default:
+          type: boolean
+          description: Present and true for rows from `GET /tls/scans/defaults`.
 
     PaginationEnvelope:
       type: object
@@ -510,7 +541,9 @@ components:
 
     WalletScanResult:
       type: object
-      description: Business result for wallet scan (distinct from TLS). Minimal target shape §5.4.4.
+      description: |
+        Business result for wallet scan (distinct from TLS). Core shape §5.4.4 plus UI fields
+        formerly exposed only via `GET /discovery/cbom/{address}` (PR13a).
       properties:
         target_address:
           type: string
@@ -528,6 +561,31 @@ components:
         observations:
           type: array
           items: {}
+        algorithm:
+          type: string
+        nist_level:
+          type: integer
+        risk_score:
+          type: number
+          format: double
+        key_exposed:
+          type: boolean
+        type:
+          type: string
+          description: Account family label (EOA, AA, Contract) — distinct from `wallet_type` enum.
+        networks:
+          type: array
+          items:
+            type: string
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        scanned_at:
+          type: string
+          format: date-time
 
     TlsScanDetail:
       type: object
@@ -538,12 +596,17 @@ components:
           format: uuid
         status:
           $ref: "#/components/schemas/ScanLifecycleStatus"
+        is_default:
+          type: boolean
+          description: True when this row is from the shared TLS defaults catalog.
         result:
           $ref: "#/components/schemas/TlsScanResult"
 
     TlsScanResult:
       type: object
-      description: Business result for TLS scan — schema distinct from wallet (WORKPLAN_API.md §5.4.5).
+      description: |
+        Business result for TLS scan — schema distinct from wallet (WORKPLAN_API.md §5.4.5), enriched
+        for UI parity with legacy CBOM (PR13a).
       properties:
         endpoint:
           type: string
@@ -562,6 +625,60 @@ components:
         observations:
           type: array
           items: {}
+        url:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        protocol_version:
+          type: string
+        nist_level:
+          type: integer
+        risk_score:
+          type: number
+          format: double
+        pqc_risk:
+          type: string
+        pqc_mode:
+          type: string
+        supported_pqc:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        scanned_at:
+          type: string
+          format: date-time
+        default:
+          type: boolean
+        certificate:
+          type: object
+          additionalProperties: true
+        cipher_suites:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        kex_algorithm:
+          type: string
+        kex_pqc_ready:
+          type: boolean
+        pfs:
+          type: boolean
+        ocsp_stapled:
+          type: boolean
+        nist_levels:
+          type: object
+          additionalProperties:
+            type: integer
+        alpn:
+          type: string
+        curve:
+          type: string
 
     PostScanRequest:
       oneOf:
