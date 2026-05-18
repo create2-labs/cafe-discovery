@@ -10,11 +10,15 @@ const (
 	TLSScans         = V1Base + "/tls/scans"
 	TLSScansDefaults = TLSScans + "/defaults"
 	PostScan         = V1Base + "/scan"
+	RPCs             = V1Base + "/rpcs"
+	Scanners         = V1Base + "/scanners"
 
 	// EdgeV1Base is the public Location prefix returned in POST /scan responses (browser-facing).
 	EdgeV1Base      = "/api/discovery/v1"
 	EdgeWalletScans = EdgeV1Base + "/wallets/scans/"
 	EdgeTLSScans    = EdgeV1Base + "/tls/scans/"
+	EdgeRPCs        = EdgeV1Base + "/rpcs"
+	EdgeScanners    = EdgeV1Base + "/scanners"
 )
 
 // WalletScanByID returns the upstream path for a wallet scan detail/delete.

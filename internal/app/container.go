@@ -262,14 +262,10 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	// This endpoint exposes metrics in Prometheus format for scraping
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
-	// Public discovery routes (no authentication)
-	discoveryPublic := app.Group("/discovery")
-	discoveryPublic.Get("/rpcs", discoveryHandler.ListRPCs)
-	discoveryPublic.Get("/scanners", discoveryHandler.ListAvailableScanners)
-
-	// Protected discovery routes - require JWT authentication (non-v1 utilities; assessments).
-	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
-	api.Post("/assessments/request", discoveryHandler.RequestAssessment)
+	// Public discovery utilities v1 (no JWT) — WORKPLAN_API_PR PR13d.
+	v1Public := app.Group(discoveryroutes.V1Base)
+	v1Public.Get("/rpcs", discoveryHandler.ListRPCs)
+	v1Public.Get("/scanners", discoveryHandler.ListAvailableScanners)
 
 	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton, PR3 POST /scan, PR4–PR6 list/detail/delete).
 	apiV1 := app.Group(discoveryroutes.V1Base, middleware.JWTMiddleware(authService))

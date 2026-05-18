@@ -105,7 +105,7 @@ func (t *ScannerPresenceTracker) handleMessage(msg *natsio.Msg) {
 // When Redis is configured: true if scanner:<type>:last_seen exists (heartbeat within TTL),
 // or if at least one scanner has announced (joined) and not yet left (in-memory presence).
 // Otherwise: true if at least one scanner has announced (joined) and not yet left.
-// This keeps HasScanner in sync with ListScanners so GET /discovery/scanners and scan requests use the same notion of availability.
+// This keeps HasScanner in sync with ListScanners so GET /discovery/v1/scanners and scan requests use the same notion of availability.
 func (t *ScannerPresenceTracker) HasScanner(scannerType string) bool {
 	if t.redis != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
