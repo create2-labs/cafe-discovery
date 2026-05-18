@@ -21,7 +21,7 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 		"wallet_type":        walletAccountTypeV1(e.Type, e.IsEOA, e.IsERC4337),
 		"current_pq_posture": nistLevelToPQPosture(e.NISTLevel),
 		"observations":       []any{},
-		// UI parity (fields historically served by GET /discovery/cbom/{address})
+		// UI parity (legacy address-keyed hydration; PR13a)
 		"algorithm":   string(e.Algorithm),
 		"nist_level":  int(e.NISTLevel),
 		"risk_score":  e.RiskScore,
@@ -67,7 +67,7 @@ func tlsScanResultBodyV1(ent *domain.TLSScanResultEntity) fiber.Map {
 		"certificate_summary": certSummary,
 		"current_pq_posture":  nistLevelToPQPosture(dto.NISTLevel),
 		"observations":        []any{},
-		// UI parity (fields historically served by GET /discovery/cbom/{url})
+		// UI parity (legacy URL-keyed hydration; PR13a)
 		"url":              dto.URL,
 		"host":             dto.Host,
 		"port":             dto.Port,

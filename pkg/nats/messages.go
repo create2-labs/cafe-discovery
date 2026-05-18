@@ -67,7 +67,7 @@ type ScanFailedMessage struct {
 }
 
 // ScanReadyMessage is published by persistence-service after writing a scan result (success or failure) to Redis and Postgres.
-// API backend can subscribe to know when GET /discovery/cbom will return the result.
+// API backend can subscribe when a scan result is persisted (e.g. logging or metrics).
 type ScanReadyMessage struct {
 	UserID   uuid.UUID `json:"user_id"`
 	Kind     string    `json:"kind"`     // "tls" or "wallet"
