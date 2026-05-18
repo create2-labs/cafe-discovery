@@ -226,7 +226,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
 
-	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres); GET /discovery/cbom will then return the result
+	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres).
 	if _, err := natsConn.Subscribe(nats.SubjectScanReady, func(msg *natsio.Msg) {
 		var m nats.ScanReadyMessage
 		if err := json.Unmarshal(msg.Data, &m); err != nil {
@@ -267,10 +267,9 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	discoveryPublic.Get("/rpcs", discoveryHandler.ListRPCs)
 	discoveryPublic.Get("/scanners", discoveryHandler.ListAvailableScanners)
 
-	// Protected discovery routes - require JWT authentication (non-v1 paths kept for CBOM hydration; see PR11b/PR12).
+	// Protected discovery routes - require JWT authentication (non-v1 utilities; assessments).
 	api := app.Group("/discovery", middleware.JWTMiddleware(authService))
 	api.Post("/assessments/request", discoveryHandler.RequestAssessment)
-	api.Get("/cbom/*", discoveryHandler.GetCBOM) // Get CBOM for a wallet address or TLS endpoint (wildcard to handle URLs)
 
 	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton, PR3 POST /scan, PR4–PR6 list/detail/delete).
 	apiV1 := app.Group(discoveryroutes.V1Base, middleware.JWTMiddleware(authService))
