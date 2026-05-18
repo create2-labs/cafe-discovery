@@ -34,6 +34,8 @@ tags:
     description: TLS endpoint scan executions and history.
   - name: scan
     description: Unified trigger for wallet or TLS scans.
+  - name: utilities
+    description: Public catalog endpoints (no JWT).
 
 security:
   - bearerAuth: []
@@ -335,6 +337,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /rpcs:
+    get:
+      tags: [utilities]
+      summary: List configured blockchain RPC endpoints
+      description: Public utility; no authentication (WORKPLAN_API_PR PR13d).
+      operationId: listRpcs
+      security: []
+      responses:
+        "200":
+          description: Configured RPC endpoints per blockchain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RpcListResponse"
+
+  /scanners:
+    get:
+      tags: [utilities]
+      summary: List scanner types currently available
+      description: |
+        Snapshot of scanner presence announced via NATS. Public utility; no authentication
+        (WORKPLAN_API_PR PR13d).
+      operationId: listScanners
+      security: []
+      responses:
+        "200":
+          description: Available scanner types and instance counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerListResponse"
 
   /scan:
     post:
@@ -736,3 +770,43 @@ components:
         id:
           type: string
       additionalProperties: true
+
+    RpcListResponse:
+      type: object
+      required: [blockchains, count]
+      properties:
+        blockchains:
+          type: array
+          items:
+            type: object
+            required: [name, rpc]
+            properties:
+              name:
+                type: string
+              rpc:
+                type: string
+                format: uri
+        count:
+          type: integer
+          minimum: 0
+
+    ScannerListResponse:
+      type: object
+      required: [scanners]
+      properties:
+        scanners:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                description: Scanner family (`wallet` or `tls`).
+              count:
+                type: integer
+                minimum: 0
+              ids:
+                type: array
+                items:
+                  type: string
+            additionalProperties: true

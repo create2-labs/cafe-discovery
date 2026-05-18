@@ -64,13 +64,13 @@
       2. [POST /auth/signup](#post-authsignup)
       3. [POST /auth/signin](#post-authsignin)
       4. [POST /discovery/scan](#post-discoveryscan)
-      5. [POST /discovery/assessments/request](#post-discoveryassessmentsrequest)
-      6. [GET /discovery/scans](#get-discoveryscans)
-      7. [GET /discovery/cbom/\*](#get-discoverycbom)
-      8. [POST /discovery/tls/scan](#post-discoverytlsscan)
-      9. [GET /discovery/tls/scans](#get-discoverytlsscans)
-      10. [GET /discovery/rpcs](#get-discoveryrpcs)
-      11. [GET /discovery/scanners](#get-discoveryscanners)
+      5. [GET /discovery/v1/rpcs](#get-discoveryv1rpcs)
+      6. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
+      7. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
+      8. [GET /discovery/scans](#get-discoveryscans)
+      9. [GET /discovery/cbom/\*](#get-discoverycbom)
+      10. [POST /discovery/tls/scan](#post-discoverytlsscan)
+      11. [GET /discovery/tls/scans](#get-discoverytlsscans)
       12. [GET /version](#get-version)
       13. [GET /health](#get-health)
       14. [GET /metrics](#get-metrics)
@@ -199,7 +199,7 @@ The application is designed to be scalable with a focus on performance.
   - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
   - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
   - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `cafe.discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
-  - `cafe.policy.events.policy.assessment.requested.v0_1`: Published by backend only on explicit authenticated user action (`POST /discovery/assessments/request`); JSON matches `cafe-contracts` `cafenatsv01.PolicyAssessmentRequested`
+  - `cafe.policy.events.policy.assessment.requested.v0_1`: Published on explicit authenticated user action via **CPM** (`POST /api/cpm/v1/policies/assessment/request`, see `cafe-crypto-policy-mgt`); JSON matches `cafe-contracts` `cafenatsv01.PolicyAssessmentRequested`. Discovery does **not** expose an HTTP assessment trigger.
   - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
 - Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
 
@@ -1459,42 +1459,14 @@ Response:
 
 Note: The endpoint automatically detects the scan type based on the provided field (`address` for wallets, `url` for TLS endpoints). You cannot specify both fields in the same request.
 
-### POST /discovery/assessments/request
+### Policy assessment (CPM-owned)
 
-Publishes the explicit assessment command `policy.assessment.requested.v0.1` on NATS from an authenticated user action. Requires authentication.
+Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Management (CPM)**:
 
-Request:
-```json
-{
-  "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-  "selection_request": {
-    "target_posture": "hybrid",
-    "target_chain_ids": [1, 137],
-    "allow_new_wallet": true,
-    "address_continuity_required": true,
-    "approval_mode": "manual"
-  },
-  "client_request_id": "frontend-click-42"
-}
-```
+- **Edge (browser / gateway):** `POST /api/cpm/v1/policies/assessment/request`
+- **CPM backend (in-process):** `POST /cpm/v1/policies/assessment/request` (after ingress strips `/api`)
 
-Response:
-```json
-{
-  "message": "assessment request published",
-  "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-  "event_id": "evt_par_...",
-  "correlation_id": "corr_par_...",
-  "causation_id": "cause_par_...",
-  "subject": "cafe.policy.events.policy.assessment.requested.v0_1",
-  "status": "queued"
-}
-```
-
-Notes:
-- Discovery does **not** auto-trigger CPM from `cafe.discovery.wallet.observed.v0_1`.
-- The command embeds a normalized wallet observation snapshot and the policy selection request.
-- Identifier mapping is deterministic for the same input tuple (`user_id`, normalized address, observation id, normalized selection request, `client_request_id`).
+Discovery still publishes wallet **observations** on the bus; CPM owns the explicit `policy.assessment.requested.v0.1` command (see `cafe-crypto-policy-mgt` and WORKPLAN_API_PR **PR13g**).
 
 ### GET /discovery/scans
 
@@ -1700,9 +1672,14 @@ curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-### GET /discovery/rpcs
+### GET /discovery/v1/rpcs
 
-Returns the list of configured RPC endpoints. Requires authentication.
+Returns the list of configured RPC endpoints. **No authentication required.**
+
+| Layer | Path |
+|-------|------|
+| Discovery backend (Fiber) | `GET /discovery/v1/rpcs` |
+| Edge / frontend / scripts | `GET /api/discovery/v1/rpcs` |
 
 Response:
 ```json
@@ -1721,9 +1698,24 @@ Response:
 }
 ```
 
-### GET /discovery/scanners
+Example (direct backend):
+```bash
+curl -sS "http://localhost:8080/discovery/v1/rpcs" | jq .
+```
 
-Returns the list of scanner types currently available (scanners that have announced their presence via NATS). Useful for monitoring and to know which scan types (wallet, TLS) can be processed. **No authentication required** (same as `/discovery/rpcs`).
+Example (via edge):
+```bash
+curl -sS "https://localhost/api/discovery/v1/rpcs" | jq .
+```
+
+### GET /discovery/v1/scanners
+
+Returns the list of scanner types currently available (scanners that have announced their presence via NATS). Useful for monitoring and to know which scan types (wallet, TLS) can be processed. **No authentication required.**
+
+| Layer | Path |
+|-------|------|
+| Discovery backend (Fiber) | `GET /discovery/v1/scanners` |
+| Edge / frontend / scripts | `GET /api/discovery/v1/scanners` |
 
 **Response**:
 ```json
@@ -1747,9 +1739,14 @@ Returns the list of scanner types currently available (scanners that have announ
 - `count`: Number of scanner instances currently available for this type.
 - `ids`: List of scanner instance IDs (for debugging/ops).
 
-Example:
+Example (direct backend):
 ```bash
-curl -X GET "http://localhost:8080/discovery/scanners" | jq .
+curl -sS "http://localhost:8080/discovery/v1/scanners" | jq .
+```
+
+Example (via edge):
+```bash
+curl -sS "https://localhost/api/discovery/v1/scanners" | jq .
 ```
 
 ### GET /version
@@ -2226,11 +2223,11 @@ All CBOMs returned by the API are **based on CycloneDX v1.7** and include:
 ### 5. Public Endpoints
 
 ```bash
-# List configured RPC endpoints (no auth required)
-curl http://localhost:8080/discovery/rpcs
+# List configured RPC endpoints (no auth required; backend path)
+curl http://localhost:8080/discovery/v1/rpcs
 
-# List available scanners (no auth required)
-curl http://localhost:8080/discovery/scanners
+# List available scanners (no auth required; backend path)
+curl http://localhost:8080/discovery/v1/scanners
 
 # Health check (no auth required)
 curl http://localhost:8080/health

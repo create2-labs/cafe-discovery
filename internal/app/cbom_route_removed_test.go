@@ -12,10 +12,6 @@ func TestDiscoveryCBOMRouteRemoved(t *testing.T) {
 	t.Parallel()
 
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	discovery := app.Group("/discovery")
-	discovery.Post("/assessments/request", func(c *fiber.Ctx) error {
-		return c.SendStatus(fiber.StatusAccepted)
-	})
 
 	req := httptest.NewRequest(http.MethodGet, "/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc454e4438f44e", nil)
 	resp, err := app.Test(req, -1)
