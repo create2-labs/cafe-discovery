@@ -63,18 +63,20 @@
       1. [Authentication](#authentication)
       2. [POST /auth/signup](#post-authsignup)
       3. [POST /auth/signin](#post-authsignin)
-      4. [POST /discovery/scan](#post-discoveryscan)
-      5. [GET /discovery/v1/rpcs](#get-discoveryv1rpcs)
-      6. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
-      7. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
-      8. [GET /discovery/scans](#get-discoveryscans)
-      9. [GET /discovery/cbom/\*](#get-discoverycbom)
-      10. [POST /discovery/tls/scan](#post-discoverytlsscan)
-      11. [GET /discovery/tls/scans](#get-discoverytlsscans)
-      12. [GET /version](#get-version)
-      13. [GET /health](#get-health)
-      14. [GET /metrics](#get-metrics)
-      15. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
+      4. [POST /discovery/v1/scan](#post-discoveryv1scan)
+      5. [GET /discovery/v1/wallets/scans](#get-discoveryv1walletsscans)
+      6. [GET /discovery/v1/wallets/scans/:scan_id](#get-discoveryv1walletsscansscan_id)
+      7. [GET /discovery/v1/tls/scans](#get-discoveryv1tlsscans)
+      8. [GET /discovery/v1/tls/scans/defaults](#get-discoveryv1tlsscansdefaults)
+      9. [GET /discovery/v1/tls/scans/:scan_id](#get-discoveryv1tlsscansscan_id)
+      10. [GET /discovery/v1/rpcs](#get-discoveryv1rpcs)
+      11. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
+      12. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
+      13. [Removed legacy Discovery routes](#removed-legacy-discovery-routes)
+      14. [GET /version](#get-version)
+      15. [GET /health](#get-health)
+      16. [GET /metrics](#get-metrics)
+      17. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
    9. [Subscription Plans](#subscription-plans)
       1. [Available Plans](#available-plans)
       2. [Plan Management Endpoints](#plan-management-endpoints)
@@ -86,12 +88,8 @@
    10. [Testing](#testing)
        1. [1. Register and Authenticate](#1-register-and-authenticate)
        2. [2. Test Unified Scanning](#2-test-unified-scanning)
-       3. [3. List Scan IDs and Retrieve CBOMs](#3-list-scan-ids-and-retrieve-cboms)
-       4. [4. Retrieve CBOM (Cryptographic Bill of Materials)](#4-retrieve-cbom-cryptographic-bill-of-materials)
-          1. [List wallet scan IDs and fetch CBOMs](#list-wallet-scan-ids-and-fetch-cboms)
-          2. [List TLS scan IDs and fetch CBOMs](#list-tls-scan-ids-and-fetch-cboms)
-          3. [Get Specific CBOM by Address/URL](#get-specific-cbom-by-addressurl)
-          4. [CBOM Structure](#cbom-structure)
+       3. [3. List Scan Summaries](#3-list-scan-summaries)
+       4. [4. Retrieve Scan Details by scan_id](#4-retrieve-scan-details-by-scan_id)
        5. [5. Public Endpoints](#5-public-endpoints)
    11. [Risk Scoring](#risk-scoring)
        1. [Wallet Risk Score](#wallet-risk-score)
@@ -131,7 +129,7 @@ A Discovery service for identifying cryptographic exposures and quantum vulnerab
 - Quantum Security Level: Assess NIST quantum-security levels
 - TLS Scanning: Scan TLS endpoints for post-quantum cryptography (PQC) certificate support
 - Post-Quantum JWT: Hybrid PQC JWT tokens (EdDSA + ML-DSA-65) for quantum-resistant authentication
-- **CycloneDX v1.7 CBOMs**: All scan results are returned as CycloneDX v1.7-based Cryptographic Bill of Materials (CBOMs) with NIST SP 800-57 key states and lifecycle metadata. Note: CAFE extends CycloneDX with custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`) that are not part of the standard specification.
+- **Structured cryptographic discovery results**: v1 detail endpoints return scan results by `scan_id` with wallet/TLS posture fields such as `nist_level`, `risk_score`, `current_pq_posture`, and scanner-specific observations.
 - **Subscription Plans**: Free and Premium (CAFEIN) plans with usage limits
 - **Versioning**: Automatic version tracking via `/version` endpoint and Docker image tags
 - **Authentication**: All backend API calls require authentication.
@@ -244,7 +242,7 @@ The application is designed to be scalable with a focus on performance.
 Scans are implemented as **plugins** registered in a central registry:
 
 - **`pkg/scan`**: Defines `ScanTarget`, `ScanResult`, `Plugin` interface (Descriptor, DecodeHTTP, DecodeMessage, Run), and a thread-safe **registry** (`Register`, `Get(kind)`, `GetBySubject`). Kinds: `tls`, `wallet`; plan limit keys: `endpoint` (TLS), `wallet`.
-- **TLS plugin** (`internal/scan/tls`): Implements `scan.Plugin` for TLS endpoint scans. Adapter wraps `domain.TLSScanResult` as `scan.ScanResult` (CBOM shape unchanged). Consumes NATS subject `cafe.discovery.tls.scan`.
+- **TLS plugin** (`internal/scan/tls`): Implements `scan.Plugin` for TLS endpoint scans. Adapter wraps `domain.TLSScanResult` as `scan.ScanResult` while preserving the current v1 detail payload. Consumes NATS subject `cafe.discovery.tls.scan`.
 - **Wallet plugin** (`internal/scan/wallet`): Implements `scan.Plugin` for wallet scans. Adapter wraps `domain.ScanResult` as `scan.ScanResult`. Consumes NATS subject `cafe.discovery.wallet.scan`.
 
 Handlers validate requests (optionally via `plugin.DecodeHTTP`) and publish the same NATS messages as before. Workers unmarshal messages, call `plugin.DecodeMessage` then `plugin.Run`. Plan limits use kind-based constants (`scan.KindWallet`, `scan.PlanLimitKeyEndpoint`). Plugin versions are configurable via `scan.plugins.tls.version` and `scan.plugins.wallet.version` in config.
@@ -336,9 +334,9 @@ Client HTTP → Discovery → NATS (publish) → Scanner → NATS (scan.started/
                               Immediate Response              Persistence writes; publishes scan.ready → Backend can return GET result
 ```
 
-1. Client sends a POST request to `/discovery/scan`
+1. Client sends a POST request to `/discovery/v1/scan`
 2. API Server validates the request and publishes a NATS message
-3. Client receives an immediate response: `{"status": "processing"}`
+3. Client receives an immediate response with `scan_id`, `scan_family`, `status: "requested"`, and a detail `location`
 4. A scanner consumes the message and processes the scan, then publishes `scan.started` / `scan.completed` or `scan.failed`
 5. The **persistence service** consumes those events and saves the result to PostgreSQL and Redis (write-through); then publishes `scan.ready` so the API can return the result on GET
 
@@ -351,9 +349,9 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
                          Immediate Response
 ```
 
-1. Client sends a POST request to `/discovery/tls/scan`
+1. Client sends a POST request to `/discovery/v1/scan`
 2. API Server validates the request and publishes a NATS message to `cafe.discovery.tls.scan`
-3. Client receives an immediate response: `{"message": "scan queued successfully", "status": "processing"}`
+3. Client receives an immediate response with `scan_id`, `scan_family: "tls"`, `status: "requested"`, and a detail `location`
 4. A scanner consumes the message and processes the TLS scan (checks for PQC certificate support), then publishes scan lifecycle events
 5. The **persistence service** consumes those events and saves the result to PostgreSQL and Redis; when the result is in Redis, it publishes `scan.ready`; the **backend consumes this message** and can then return the result on GET.
 
@@ -361,7 +359,7 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
 
 ### Data structure (CPM export contract)
 
-Discovery remains the **owner** of internal scan models and persistence (for example wallet CBOMs and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
+Discovery remains the **owner** of internal scan models and persistence (for example wallet scan results and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
 
 **Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafe.discovery.events.wallet.observed.v0_1`** after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
 
@@ -1348,7 +1346,7 @@ Available PQC Algorithms:
 
 3. Scan with the API:
 ```bash
-curl -X POST http://localhost:8080/discovery/tls/scan \
+curl -X POST http://localhost:8080/discovery/v1/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://localhost:8443"}'
@@ -1415,9 +1413,9 @@ Response:
 
 The token is a hybrid PQC JWT (base64url-encoded JWS JSON General Serialization format).
 
-### POST /discovery/scan
+### POST /discovery/v1/scan
 
-Unified scan endpoint that automatically detects whether the request is for a wallet scan or TLS endpoint scan. Requires authentication. The scan is processed asynchronously via NATS.
+Unified scan request endpoint for wallet and TLS scans. Requires authentication. The scan is processed asynchronously via NATS and returns a `scan_id` immediately; clients use that `scan_id` with the wallet or TLS detail routes.
 
 **For Wallet Scans:**
 Request:
@@ -1430,14 +1428,12 @@ Request:
 Response:
 ```json
 {
-  "message": "scan queued successfully",
-  "address": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-  "type": "wallet",
-  "status": "processing"
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "scan_family": "wallet",
+  "status": "requested",
+  "location": "/api/discovery/v1/wallets/scans/550e8400-e29b-41d4-a716-446655440000"
 }
 ```
-
-Implementation note: this HTTP response intentionally does **not** include the internal **`scan_id`** (UUID) emitted on NATS for the job. Clients should correlate follow-up work using the returned **canonical wallet address**: poll **`GET /discovery/cbom/{address}`** (authenticated) until a result appears, then drive **Crypto Policy Management** with that observation-shaped data (REST or NATS)—see **`cafe-crypto-policy-mgt`** [`scripts/wallet-scan-and-cpm-policy.sh`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/scripts/wallet-scan-and-cpm-policy.sh) and [`cafe-documentation` developer guide](https://github.com/create2-labs/cafe-documentation/blob/main/03-cafe-developer-guide.md).
 
 **For TLS Endpoint Scans:**
 Request:
@@ -1450,14 +1446,167 @@ Request:
 Response:
 ```json
 {
-  "message": "scan queued successfully",
-  "endpoint": "https://example.com",
-  "type": "tls",
-  "status": "processing"
+  "scan_id": "660e8400-e29b-41d4-a716-446655440000",
+  "scan_family": "tls",
+  "status": "requested",
+  "location": "/api/discovery/v1/tls/scans/660e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-Note: The endpoint automatically detects the scan type based on the provided field (`address` for wallets, `url` for TLS endpoints). You cannot specify both fields in the same request.
+Note: The endpoint detects the scan family based on the provided field (`address` for wallets, `url` for TLS endpoints). You cannot specify both fields in the same request.
+
+| Layer | Path |
+|-------|------|
+| Discovery backend (Fiber) | `POST /discovery/v1/scan` |
+| Edge / frontend / scripts | `POST /api/discovery/v1/scan` |
+
+### GET /discovery/v1/wallets/scans
+
+Returns a paginated list of wallet scan summaries for the authenticated user. List responses are intentionally lightweight; use `scan_id` with `GET /discovery/v1/wallets/scans/:scan_id` for detail.
+
+Query Parameters:
+- `limit` (optional): Number of results per page (default: 20)
+- `offset` (optional): Number of results to skip (default: 0)
+- `address` (optional): Filter by wallet address
+- `chain_id` (optional): Filter by chain ID; requires `address`
+
+Response:
+```json
+{
+  "items": [
+    {
+      "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+      "target_address": "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+      "chain_ids": [1, 137],
+      "status": "completed",
+      "created_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### GET /discovery/v1/wallets/scans/:scan_id
+
+Returns the wallet scan detail for a single `scan_id`. Pending scans return only `scan_id` and `status`; terminal scans include a `result` object.
+
+Response:
+```json
+{
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": {
+    "target_address": "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+    "chain_ids": [1, 137],
+    "wallet_type": "eoa",
+    "current_pq_posture": "not_pq_ready",
+    "algorithm": "ECDSA-secp256k1",
+    "nist_level": 1,
+    "risk_score": 0.85,
+    "key_exposed": true,
+    "networks": ["ethereum-mainnet", "polygon"],
+    "scanned_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+Example:
+```bash
+curl -X GET "http://localhost:8080/discovery/v1/wallets/scans/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Address contract note: wallet addresses are accepted in any valid EVM hex casing, and Discovery returns canonical lowercase addresses in machine-oriented API fields.
+
+### GET /discovery/v1/tls/scans
+
+Returns a paginated list of TLS scan summaries for the authenticated user. Use `scan_id` with `GET /discovery/v1/tls/scans/:scan_id` for detail.
+
+Query Parameters:
+- `limit` (optional): Number of results per page (default: 20)
+- `offset` (optional): Number of results to skip (default: 0)
+
+Response:
+```json
+{
+  "items": [
+    {
+      "scan_id": "660e8400-e29b-41d4-a716-446655440000",
+      "endpoint": "https://example.com",
+      "status": "completed",
+      "created_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+Example:
+```bash
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+### GET /discovery/v1/tls/scans/defaults
+
+Returns the shared catalog of default TLS endpoint scans. Requires authentication.
+
+Response:
+```json
+{
+  "items": [
+    {
+      "scan_id": "770e8400-e29b-41d4-a716-446655440000",
+      "endpoint": "https://example.com",
+      "status": "completed",
+      "created_at": "2025-01-15T10:30:00Z",
+      "is_default": true
+    }
+  ],
+  "total": 1,
+  "limit": 1,
+  "offset": 0
+}
+```
+
+### GET /discovery/v1/tls/scans/:scan_id
+
+Returns the TLS scan detail for a single `scan_id`. Pending scans return only `scan_id` and `status`; terminal scans include a `result` object. Default endpoint scans are visible to authenticated users and include `is_default: true`.
+
+Response:
+```json
+{
+  "scan_id": "660e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": {
+    "endpoint": "https://example.com",
+    "tls_version": "TLS 1.3",
+    "cipher_suite": "TLS_AES_256_GCM_SHA384",
+    "key_exchange": "X25519",
+    "current_pq_posture": "not_pq_ready",
+    "url": "https://example.com",
+    "host": "example.com",
+    "port": 443,
+    "nist_level": 1,
+    "risk_score": 0.75,
+    "pqc_risk": "critical",
+    "pqc_mode": "classical",
+    "supported_pqc": [],
+    "recommendations": ["Upgrade to PQC certificates"],
+    "scanned_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+Example:
+```bash
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans/660e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
 
 ### Policy assessment (CPM-owned)
 
@@ -1468,209 +1617,17 @@ Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Manag
 
 Discovery still publishes wallet **observations** on the bus; CPM owns the explicit `policy.assessment.requested.v0.1` command (see `cafe-crypto-policy-mgt` and WORKPLAN_API_PR **PR13g**).
 
-### GET /discovery/scans
+### Removed legacy Discovery routes
 
-Returns a paginated list of **IDs only** (wallet addresses) for the authenticated user's wallet scans. Use each `id` with `GET /discovery/cbom/{id}` to fetch the full CBOM. Requires authentication.
+The following routes are no longer primary API references and should not be used by frontend or integration scripts:
 
-Query Parameters:
-- `limit` (optional): Number of results per page (default: 20)
-- `offset` (optional): Number of results to skip (default: 0)
+- `POST /discovery/scan`
+- `GET /discovery/scans`
+- `GET /discovery/cbom/*`
+- `POST /discovery/tls/scan`
+- `GET /discovery/tls/scans`
 
-Response:
-```json
-{
-  "results": [
-    { "id": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" },
-    { "id": "0x1234567890123456789012345678901234567890" }
-  ],
-  "total": 2,
-  "limit": 20,
-  "offset": 0,
-  "count": 2
-}
-```
-
-Fetch the full CBOM for each wallet: `GET /discovery/cbom/0x742d35Cc6634C0532925a3b844Bc454e4438f44e` (with JWT).
-
-Address contract note: wallet addresses are accepted in any valid EVM hex casing, and Discovery returns canonical lowercase addresses in machine-oriented API fields.
-
-### GET /discovery/cbom/*
-
-Returns a CBOM (Cryptographic Bill of Materials) JSON record for a wallet address or TLS endpoint. Automatically detects the type based on the parameter format. Requires authentication.
-
-Path Parameters:
-- `*`: Either:
-  - Ethereum wallet address (EOA) in hex format (e.g., `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb`)
-  - TLS endpoint URL (e.g., `https://example.com` or URL-encoded `https%3A%2F%2Fexample.com`)
-
-**For Wallet Addresses:**
-
-Response:
-```json
-{
-  "address": "0x742d35cc6634c0532925a3b844bc9e7595f0beb",
-  "type": "EOA",
-  "algorithm": "ECDSA-secp256k1",
-  "nist_level": 1,
-  "key_exposed": true,
-  "risk_score": 0.85,
-  "first_seen": "2025-03-10T15:22:00Z",
-  "last_seen": "2025-10-16T08:10:00Z",
-  "networks": ["ethereum-mainnet", "polygon"],
-  "scanned_at": "2025-01-15T10:30:00Z",
-  "cbom": {
-    "bomFormat": "CycloneDX",
-    "specVersion": "1.7",
-    "version": 1,
-    "metadata": {
-      "timestamp": "2025-01-15T10:30:00Z"
-    },
-    "type": "wallet",
-    "components": [
-      {
-        "type": "cryptographic-primitive",
-        "name": "ECDSA-secp256k1",
-        "nist_level": 1,
-        "quantum_vulnerable": true,
-        "key_exposed": true,
-        "assetType": "related-crypto-material",
-        "state": "active",
-        "customStates": [
-          {
-            "name": "quantum-vulnerable",
-            "description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**For TLS Endpoints:**
-
-Response:
-```json
-{
-  "url": "https://example.com",
-  "host": "example.com",
-  "port": 443,
-  "protocol": "TLS 1.3",
-  "nist_level": 1,
-  "risk_score": 0.75,
-  "pqc_risk": "critical",
-  "pqc_mode": "classical",
-  "supported_pqc": [],
-  "recommendations": ["Upgrade to PQC certificates"],
-  "scanned_at": "2025-01-15T10:30:00Z",
-  "certificate": {
-    "subject": "CN=example.com",
-    "issuer": "CN=Let's Encrypt",
-    "signature_algorithm": "ECDSA-secp256r1",
-    "nist_level": 1,
-    "is_pqc_ready": false
-  },
-  "cipher_suites": [...],
-  "kex_algorithm": "X25519",
-  "kex_pqc_ready": false,
-  "pfs": true,
-  "ocsp_stapled": true,
-  "nist_levels": {
-    "kex": 1,
-    "sig": 1,
-    "cipher": 1
-  },
-  "cbom": {
-    "bomFormat": "CycloneDX",
-    "specVersion": "1.7",
-    "version": 1,
-    "metadata": {
-      "timestamp": "2025-01-15T10:30:00Z",
-      "lifecycles": [
-        {
-          "phase": "discovery",
-          "description": "Point-in-time cryptographic discovery of live TLS endpoints observed over the network"
-        }
-      ]
-    },
-    "type": "tls-endpoint",
-    "components": [
-      {
-        "type": "certificate",
-        "subject": "CN=example.com",
-        "nist_level": 1,
-        "quantum_vulnerable": true
-      },
-      {
-        "type": "key-exchange",
-        "algorithm": "X25519",
-        "pqc_ready": false,
-        "nist_level": 1
-      },
-      {
-        "type": "cipher-suite",
-        "name": "TLS_AES_256_GCM_SHA384",
-        "nist_level": 1
-      }
-    ]
-  }
-}
-```
-
-Examples:
-```bash
-# Wallet address (via nginx HTTPS)
-curl -k https://localhost/api/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
-  -H "Authorization: Bearer $TOKEN"
-
-# Wallet address (directly to backend)
-curl http://cafe-discovery-backend:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
-  -H "Authorization: Bearer $TOKEN"
-
-# TLS endpoint (URL-encoded in path)
-curl -k "https://localhost/api/discovery/cbom/https%3A%2F%2Fexample.com" \
-  -H "Authorization: Bearer $TOKEN"
-
-# TLS endpoint (directly to backend, URL-encoded)
-curl "http://cafe-discovery-backend:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Note: For TLS endpoints, the URL must be URL-encoded when passed as a path parameter. The endpoint automatically detects whether the parameter is a wallet address (starts with `0x`) or a URL (starts with `http://` or `https://`).
-
-### POST /discovery/tls/scan
-
-Deprecated endpoint removed. Use the unified `/discovery/scan` endpoint for TLS and wallet requests.
-
-### GET /discovery/tls/scans
-
-Returns a paginated list of **IDs only** (TLS endpoint URLs) for the authenticated user's TLS scans. Use each `id` with `GET /discovery/cbom/{id}` (URL-encode the URL in the path) to fetch the full CBOM. Requires authentication.
-
-Query Parameters:
-- `limit` (optional): Number of results per page (default: 20)
-- `offset` (optional): Number of results to skip (default: 0)
-
-Response:
-```json
-{
-  "results": [
-    { "id": "https://example.com" },
-    { "id": "https://api.example.org:8443" }
-  ],
-  "total": 2,
-  "limit": 20,
-  "offset": 0,
-  "count": 2
-}
-```
-
-Fetch the full CBOM for each endpoint: `GET /discovery/cbom/https%3A%2F%2Fexample.com` (with JWT; URL must be encoded in the path).
-
-Example:
-```bash
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
+Use the `/discovery/v1` routes above, and retrieve details by `scan_id`.
 
 ### GET /discovery/v1/rpcs
 
@@ -2065,160 +2022,57 @@ Getting Turnstile Tokens: In a real application, the Turnstile token is generate
 
 ### 2. Test Unified Scanning
 
-The `/discovery/scan` endpoint automatically detects whether you're scanning a wallet or TLS endpoint:
+The `/discovery/v1/scan` endpoint automatically detects whether you're scanning a wallet or TLS endpoint and returns a `scan_id` for follow-up detail requests:
 
 ```bash
 # Queue a wallet scan (automatically detected from "address" field)
-curl -X POST http://localhost:8080/discovery/scan \
+curl -X POST http://localhost:8080/discovery/v1/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"address": "0x13f735c915bba9136Db794F6b1f42566B24861B8"}'
 
 # Queue a TLS endpoint scan (automatically detected from "url" field)
-curl -X POST http://localhost:8080/discovery/scan \
+curl -X POST http://localhost:8080/discovery/v1/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://example.com"}'
 
 # Queue a TLS scan with custom port (e.g., 8443)
-curl -X POST http://localhost:8080/discovery/scan \
+curl -X POST http://localhost:8080/discovery/v1/scan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"url": "https://localhost:8443"}'
 ```
 
-### 3. List Scan IDs and Retrieve CBOMs
+### 3. List Scan Summaries
 
-The list endpoints `/discovery/scans` and `/discovery/tls/scans` return **IDs only** (paginated). Use each `id` with `GET /discovery/cbom/{id}` to fetch the full CBOM.
+The list endpoints return lightweight scan summaries. Use the returned `scan_id` with the corresponding detail endpoint.
 
 ```bash
-# List wallet scan IDs (paginated); then GET /discovery/cbom/{id} for each
-curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
+# List wallet scan summaries
+curl -X GET "http://localhost:8080/discovery/v1/wallets/scans?limit=10&offset=0" \
   -H "Authorization: Bearer $TOKEN" | jq .
 
-# List TLS scan IDs (paginated); then GET /discovery/cbom/{url-encoded-id} for each
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
+# List TLS scan summaries
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans?limit=10&offset=0" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-For each id from the list, the full result is a **CycloneDX v1.7-based CBOM** (extended with custom fields) that includes:
-- All scan data (address/url, risk_score, nist_level, etc.)
-- A `cbom` object with:
-  - `bomFormat`: `"CycloneDX"` (format identifier)
-  - `specVersion`: `"1.7"` (specification version)
-  - `version`: Document version (currently `1`)
-  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC) and `lifecycles` (for TLS)
-  - `type`: `"wallet"` or `"tls-endpoint"`
-  - `components`: Array describing cryptographic primitives with NIST SP 800-57 key states (for wallets)
+### 4. Retrieve Scan Details by scan_id
 
-### 4. Retrieve CBOM (Cryptographic Bill of Materials)
-
-**List endpoints return IDs only.** The endpoints `/discovery/scans` and `/discovery/tls/scans` return paginated lists of `{ "id": "..." }` (wallet address or TLS URL). Use `GET /discovery/cbom/{id}` with each id to fetch the full CBOM.
-
-#### List wallet scan IDs and fetch CBOMs
-
-Get a list of wallet scan IDs, then fetch the full CBOM for each:
+Use wallet scan IDs with `/discovery/v1/wallets/scans/:scan_id` and TLS scan IDs with `/discovery/v1/tls/scans/:scan_id`.
 
 ```bash
-# List wallet scan IDs (paginated)
-curl -X GET "http://localhost:8080/discovery/scans?limit=10&offset=0" \
+# Fetch wallet scan detail
+curl -X GET "http://localhost:8080/discovery/v1/wallets/scans/550e8400-e29b-41d4-a716-446655440000" \
   -H "Authorization: Bearer $TOKEN" | jq .
 
-# Fetch full CBOM for one wallet (use each id from the list)
-curl -X GET "http://localhost:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" \
+# Fetch TLS scan detail
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans/660e8400-e29b-41d4-a716-446655440000" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Each result in the `results` array is a complete **CycloneDX v1.7-based CBOM** (extended with custom fields) with:
-- All scan metadata (address, type, algorithm, risk_score, etc.)
-- A `cbom` object containing:
-  - `bomFormat`: `"CycloneDX"` (format identifier)
-  - `specVersion`: `"1.7"` (specification version)
-  - `version`: Document version (currently `1`)
-  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC)
-  - `type`: `"wallet"`
-  - `components`: Array with cryptographic primitives including NIST SP 800-57 key states (`state: "active"`, `assetType: "related-crypto-material"`, and `customStates` for quantum-vulnerable keys)
-
-#### List TLS scan IDs and fetch CBOMs
-
-Get a list of TLS scan IDs (endpoint URLs), then fetch the full CBOM for each (URL-encode the id in the path):
-
-```bash
-# List TLS scan IDs (paginated)
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-# Fetch full CBOM for one endpoint (use each id from the list; URL-encode for path)
-curl -X GET "http://localhost:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
-
-Each full CBOM result is a complete **CycloneDX v1.7-based CBOM** (extended with custom fields) with:
-- All scan metadata (url, host, port, protocol, risk_score, etc.)
-- A `cbom` object containing:
-  - `bomFormat`: `"CycloneDX"` (format identifier)
-  - `specVersion`: `"1.7"` (specification version)
-  - `version`: Document version (currently `1`)
-  - `metadata`: Metadata object with `timestamp` (ISO-8601 UTC) and `lifecycles` array declaring the discovery phase
-  - `type`: `"tls-endpoint"`
-  - `components`: Array describing all cryptographic primitives (certificate, key-exchange, signature-algorithm, cipher-suite)
-
-#### Get Specific CBOM by Address/URL
-
-You can also retrieve a specific CBOM using the `/discovery/cbom/*` endpoint:
-
-```bash
-# Get CBOM for a specific wallet address
-curl http://localhost:8080/discovery/cbom/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
-  -H "Authorization: Bearer $TOKEN" | jq .
-
-# Get CBOM for a specific TLS endpoint (URL must be URL-encoded)
-curl "http://localhost:8080/discovery/cbom/https%3A%2F%2Fexample.com" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
-
-Note: URLs must be URL-encoded when passed as path parameters. The endpoint automatically detects if the parameter is a wallet address (starts with `0x`) or a URL (starts with `http://` or `https://`).
-
-#### CBOM Structure
-
-All CBOMs returned by the API are **based on CycloneDX v1.7** and include:
-
-> **Note on CycloneDX Compliance**: CAFE CBOMs follow the CycloneDX v1.7 structure and include standard fields (`bomFormat`, `specVersion`, `version`, `metadata`, `components`), but are **not strictly compliant** because they extend the specification with custom fields outside the standard. These custom fields (e.g., `nist_level`, `quantum_vulnerable`, `key_exposed`, `pqc_ready`) are added to provide cryptographic discovery and post-quantum risk analysis capabilities specific to CAFE's use case.
-
-- **Scan metadata**: All original scan data (address/url, risk_score, nist_level, etc.)
-- **CBOM object**: A structured `cbom` object containing:
-  - `bomFormat`: Always `"CycloneDX"` (CycloneDX format identifier)
-  - `specVersion`: Always `"1.7"` (CycloneDX specification version)
-  - `version`: CBOM document version (currently `1`)
-  - `metadata`: Metadata object containing:
-    - `timestamp`: ISO-8601 UTC timestamp of scan execution
-    - `lifecycles`: (TLS only) Array declaring the CBOM lifecycle phase:
-      - `phase`: `"discovery"` - Indicates this is a point-in-time discovery CBOM
-      - `description`: Explains that this represents network observations
-  - `type`: Type of CBOM (`"wallet"` or `"tls-endpoint"`)
-  - `components`: Array of cryptographic primitives with details:
-    - For wallets: cryptographic-primitive components with NIST SP 800-57 key states
-    - For TLS: certificate, key-exchange, signature-algorithm, and cipher-suite components
-
-**Wallet Components** include:
-- Type and name of the cryptographic primitive (CycloneDX standard)
-- `assetType`: `"related-crypto-material"` (CycloneDX standard - indicates cryptographic material)
-- `state`: `"active"` (CycloneDX standard - NIST SP 800-57 key state)
-- `customStates`: (if quantum-vulnerable) Array with custom state (CycloneDX standard extension):
-  - `name`: `"quantum-vulnerable"`
-  - `description`: Explains vulnerability to future quantum attacks
-- **Custom fields (CAFE-specific, not in CycloneDX spec)**:
-  - `nist_level`: NIST security level (1-5)
-  - `quantum_vulnerable`: Boolean indicating quantum vulnerability
-  - `key_exposed`: Boolean indicating if the key has been exposed on-chain
-
-**TLS Components** include:
-- Type and name of the cryptographic primitive (CycloneDX standard)
-- **Custom fields (CAFE-specific, not in CycloneDX spec)**:
-  - `nist_level`: NIST security level (1-5)
-  - `quantum_vulnerable`: Boolean indicating quantum vulnerability
-  - `pqc_ready`: Boolean indicating post-quantum cryptography readiness (for applicable components)
-  - Additional TLS-specific fields: `subject`, `issuer`, `signature_algorithm`, `key_size`, `not_before`, `not_after`, etc.
+Pending scans return `{"scan_id": "...", "status": "requested"}`. Terminal scans include a `result` object with wallet or TLS discovery fields.
 
 ### 5. Public Endpoints
 
