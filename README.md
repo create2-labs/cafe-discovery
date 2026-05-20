@@ -71,12 +71,13 @@
       9. [GET /discovery/v1/tls/scans/:scan_id](#get-discoveryv1tlsscansscan_id)
       10. [GET /discovery/v1/rpcs](#get-discoveryv1rpcs)
       11. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
-      12. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
-      13. [Removed legacy Discovery routes](#removed-legacy-discovery-routes)
-      14. [GET /version](#get-version)
-      15. [GET /health](#get-health)
-      16. [GET /metrics](#get-metrics)
-      17. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
+      12. [Option A: Discovery wallet scan v1 ↔ CPM contract](#option-a-discovery-wallet-scan-v1--cpm-contract)
+      13. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
+      14. [Removed legacy Discovery routes](#removed-legacy-discovery-routes)
+      15. [GET /version](#get-version)
+      16. [GET /health](#get-health)
+      17. [GET /metrics](#get-metrics)
+      18. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
    9. [Subscription Plans](#subscription-plans)
       1. [Available Plans](#available-plans)
       2. [Plan Management Endpoints](#plan-management-endpoints)
@@ -1608,6 +1609,10 @@ curl -X GET "http://localhost:8080/discovery/v1/tls/scans/660e8400-e29b-41d4-a71
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
+### Option A: Discovery wallet scan v1 ↔ CPM contract
+
+Maintainer reference for **Option A** (list + detail wallet scans under **`/discovery/v1/wallets/scans`**, synchronous CPM explore with **`policy_context`**, persist / list by **`scan_id`**, async assessment without client **`policy_context`**): see **[docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md)**. It includes the URL matrix, flow summary, and the normative **§3.1** field mapping from **`WalletScanDetail`** into CPM explore (cross‑checked with **`cafe-crypto-policy-mgt/internal/api/explore_policy_context.go`**).
+
 ### Policy assessment (CPM-owned)
 
 Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Management (CPM)**:
@@ -1624,6 +1629,7 @@ The following routes are no longer primary API references and should not be used
 - `POST /discovery/scan`
 - `GET /discovery/scans`
 - `GET /discovery/cbom/*`
+- **`GET /discovery/wallet-policy-contexts`** (historical façade **removed**; use **`GET /discovery/v1/wallets/scans`** + **`GET /discovery/v1/wallets/scans/{scan_id}`** — see **`docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`**)
 - `POST /discovery/tls/scan`
 - `GET /discovery/tls/scans`
 
@@ -2316,6 +2322,7 @@ docker compose down
 
 ## Additional Resources
 
+- [Option A: Discovery v1 wallet scans ↔ CPM](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) — contract reference for **`policy_context`** and related CPM routes
 - [Post-Quantum JWT Documentation](docs/PQC_JWT.md) - Detailed guide on PQC JWT implementation
 - [PQC Certificate Generation Guide](docs/PQC_CERTIFICATES.md) - Guide for generating and testing PQC TLS certificates
 - [Open Quantum Safe](https://openquantumsafe.org/) - Official OQS project
