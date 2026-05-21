@@ -1611,7 +1611,9 @@ curl -X GET "http://localhost:8080/discovery/v1/tls/scans/660e8400-e29b-41d4-a71
 
 ### Option A: Discovery wallet scan v1 ↔ CPM contract
 
-Maintainer reference for **Option A** (list + detail wallet scans under **`/discovery/v1/wallets/scans`**, synchronous CPM explore with **`policy_context`**, persist / list by **`scan_id`**, async assessment without client **`policy_context`**): see **[docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md)**. It includes the URL matrix, flow summary, and the normative **§3.1** field mapping from **`WalletScanDetail`** into CPM explore (cross‑checked with **`cafe-crypto-policy-mgt/internal/api/explore_policy_context.go`**).
+**Option A** is the post-V1 CPM integration path: real user-owned wallet scans via the authenticated Discovery backend (not mock scan placeholders or direct DB access from CPM/frontend). Product definition and Option A vs Option B: **[cafe-crypto-policy-mgt `workplans/CPM_post_v_1_option_a_scan_context.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/CPM_post_v_1_option_a_scan_context.md)**.
+
+Maintainer reference for HTTP/mapping (list + detail under **`/discovery/v1/wallets/scans`**, CPM explore with **`policy_context`**, persist / list by **`scan_id`**, async assessment without client **`policy_context`**): **[docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md)** — URL matrix, flow summary, and normative **§3.1** mapping from **`WalletScanDetail`** into CPM explore (cross‑checked with **`cafe-crypto-policy-mgt/internal/api/explore_policy_context.go`**).
 
 ### Policy assessment (CPM-owned)
 
