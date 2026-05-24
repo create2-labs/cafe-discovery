@@ -12,7 +12,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1** documenté ([`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2+** non mergés.
+**Statut du document :** plan de découpe — **IMM-1** mergé ([#64](https://github.com/create2-labs/cafe-discovery/pull/64), [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2** en cours sur `discovery/scan-history-db-migration` ; **IMM-3+** non mergés.
 
 ---
 
@@ -89,8 +89,8 @@
 
 | PR | GitHub issue (draft) | Branche (proposée) | Dépôt (issue) | PR Git | Dépend de | Objectif en une ligne |
 |----|----------------------|-------------------|---------------|--------|-----------|------------------------|
-| **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | — | — | Doc : écart vs WORKPLAN, stratégie migration. |
-| **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | — | **IMM-1** | DB : retirer unicité par cible. |
+| **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
+| **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | — | **IMM-1** (#64) | DB : retirer unicité par cible. |
 | **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | — | **IMM-2** | Writers : une ligne par `scan_id`. |
 | **IMM-4** | [§ IMM-4](#github-issue--imm-4) | `discovery/scan-history-api-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste + **`latest=true`** + garde POST **en cours** (`SCAN_IN_PROGRESS`). |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-legacy-readpaths` | `cafe-discovery` | — | **IMM-3** | Redis + chemins legacy alignés. |
@@ -157,7 +157,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 | Fichier | Comportement aujourd’hui |
 |---------|-------------------------|
-| `cmd/persistence/main.go` | Crée `idx_scan_results_user_address`, `idx_tls_scan_results_user_url`. |
+| `cmd/persistence/main.go` | ~~Crée index uniques~~ → **IMM-2** : DDL index au démarrage (drop unique + index liste). |
 | `internal/persistence/storage/postgres.go` | `OnConflict` sur `(user_id, address)` / `(user_id, url)` ; commentaire *same address overwrites*. |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max). |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **pas** de nouveau scan synchrone legacy. |
@@ -167,6 +167,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-1 — Gap analysis & stratégie migration (doc)
 
+- **Status:** mergé — PR [#64](https://github.com/create2-labs/cafe-discovery/pull/64)
 - **Branch:** `docs/scan-immutability-gap-and-migration`
 - **Repository:** `cafe-discovery`
 - **Objective:** Figurer la trajectoire **IMM-2…IMM-8** et la politique données pour l’existant (1 row / cible).
@@ -186,25 +187,25 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-2 — Migration DB (retirer unicité par cible)
 
+- **Status:** en cours — branche `discovery/scan-history-db-migration` (pas d’issue GitHub ; ce plan suffit)
 - **Branch:** `discovery/scan-history-db-migration`
 - **Repository:** `cafe-discovery`
 - **Objective:** Autoriser **plusieurs lignes** par `(user_id, address)` et `(user_id, url)`.
 - **Scope:**
-  - Migration SQL (GORM ou script) : `DROP INDEX IF EXISTS idx_scan_results_user_address` ; `DROP INDEX IF EXISTS idx_tls_scan_results_user_url`.
-  - Index non unique pour perf : ex. `(user_id, address, created_at DESC)` / `(user_id, url, created_at DESC)` (noms à figer en implémentation).
-  - Mettre à jour `cmd/persistence/main.go` : ne plus recréer les index **uniques** ; créer les index de liste.
+  - DDL au démarrage `persistence` dans `cmd/persistence/main.go` : `DROP INDEX IF EXISTS` sur les index uniques legacy ; `CREATE INDEX` liste non uniques (`idx_scan_results_user_address_created_at`, `idx_tls_scan_results_user_url_created_at`).
+  - **Pas** de package / script de migration incrémentale — dev : reset volume Postgres si le schéma change brutalement.
   - Note : `id` (UUID) reste **PK** — pas de changement.
 - **Out of scope:** Logique `OnStarted` / `OnCompleted`.
 - **Dependencies:** **IMM-1**
 - **Implementation notes:**
   - Environnements avec **une** ligne par adresse : aucune action données requise avant IMM-3.
   - PostgreSQL **15+** : conserver `NULLS NOT DISTINCT` sur TLS `user_id` si applicable.
-- **Tests:** Test migration idempotente (CI ou test intégration DB).
-- **Validation commands:** `cd cafe-discovery && go test ./cmd/persistence/... ./internal/persistence/...` (selon arborescence tests).
+- **Tests:** `go build ./cmd/persistence/...` ; pas de tests DDL dédiés (schéma = état cible au boot).
+- **Validation commands:** `go build ./cmd/persistence/...` ; vérif manuelle `pg_indexes` après redémarrage persistence.
 - **Proposed commit title:** `db: allow multiple scan rows per user target`
 - **Proposed PR title:** `Discovery: DB migration for per-execution scan history`
 - **Risks:** Voir [§ Release IMM-2 + IMM-3](#release-imm-2--imm-3-unité-atomique) — **pas** de fenêtre prod/staging avec schéma IMM-2 et anciens writers, ni avec writers IMM-3 et anciens index uniques.
-- **Completion criteria:** Index unique absents ; index liste présents ; migration rejouable.
+- **Completion criteria:** Index unique absents ; index liste présents après boot persistence.
 
 ---
 
@@ -514,8 +515,8 @@ Discovery **v1 HTTP** exposes `scan_id` and documents immutable `result` after t
 
 | Field | Value |
 |-------|--------|
-| Issue | — |
-| PR | — |
+| Issue | — (non créée ; plan IMMUTABILITE_PR suffit) |
+| PR | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) |
 
 ---
 
@@ -543,7 +544,7 @@ Discovery **v1 HTTP** exposes `scan_id` and documents immutable `result` after t
 
 **Tracking ID:** IMM-2  
 **Plan:** [IMMUTABILITE_PR.md — IMM-2](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md#github-issue--imm-2)  
-**Depends on:** IMM-1 (migration strategy approved)
+**Depends on:** IMM-1 (migration strategy approved — PR [#64](https://github.com/create2-labs/cafe-discovery/pull/64))
 
 ### Summary
 
@@ -554,7 +555,7 @@ Remove unique indexes that enforce **one scan row per `(user_id, address)`** and
 - [ ] `DROP` (or equivalent) `idx_scan_results_user_address` and `idx_tls_scan_results_user_url`.
 - [ ] Non-unique indexes for listing by user + address/url (names defined in PR).
 - [ ] `cmd/persistence/main.go` no longer recreates **unique** indexes on startup; creates list indexes instead.
-- [ ] Migration idempotent (safe re-run on deploy).
+- [ ] DDL index appliqué au boot persistence (pas de couche migration dédiée).
 - [ ] Existing single row per target remains valid (no data rewrite required).
 
 ### Out of scope
@@ -576,15 +577,15 @@ Remove unique indexes that enforce **one scan row per `(user_id, address)`** and
 
 ### Test plan
 
-- [ ] `go test` for migration/persistence package if present
-- [ ] Manual: second insert same `(user_id, address)` with different `id` succeeds after migration
+- [ ] `go build ./cmd/persistence/...`
+- [ ] Manual: `pg_indexes` après boot ; second insert même `(user_id, address)` + `id` différent OK (après IMM-3 pour le comportement writer)
 
 ### Tracking
 
 | Field | Value |
 |-------|--------|
-| Issue | — |
-| PR | — |
+| Issue | — (non créée ; plan IMMUTABILITE_PR suffit) |
+| PR | — (branche `discovery/scan-history-db-migration`) |
 
 ---
 
