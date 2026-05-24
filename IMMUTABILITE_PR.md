@@ -12,7 +12,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **aucune PR IMM-* mergée** à ce jour.
+**Statut du document :** plan de découpe — **IMM-1** documenté ([`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2+** non mergés.
 
 ---
 
@@ -170,6 +170,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 - **Branch:** `docs/scan-immutability-gap-and-migration`
 - **Repository:** `cafe-discovery`
 - **Objective:** Figurer la trajectoire **IMM-2…IMM-8** et la politique données pour l’existant (1 row / cible).
+- **Livrable doc :** [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md) (gap, lifecycle, NATS→Postgres, **no backfill**, Redis, checklist OpenAPI/README).
 - **Scope:**
   - Section dans ce fichier ou `docs/SCAN_IMMUTABILITY_MIGRATION.md` : état → cible, diagramme lifecycle.
   - Décision explicite : **pas de rétro-historique** pour les re-scans passés (impossible sans backup) ; première exécution post-migration crée la 2ᵉ ligne.
