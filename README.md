@@ -1615,6 +1615,12 @@ curl -X GET "http://localhost:8080/discovery/v1/tls/scans/660e8400-e29b-41d4-a71
 
 Maintainer reference for HTTP/mapping (list + detail under **`/discovery/v1/wallets/scans`**, CPM explore with **`policy_context`**, persist / list by **`scan_id`**, async assessment without client **`policy_context`**): **[docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md)** — URL matrix, flow summary, and normative **§3.1** mapping from **`WalletScanDetail`** into CPM explore (cross‑checked with **`cafe-crypto-policy-mgt/internal/api/explore_policy_context.go`**).
 
+#### Scan immutability & per-execution history (maintainers)
+
+Product invariants (**`scan_id`** stable per row, immutable terminal **`result`**, multi-row history per address, **W1–W8** with CPM) are defined in **[`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md` §2.2](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md)** (see also **§4.2.1** for list envelopes).
+
+Implementation is split across PRs **IMM-1…IMM-12** in **[`IMMUTABILITE_PR.md`](IMMUTABILITE_PR.md)**. Gap analysis, **no-backfill** data policy, Redis vs Postgres roles, and deployment ordering: **[`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)** (IMM-1). Start **IMM-2** only after that document is reviewed.
+
 ### Policy assessment (CPM-owned)
 
 Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Management (CPM)**:
@@ -2325,6 +2331,8 @@ docker compose down
 ## Additional Resources
 
 - [Option A: Discovery v1 wallet scans ↔ CPM](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) — contract reference for **`policy_context`** and related CPM routes
+- [Scan immutability & migration strategy (IMM-1)](docs/SCAN_IMMUTABILITY_MIGRATION.md) — gap vs **WORKPLAN_API.md** §2.2, rollout **IMM-2…IMM-8**
+- [Scan immutability PR plan](IMMUTABILITE_PR.md) — per-PR branches and acceptance criteria
 - [Post-Quantum JWT Documentation](docs/PQC_JWT.md) - Detailed guide on PQC JWT implementation
 - [PQC Certificate Generation Guide](docs/PQC_CERTIFICATES.md) - Guide for generating and testing PQC TLS certificates
 - [Open Quantum Safe](https://openquantumsafe.org/) - Official OQS project
