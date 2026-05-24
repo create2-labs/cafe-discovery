@@ -34,22 +34,19 @@ func main() {
 	}
 	defer db.Shutdown()
 
-	// Migrate only scan tables (persistence owns these).
-	// Ignore "column already exists" when backend and persistence both run migrations.
+	// Scan tables (persistence owns these). Dev: reset Postgres volume if schema changes brutally.
 	if err := db.GetDB().AutoMigrate(&domain.TLSScanResultEntity{}, &domain.ScanResultEntity{}); err != nil {
-		if strings.Contains(err.Error(), "already exists") {
-			log.Warn().Err(err).Msg("scan tables: some columns already exist (idempotent migration)")
-		} else {
-			log.Fatal().Err(err).Msg("scan tables migration failed")
-		}
+		log.Fatal().Err(err).Msg("scan tables AutoMigrate failed")
 	}
-	// Unique constraints for upsert-by-(user_id, url) and (user_id, address). PostgreSQL 15+ for NULLS NOT DISTINCT.
+	// IMM-2: multiple rows per (user_id, address|url); list indexes for history queries.
 	for _, q := range []string{
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tls_scan_results_user_url ON tls_scan_results (user_id, url) NULLS NOT DISTINCT`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scan_results_user_address ON scan_results (user_id, address)`,
+		`DROP INDEX IF EXISTS idx_scan_results_user_address`,
+		`DROP INDEX IF EXISTS idx_tls_scan_results_user_url`,
+		`CREATE INDEX IF NOT EXISTS idx_scan_results_user_address_created_at ON scan_results (user_id, address, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_tls_scan_results_user_url_created_at ON tls_scan_results (user_id, url, created_at DESC) NULLS NOT DISTINCT`,
 	} {
 		if err := db.GetDB().Exec(q).Error; err != nil {
-			log.Warn().Err(err).Str("sql", q).Msg("unique index creation (may already exist)")
+			log.Fatal().Err(err).Str("sql", q).Msg("scan history indexes failed")
 		}
 	}
 

@@ -1,6 +1,6 @@
 # Scan immutability — gap analysis & migration strategy (IMM-1)
 
-**Status:** Approved for implementation sequence **IMM-2 → IMM-8** (documentation only; no schema or writer changes in this deliverable).
+**Status:** **IMM-1** delivered in PR [#64](https://github.com/create2-labs/cafe-discovery/pull/64). Implementation sequence **IMM-2 → IMM-8** ; index DDL (**IMM-2**) au boot `cmd/persistence` (pas de package migration).
 
 **Product contract:** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) — **§2.2** (scan lifecycle, invariants, **W1–W8**), **§4.2.1** (list/detail envelopes).
 
@@ -27,7 +27,7 @@ This document records the gap, target invariants, **data migration policy**, Red
 | Topic | Current (`main`) | Target (`WORKPLAN_API.md` §2.2) |
 |-------|------------------|----------------------------------|
 | Rows per target | At most **one** Postgres row per `(user_id, address)` or `(user_id, url)` | **One row per execution**; PK **`id` = `scan_id`** |
-| Unique indexes | `idx_scan_results_user_address`, `idx_tls_scan_results_user_url` | **Non-unique** list indexes on `(user_id, address\|url, created_at DESC)` — see IMM-2 |
+| Unique indexes | `idx_scan_results_user_address`, `idx_tls_scan_results_user_url` | **Non-unique** `idx_scan_results_user_address_created_at`, `idx_tls_scan_results_user_url_created_at` — **IMM-2** |
 | Re-scan same `0x…` / URL | `ON CONFLICT` upsert **replaces** `id`, status, `result` | **INSERT** new row; prior row **unchanged** |
 | `OnStarted` if terminal exists | **No-op** (wallet/TLS) — new `scan_id` never persisted | **INSERT** new `RUNNING` row (IMM-3) |
 | Lost history | Prior `scan_id` may 404; CPM policy orphan risk | Prior `scan_id` readable until **DELETE** (**W3**) |
@@ -104,7 +104,7 @@ sequenceDiagram
 
 | Component | File | Behaviour |
 |-----------|------|-----------|
-| Index creation | `cmd/persistence/main.go` | Creates **unique** `idx_scan_results_user_address`, `idx_tls_scan_results_user_url` |
+| Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |
@@ -230,19 +230,15 @@ Use this when closing IMM-7 / after API PRs; IMM-1 records intended end state.
 | Role | Date | Notes |
 |------|------|-------|
 | Author (IMM-1 doc) | 2026-05-24 | Gap + no-backfill + Redis policy recorded |
-| Maintainer approval (required before IMM-2) | _pending_ | Record PR comment or team ack |
+| Maintainer approval (required before IMM-2) | 2026-05-24 | IMM-1 merged [#64](https://github.com/create2-labs/cafe-discovery/pull/64) |
 
 ---
 
-## Appendix A — Code anchors (current `main`)
+## Appendix A — Code anchors
 
-```46:54:cmd/persistence/main.go
-	// Unique constraints for upsert-by-(user_id, url) and (user_id, address). PostgreSQL 15+ for NULLS NOT DISTINCT.
-	for _, q := range []string{
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tls_scan_results_user_url ON tls_scan_results (user_id, url) NULLS NOT DISTINCT`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scan_results_user_address ON scan_results (user_id, address)`,
-	} {
-```
+**IMM-2 (index DDL)** — `cmd/persistence/main.go` : `DROP INDEX IF EXISTS` sur les uniques legacy, puis `CREATE INDEX` liste (`idx_*_created_at`). Dev : reset volume Postgres si besoin (pas de migration incrémentale).
+
+**Pre-IMM-3 (writers still upsert)** — `internal/persistence/storage/postgres.go`:
 
 ```124:127:internal/persistence/storage/postgres.go
 	return w.db.Clauses(clause.OnConflict{
