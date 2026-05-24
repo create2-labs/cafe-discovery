@@ -2,67 +2,72 @@
 
 **Propriétaire runtime :** `cafe-discovery` (API, persistence-service, Postgres, Redis cache scan).
 
-**Source de vérité (contrat produit) :** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) — **§2.2** (invariants, couplage **W1–W8**), **§4.2.1**, **§8.4–§8.6**. **Ce fichier** = découpage PR / écarts **implémentation** vs ce workplan.
+**Source de vérité (contrat produit) :** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) — **§0**, **§2.2** (invariants, couplage **W1–W7**), **§4.2.1**, **§5.4.6**, **§8.4–§8.8**. **Ce fichier** = découpage PR / écarts **implémentation** vs ce workplan.
 
-**Contrat machine-readable :** `openapi/discovery-v1.yaml` — à aligner sur **W1**, **W6**, persistance multi-lignes.
+**All API paths in this document refer to the canonical public prefixes defined in WORKPLAN_API.md: `/api/discovery/v1` and `/api/cpm/v1`.**
+
+**Contrat machine-readable :** `openapi/discovery-v1.yaml` — à aligner sur **W1** (policy **+** draft), **W6**, persistance multi-lignes.
 
 **Contexte CPM :** policies par **`scan_id`** (**PR5/PR6/PR7**). **PR6** (**DELETE** + **409**) reste le modèle cible (**§2.2 W3**) : l’utilisateur supprime d’abord la CPM, puis le scan.
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1** documenté sur branche `docs/scan-immutability-gap-and-migration` ([`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2+** non mergés.
+**Statut du document :** plan de découpe — **IMM-1** documenté ([`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2+** non mergés.
 
 ---
 
-## Règles produit wallet ↔ CPM (référence [WORKPLAN](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) §2.2 W1–W8)
+## Règles produit wallet ↔ CPM (référence WORKPLAN §2.2 W1–W7)
 
-**Périmètre :** scans **wallet / EVM** et CPM **`binding=discovery`**. **TLS** : historique + CBOM par **`scan_id`** ; pas de **W1–W4** / **W7–W8** (assessment wallet-only).
+**Périmètre wallet ↔ CPM :** scans **wallet / EVM** et CPM **`binding=discovery`** — règles **W1–W7** (assessment/remediation **wallet-only**).
+
+**TLS scope (Discovery-only for current CPM product flow) :**
+
+- **oui** : `scan_id` stable, historique, résultat terminal immutable, list/detail/delete, CBOM optionnel ;
+- **oui** : inventaire de risque / observation / historique Discovery ;
+- **non** (flux CPM produit actuel) : cible d’assessment ou de remediation CPM ; pas de migration/remediation TLS dans CPM ;
+- **défensif** : si un `scan_id` TLS est référencé par une policy persistée, **`DELETE /api/discovery/v1/tls/scans/{scan_id}`** → **`409`** **`SCAN_REFERENCED_BY_POLICY`**.
 
 | WORKPLAN | Règle | Discovery | CPM | Frontend |
 |----------|--------|-----------|-----|----------|
-| **W1** | Pas de **nouveau scan** si policy **ou** draft sur la cible (après **W8**) | `POST …/scan` → **409** `CPM_EXISTS_FOR_WALLET_TARGET` | Lookup policies **+** drafts | Désactiver « Scanner » si policy/draft |
+| **W7** | **CPM** bloquée si le **dernier scan** n’est pas **`completed`**. **`POST …/scan`** : refus si **en cours** ; retry si **`failed`** **et** **W1** OK | `SCAN_IN_PROGRESS` si en cours ; CPM → **400** | explore/persist → **400** | Scan : off si en cours ou **W1** ; CPM off si dernier ≠ **`completed`** |
+| **W1** | **Un seul contexte CPM actif / adresse** : pas de scan si **policy** ou **draft plateforme** | `POST …/scan` → **409** | Lookup policies **+** drafts (**IMM-9b**) | Finaliser / supprimer draft plateforme ; ou export local → delete draft → rescan (UX frontend) |
 | **W2** | CPM **uniquement** sur le dernier scan **`completed`** | **`GET …?address=&latest=true`** (≤1 item **`completed`**) | **400** si `scan_id` ≠ latest **`completed`** | Référence policy via **`latest=true`** |
 | **W3** | **DELETE scan** : l’utilisateur **supprime d’abord la CPM**, puis **`DELETE …/wallets/scans/{scan_id}`** | **409** `SCAN_REFERENCED_BY_POLICY` tant que policy liée ; **204** après | `GET ?scan_id=` puis `DELETE ?id=` | Guide 409 → supprimer policy → retry DELETE |
 | **W4** | **DELETE CPM** sans effet sur les scans | Inchangé | `DELETE …/policies?id=` | Bouton supprimer policy |
 | **W5** | **Historique** par adresse | `GET …/wallets/scans?address=` | Lecture | Liste chronologique |
 | **W6** | **CBOM** par scan | `GET …/wallets/scans/{scan_id}/cbom` à la demande | Hors scope | Lien CBOM par ligne |
-| **W7** | **CPM uniquement** : pas d’explore/persist tant que la **newest row** (`created_at` max) n’est pas **`completed`** (`failed` ou en cours inclus) | — | explore/persist → **400** `LATEST_SCAN_NOT_COMPLETED` | **CPM** off si newest ≠ **`completed`** |
-| **W8** | **Rescan** (`POST …/scan`) : **indépendant de W7** — refus seulement si scan **en cours** ; si newest = **`failed`**, nouveau scan **OK** (sous **W1**) | **409** `SCAN_IN_PROGRESS` si en cours ; **accepté** si **`failed`** (+ **W1**) | — | **Scan** off si en cours ; **on** si **`failed`** + **W1** OK (CPM peut rester bloquée) |
-
-> **W7 vs W8 (WORKPLAN §2.2) :** **W7** = blocage **CPM** si newest ≠ **`completed`**. **W8** = garde **rescan** sur **`POST …/scan`** (souvent **IMM-4**) — **409** seulement si en cours. Ex. : **`completed` A** + **`failed` B** → CPM **400** (**W7**), rescan **OK** (**W8** + **W1**).
 
 ---
 
-## Écarts implémentation vs [`WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) (ce plan les comble)
+## Écarts implémentation vs `WORKPLAN_API.md` (ce plan les comble)
 
 | Sujet | `main` aujourd’hui | Workplan (cible) | PR |
 |-------|-------------------|------------------|-----|
 | Persistance | 1 ligne / `(user_id, address)` upsert | Multi-lignes, `scan_id` stable | IMM-2, IMM-3 |
-| **W1** — contexte CPM actif | Pas de garde CPM / draft | **409** si policy ou draft (**IMM-9** + **IMM-9b**) | IMM-9 |
-| **W2** — dernier `completed` | Pas de query **`latest=true`** | **`GET …/wallets/scans?address=&latest=true`** | IMM-4 |
-| **W3** — DELETE scan | **409** si policy (**PR6**) — déjà proche | Parcours utilisateur documenté | — (doc/UX) |
-| **W4** — DELETE policy | Ne supprime pas scan | **W4** inchangé | — |
-| **W5** — historique | Filtre `chain_id` → 1 ligne | Liste multi-lignes par adresse | IMM-4 |
-| **W6** — CBOM | Pas de route v1 | **`GET …/wallets/scans/{scan_id}/cbom`** | IMM-12 |
-| **W7** — garde CPM lifecycle | Pas de blocage | Explore/persist si newest = **`completed`** | IMM-10 (CPM) |
-| **W8** — rescan | Pas de garde en cours | **409** si en cours (**IMM-4**) ; **indépendant** de **W7** | IMM-4, IMM-9 |
+| Garde readiness | Pas de blocage | **W7** (CPM : dernier `completed` ; POST : en cours seulement) | IMM-4, IMM-9, IMM-10 |
+| POST scan | Pas de garde CPM / en cours | **W7** (en cours) + **W1** → **409** | IMM-4, IMM-9 (+ IMM-9b) |
 | CPM persist | Tout `scan_id` | **W7** + **W2** | IMM-10 (CPM) |
+| DELETE scan | **409** si policy (**PR6**) — **déjà conforme W3** | Conserver ; documenter parcours utilisateur | — (doc/UX) |
+| DELETE policy | Ne supprime pas scan | **W4** | — |
+| Liste / historique | Filtre `chain_id` → 1 ligne | **W5** | IMM-4 |
+| Dernier scan (W2) | Pas de query **`latest=true`** | **`GET …/wallets/scans?address=&latest=true`** | IMM-4 (ou sous-ensemble) |
+| CBOM | Pas de route v1 | **W6** | IMM-12 |
 
-**Implémentation actuelle (`main`) :** non conforme sur **W1, W2, W5, W6, W7, W8** et persistance ; **W3/W4** proches du workplan si **PR6** est actif.
+**Implémentation actuelle (`main`) :** non conforme sur **W1, W2, W5, W6, W7** et persistance ; **W3/W4** proches du workplan si **PR6** est actif.
 
 ---
 
 ## Executive summary
 
-| Domaine | État actuel (`main`) | Cible [`WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) |
+| Domaine | État actuel (`main`) | Cible `WORKPLAN_API.md` |
 |--------|----------------------|-------------------------|
-| **Identité scan** | Chaque `POST /discovery/v1/scan` alloue un **nouveau** `scan_id` (UUID). | Identique. |
+| **Identité scan** | Chaque `POST /api/discovery/v1/scan` alloue un **nouveau** `scan_id` (UUID). | Identique. |
 | **Persistance wallet** | **Une ligne** par `(user_id, address)` — index unique `idx_scan_results_user_address` ; `WalletWriter` **upsert** et **remplace** `id` + résultat. | **Une ligne par exécution** ; **`scan_id` stable** pour la vie de la ligne ; re-scan = **nouvelle ligne**. |
 | **Persistance TLS** | **Une ligne** par `(user_id, url)` — `idx_tls_scan_results_user_url` ; même pattern upsert. | Même règle que wallet (famille TLS). |
 | **`result` terminal** | Écrasé sur re-scan (même adresse / même URL). | **Immutable** après terminal pour **ce** `scan_id`. |
 | **Liste v1** | `GET …/wallets/scans` sans filtre : `ListOwnerWalletScansDiscoveryV1` (OK multi-lignes **si** DB le permet). Filtre `?address=&chain_id=` : **au plus 1** item via `FindByUserIDAndAddress`. | `?address=` → **toutes** exécutions pour l’adresse ; `?address=&chain_id=` → sous-ensemble **mono-chaîne**, **pas** limité à une seule ligne arbitraire. |
-| **POST scan wallet** | Accepté si quota OK. | **W8** : **409** si en cours ; **OK** si newest **`failed`**. Puis **W1**. Indépendant de **W7**. |
-| **CPM explore/persist** | Sans garde lifecycle. | **W7** (newest = **`completed`**) + **W2** → **400** si mauvais état ou `scan_id`. |
+| **POST scan wallet** | Accepté si quota OK. | **W7** : **409** si en cours ; retry si **`failed`** **seulement** si **W1** OK (pas de policy/draft). |
+| **CPM explore/persist** | Sans garde lifecycle. | **W7** + **W2** → **400** si dernier ≠ **`completed`** ou mauvais `scan_id`. |
 | **DELETE wallet** | **PR6** : `DELETE …/{scan_id}` + **409** si policy. | **W3** inchangé : action user — d’abord `DELETE` policy, puis scan. |
 | **CPM persist** | Tout `scan_id` owner valide. | **W7** + **`scan_id` = latest `completed`** (**W2**). |
 | **DELETE CPM** | Ne supprime pas le scan (déjà). | Inchangé (**règle 4**). |
@@ -74,9 +79,9 @@
 
 **`latest=true` (W2) :** dernier scan **`completed`** pour l’adresse — peut coexister avec un **`failed`** plus récent dans l’historique (`total: 1` possible). **`total: 0`** seulement s’il n’existe **aucun** **`completed`**.
 
-**W7 (CPM) :** explore/persist refusés si newest row ≠ **`completed`** → **400** `LATEST_SCAN_NOT_COMPLETED`.
+**Garde readiness (W7) :** **CPM** — refuser explore/persist tant que la ligne la plus récente n’est pas **`completed`**. **`POST …/scan`** — refuser si en cours (`SCAN_IN_PROGRESS`) ; si dernier **`failed`**, retry seulement si **W1** OK (pas de policy **ni** draft).
 
-**W8 (rescan) :** **`POST …/scan`** refusé seulement si scan **en cours** → **409** `SCAN_IN_PROGRESS` ; si newest = **`failed`**, rescan **autorisé** (sous **W1**) même si **W7** bloque encore la CPM.
+**W1 (contexte CPM actif) :** au plus **une** policy **ou** draft par adresse — **409** `CPM_EXISTS_FOR_WALLET_TARGET` ; parcours plateforme : finaliser ou supprimer le draft avant rescan. **Parcours client optionnel** (export local → delete draft plateforme → rescan → reload si même adresse + même `wallet_type`) : [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) — hors scope API Discovery.
 
 ---
 
@@ -87,14 +92,15 @@
 | **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | — | — | Doc : écart vs WORKPLAN, stratégie migration. |
 | **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | — | **IMM-1** | DB : retirer unicité par cible. |
 | **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | — | **IMM-2** | Writers : une ligne par `scan_id`. |
-| **IMM-4** | [§ IMM-4](#github-issue--imm-4) | `discovery/scan-history-api-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste + **`latest=true`** + garde **W8** (`SCAN_IN_PROGRESS`). |
+| **IMM-4** | [§ IMM-4](#github-issue--imm-4) | `discovery/scan-history-api-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste + **`latest=true`** + garde POST **en cours** (`SCAN_IN_PROGRESS`). |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-legacy-readpaths` | `cafe-discovery` | — | **IMM-3** | Redis + chemins legacy alignés. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
 | **IMM-7** | [§ IMM-7](#github-issue--imm-7) | `discovery/scan-history-tests-contract` | `cafe-discovery` | — | **IMM-3**, **IMM-4** | Tests + contract v1. |
 | **IMM-8** | [§ IMM-8](#github-issue--imm-8) | `deploy/scan-history-migration-runbook` | `cafe-deploy` | — | **IMM-2** | Runbook déploiement. |
-| **IMM-9** | [§ IMM-9](#github-issue--imm-9) | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | — | **IMM-4**, **IMM-9b** | **W8** (**IMM-4**) + **W1** (policy/draft). |
-| **IMM-10** | [§ IMM-10](#github-issue--imm-10) | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | — | **IMM-3**, **IMM-4** | **W7** + **W2** : explore/persist latest **`completed`** only. |
-| **IMM-12** | [§ IMM-12](#github-issue--imm-12) | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | — | **IMM-3** | **W6** : `GET …/cbom` à la demande. |
+| **IMM-9** | [§ IMM-9](#github-issue--imm-9) | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | — | **IMM-4**, **IMM-9b** | En cours (**IMM-4**) + **W1** (policy **ou** draft). |
+| **IMM-10** | [§ IMM-10](#github-issue--imm-10) | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | — | **IMM-4** | **W7** (newest row) + **W2** (`latest=true`), wallet-only. |
+| **IMM-12** | [§ IMM-12](#github-issue--imm-12) | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | — | **IMM-3** | **W6** : `GET …/wallets/scans/{scan_id}/cbom` à la demande. |
+| **IMM-11** | [§ IMM-11](#github-issue--imm-11) | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | — | **IMM-4**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
 
 **Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8** → `cafe-deploy`, les autres → `cafe-discovery`).
 
@@ -102,7 +108,7 @@
 
 ## Création des issues GitHub
 
-Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) §2.2), pas un rapport de bug utilisateur.
+Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2), pas un rapport de bug utilisateur.
 
 1. Copier le **title** et le **body** de la section **IMM-*n*** ci-dessous.
 2. Créer l’issue sur le dépôt **Dépôt (issue)** du tableau (sauf **IMM-8** → `create2-labs/cafe-deploy`).
@@ -110,11 +116,25 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 4. Lier l’issue à la PR : `Closes #NNN` dans la PR Git.
 5. Coller l’URL de l’issue dans le tableau ci-dessus et dans le bloc **Tracking** en bas de chaque issue.
 
-**Ordre suggéré :** IMM-1 → IMM-2 → IMM-3 → IMM-4 → IMM-12 → IMM-9 (+ CPM **IMM-9b**) → IMM-10 (CPM) → IMM-7 ; IMM-8 en parallèle de IMM-2.
+**Ordre suggéré :**
+
+0. Patch **`WORKPLAN_API.md`** seulement si nécessaire (draft **DELETE**, TLS wallet-only, chemins publics).
+1. **IMM-1** — doc migration, décision Redis, contraintes release.
+2. **IMM-2** + **IMM-3** — PRs séparées possibles ; **release atomique obligatoire** (voir [§ Release IMM-2 + IMM-3](#release-imm-2--imm-3-unité-atomique)).
+3. **IMM-4** — list filters, `latest=true`, newest row compatible W7, lifecycle enum conforme.
+4. **IMM-9b** (CPM) — lookup `target_address` normalisée + policy + draft.
+5. **IMM-9** — garde en cours puis W1 ; fail-closed si lookup CPM indisponible.
+6. **IMM-10** (CPM) — W7 via newest row ; W2 via `latest=true`.
+7. **IMM-12** — CBOM by `scan_id`.
+8. **IMM-11** — cleanup routes / edge / OpenAPI / scripts.
+9. Frontend **FE-IMM-1…5** — après stabilisation backend.
+10. **IMM-7** — tests contract E2E (peut chevaucher **IMM-11**).
+
+**IMM-8** (runbook deploy) : en parallèle de **IMM-2**, mis à jour pour release atomique **IMM-2+IMM-3**.
 
 **Prérequis livrés :** list/detail v1 (**PR4**), **PR5/PR6/PR7** (référence policy, **DELETE** + **409**, policies). **PR6** = comportement cible **W3** — **à conserver**.
 
-**Documents liés :** [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/IMMUTABILITE_PR.md) (CPM), [`cafe-frontend/IMMUTABILITE.md`](https://github.com/create2-labs/cafe-frontend/IMMUTABILITE.md) (UX).
+**Documents liés :** [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (CPM), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX).
 
 ---
 
@@ -123,14 +143,13 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 1. **`scan_id`** alloué à l’acceptation (`requested`).
 2. **Une exécution** = **une ligne** Postgres (`id` = `scan_id`).
 3. **`result`** **gelé** après état terminal ; **CBOM** dérivé à la demande (**IMM-12**), jamais stocké en blob.
-4. **Historique** : plusieurs lignes par `target_address` ; listage **`GET …/wallets/scans?address=`** (**W5**).
-5. **W1** : pas de nouveau scan si policy ou draft sur la cible (après **W8**).
-6. **W2** : CPM explore/persist sur le dernier scan **`completed`** (`latest=true`).
-7. **W3** : effacement scan — d’abord supprimer la CPM, puis **`DELETE …/wallets/scans/{scan_id}`**.
-8. **W4** : effacement CPM — **`DELETE …/policies?id=`** sans toucher aux scans.
-9. **W6** : **`GET …/wallets/scans/{scan_id}/cbom`** à la demande.
-10. **W7** : CPM bloquée si newest ≠ **`completed`**.
-11. **W8** : rescan — **`POST …/scan`** bloqué seulement si en cours ; retry si **`failed`** (+ **W1**).
+4. **Historique** : plusieurs lignes par `target_address` ; listage **`GET …/wallets/scans?address=`** (règle **5**).
+5. **W7** : CPM bloquée si dernier scan ≠ **`completed`** ; **`POST …/scan`** bloqué si en cours, ou si **W1** (policy/draft), sinon retry possible si **`failed`**.
+6. **W1** : au plus un contexte CPM actif — pas de scan si policy **ou** draft sur la cible.
+7. **CPM** : **W7** sur newest row (`limit=1`, tri défaut) ; **W2** sur dernier **`completed`** (`latest=true`).
+8. **Effacement scan** : `DELETE …/wallets/scans/{scan_id}` ; **409** si policy référencée ; parcours **W3** (d’abord supprimer CPM).
+9. **Effacement CPM** : `DELETE …/policies?id=` sans toucher aux scans (**W4**).
+10. **CBOM** : `GET …/wallets/scans/{scan_id}/cbom` à la demande (**W6**).
 
 ---
 
@@ -184,8 +203,25 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 - **Validation commands:** `cd cafe-discovery && go test ./cmd/persistence/... ./internal/persistence/...` (selon arborescence tests).
 - **Proposed commit title:** `db: allow multiple scan rows per user target`
 - **Proposed PR title:** `Discovery: DB migration for per-execution scan history`
-- **Risks:** Déploiement persistence **avant** IMM-3 si writers encore en upsert → doublons ou erreurs jusqu’à IMM-3 ; coordonner **IMM-8**.
+- **Risks:** Voir [§ Release IMM-2 + IMM-3](#release-imm-2--imm-3-unité-atomique) — **pas** de fenêtre prod/staging avec schéma IMM-2 et anciens writers, ni avec writers IMM-3 et anciens index uniques.
 - **Completion criteria:** Index unique absents ; index liste présents ; migration rejouable.
+
+---
+
+## Release IMM-2 + IMM-3 — unité atomique
+
+**IMM-2** et **IMM-3** peuvent être **revues en PRs séparées**, mais doivent être **déployées comme une seule unité** (même fenêtre de release, même train de déploiement).
+
+| Fenêtre interdite | Risque |
+|-------------------|--------|
+| Schéma **IMM-2** (index uniques retirés) + writers **anciens** (upsert par cible) | État incohérent, doublons ou erreurs PK |
+| Writers **IMM-3** (insert par `scan_id`) + index **uniques** encore actifs | Second scan même cible → violation contrainte |
+
+**Règles :**
+
+- Pas de staging/prod avec **IMM-2** seul sans **IMM-3** prêt à déployer immédiatement après.
+- Pas de staging/prod avec **IMM-3** sans **IMM-2** déjà appliqué sur la même base.
+- **IMM-8** runbook documente l’ordre : migration DB → image persistence **IMM-3** → backend API (**IMM-4+**).
 
 ---
 
@@ -195,7 +231,7 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 - **Repository:** `cafe-discovery`
 - **Objective:** Aligner `WalletWriter` / `TLSWriter` sur **une ligne par `scan_id`**.
 - **Scope:**
-  - **`OnStarted`:** `INSERT` ligne `id = scan_id`, status `RUNNING` ; **ne plus** no-op si une autre ligne terminal existe pour la même cible.
+  - **`OnStarted`:** `INSERT` ligne `id = scan_id`, **`status = started`** (lifecycle API **§5.4.1** — **pas** `RUNNING` exposé API) ; **ne plus** no-op si une autre ligne terminal existe pour la même cible.
   - **`OnCompleted` / `OnFailed`:** `UPDATE … WHERE id = ?` ; si ligne absente, `INSERT` (replay event) — **sans** `ON CONFLICT (user_id, address)`.
   - Transitions invalides : conserver garde `ValidTransition` par **`scan_id`** (logs + ignore duplicate completion).
   - `internal/persistence/handlers/scan_events.go` : ajuster messages / tests.
@@ -205,7 +241,7 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 - **Proposed commit title:** `persistence: one scan row per scan_id (no target upsert)`
 - **Proposed PR title:** `Discovery persistence: per-execution scan rows`
 - **Risks:** Double `scan.started` même `scan_id` → idempotence PK ; événements hors ordre documentés.
-- **Completion criteria:** Re-scan NATS même adresse laisse l’ancienne ligne intacte (status + `result`).
+- **Completion criteria:** Re-scan NATS même adresse laisse l’ancienne ligne intacte (status + `result`) ; **aucune** réponse API n’expose `RUNNING` / `running`.
 
 ---
 
@@ -216,11 +252,13 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 - **Objective:** Listes conformes **§4.2.1** ; query **`latest=true`** pour **W2** (sans route `/latest` dédiée).
 - **Scope:**
   - `ListDiscoveryV1WalletScans` : branche `normalizedAddr != "" && chainID != nil` → `ListOwnerWalletScansDiscoveryV1` + filtre `walletEntityMatchesChainID`, **pas** `FindByUserIDAndAddress` seul.
-  - Query **`latest=true`** : exige **`address`** ; retourne ≤1 **`ScanListItem`** en statut **`completed`** uniquement (**W2**).
-  - Garde **`POST …/scan`** : si le plus récent est **`requested`** / **`started`** → **409** `SCAN_IN_PROGRESS` (pas de blocage si dernier **`failed`**).
+  - Query **`latest=true`** : exige **`address`** ; retourne ≤1 **`ScanListItem`** en statut **`completed`** uniquement (**W2**). **Ne pas** utiliser pour **W7**.
+  - Liste par défaut : tri **`created_at`** desc, **`scan_id`** desc — newest row pour **W7** (`limit=1` + tri défaut, **pas** `latest=true`).
+  - Lifecycle API : `requested` \| `started` \| `completed` \| `failed` uniquement (**§5.4.1**).
+  - Garde **`POST /api/discovery/v1/scan`** : **`SCAN_IN_PROGRESS`** si newest `requested` / `started`. **W1** (policy/draft) → **IMM-9**.
   - Optionnel : **`latest=true&chain_id=N`** — latest parmi les scans matchant la chaîne.
-  - OpenAPI `discovery-v1.yaml` : paramètre **`latest`** (boolean) + code **`SCAN_IN_PROGRESS`**.
-  - Tests contract : `latest=true` → dernier **`completed`** ; dernier **`failed`** seul → `total: 0` ; **A `completed` + B `failed`** → `latest=true` = A, POST scan **OK**, (CPM testé en IMM-10).
+  - OpenAPI : paramètre **`latest`** + **`SCAN_IN_PROGRESS`**.
+  - Tests contract : `latest=true` ; **W1** / draft → **IMM-9** ; CPM **W7** → **IMM-10**.
 - **Out of scope:** Route **`/wallets/scans/latest`** (délibérément **query** `latest=true` only).
 - **Dependencies:** **IMM-3**
 - **Proposed commit title:** `api: wallet scan list filters and latest=true query`
@@ -294,23 +332,50 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 
 ## IMM-9 — Gardes POST scan (en cours + **W1**)
 
-- **Dépôts :** `cafe-discovery` ; appel CPM (interne ou API owner) pour **W1**.
-- **Ordre :** garde **en cours** (**IMM-4**, `SCAN_IN_PROGRESS` si `requested` / `started`) ; puis **W1** — CPM existante → **409** `CPM_EXISTS_FOR_WALLET_TARGET`. **Pas** de blocage si dernier scan = **`failed`** (retry autorisé).
-- **Dépend de :** IMM-3, **IMM-4**.
+- **Dépôts :** `cafe-discovery` ; appel CPM interne (**IMM-9b**) pour **W1**.
+- **Endpoint :** `POST /api/discovery/v1/scan` avec `{ "address": "0x…" }` (wallet only pour **W1**).
+- **Ordre des gardes :**
+  1. Newest row `requested` / `started` → **409** `SCAN_IN_PROGRESS` (**IMM-4**).
+  2. Lookup CPM par **`target_address`** normalisée (**IMM-9b**) — policy **ou** draft → **409** `CPM_EXISTS_FOR_WALLET_TARGET`.
+  3. Fail-closed si lookup CPM indisponible (pas de scan silencieux).
+- **Retry après `failed` :** accepté **seulement** si **W1** OK (aucune policy, aucun draft). Sinon : finaliser (`POST /api/cpm/v1/policies`) ou supprimer draft (`DELETE /api/cpm/v1/drafts?id=…`) / policy (`DELETE /api/cpm/v1/policies?id=…`).
+- **Dépend de :** IMM-3, **IMM-4**, **IMM-9b** (CPM, avant cette PR ou en parallèle coordonné).
 
 ---
 
 ## IMM-10 — CPM explore/persist (**W7** + **W2**)
 
-- **Dépôt principal :** `cafe-crypto-policy-mgt` — [`workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md).
-- **W7 (CPM)** : refuser explore/persist si le plus récent (`created_at`) n’est pas **`completed`** → **400** `LATEST_SCAN_NOT_COMPLETED` (y compris si dernier = **`failed`**).
-- **W2** : refuser si `scan_id` ≠ celui de **`GET …?address=&latest=true`**.
+- **Dépôt principal :** `cafe-crypto-policy-mgt` — [`workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) § IMM-10.
+- **Wallet-only** — pas d’assessment/remediation TLS.
+- **Step 1 — W7 :** `GET /api/discovery/v1/wallets/scans?address=…&limit=1` (newest row) ; si `status != completed` → **400** `LATEST_SCAN_NOT_COMPLETED`.
+- **Step 2 — W2 :** `GET /api/discovery/v1/wallets/scans?address=…&latest=true` ; si `scan_id` demandé ≠ latest **`completed`** → **400** `SCAN_ID_NOT_LATEST_FOR_TARGET`.
+- **Ne pas** utiliser `latest=true` pour **W7** ; **ne pas** utiliser `limit=1` seul pour **W2**.
+
+---
+
+## IMM-11 — Remove obsolete routes, OpenAPI, edge mappings and scripts
+
+- **Branch:** `discovery/remove-obsolete-routes`
+- **Repositories:** `cafe-discovery`, `cafe-deploy` (edge/nginx), scripts/tests frontend si applicable.
+- **Objective:** Retirer les surfaces obsolètes **après** disponibilité des routes cibles (**IMM-4**, **IMM-12**, CPM **§0.2**) — **avant** de considérer la chaîne IMM terminée.
+- **Scope:**
+  - Retirer ou confirmer le retrait de l’ancien **`GET /discovery/scans`** (liste par adresse).
+  - Retirer ou confirmer le retrait de l’ancien **`GET /discovery/tls/scans`** (liste par URL).
+  - Retirer les routes de détail ambiguës par adresse ou URL en path.
+  - Retirer **`GET /discovery/cbom/*`** si encore référencé.
+  - Décider explicitement du sort de **`GET /discovery/wallet-policy-contexts`** (supprimer si redondant avec `wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
+  - Nettoyer OpenAPI, README, edge/nginx, scripts smoke, tests frontend/backend.
+- **Dependencies:** IMM-4, IMM-12 ; CPM routes stables ; **IMM-9**/**IMM-10** pour erreurs documentées.
+- **Out of scope:** Nouvelles fonctionnalités API.
+- **Proposed commit title:** `chore: remove obsolete discovery routes and align edge/OpenAPI`
+- **Proposed PR title:** `Discovery IMM-11: remove obsolete routes, edge mappings and scripts`
+- **Completion criteria:** Anciennes routes non routées ; OpenAPI et edge alignés **§0** ; tests QA mis à jour.
 
 ---
 
 ## IMM-12 — CBOM par scan_id (W6)
 
-- **API :** `GET /discovery/v1/wallets/scans/{scan_id}/cbom` (`ToCBOM()` à la demande).
+- **API :** `GET /api/discovery/v1/wallets/scans/{scan_id}/cbom` (`ToCBOM()` à la demande).
 - **Dépend de :** IMM-3.
 
 ---
@@ -320,46 +385,63 @@ Travail d’**alignement contrat / persistance** (écart [`WORKPLAN_API.md`](htt
 ```text
 IMM-1 (doc)
    ↓
-IMM-2 (DB) ──→ IMM-8 (runbook)
+IMM-2 (DB) + IMM-3 (writers)  ← release ATOMIQUE (IMM-8 runbook)
    ↓
-IMM-3 (writers) ──→ IMM-5, IMM-6
+IMM-4 (list, latest=true, lifecycle)
    ↓
-IMM-4 (list) ──→ IMM-12 (CBOM)
+IMM-9b (CPM lookup) → IMM-9 (POST guards)
    ↓
-IMM-9 (block POST scan si CPM)     IMM-10 (CPM latest-only, repo CPM)
+IMM-10 (CPM W7+W2)     IMM-12 (CBOM)
    ↓
-IMM-7 (tests E2E W1–W8)
+IMM-11 (cleanup routes / edge / OpenAPI)
+   ↓
+IMM-7 (tests contract) ; IMM-5, IMM-6 en parallèle si besoin
+   ↓
+FE-IMM-1…5 (frontend, après backend stable)
 ```
 
-**Merge train minimal :** IMM-1 → IMM-2 → IMM-3 → IMM-4 → IMM-12 → IMM-9 → IMM-10 → IMM-7. **PR6** (DELETE + 409) : pas de PR IMM dédiée.
+**Merge train minimal :** IMM-1 → (**IMM-2 + IMM-3** atomique) → IMM-4 → IMM-9b → IMM-9 → IMM-10 → IMM-12 → **IMM-11** → IMM-7. **PR6** (DELETE + 409) : pas de PR IMM dédiée.
 
 ---
 
 ## Critères d’acceptation produit (fin de chaîne)
 
-**Historique & immutabilité (5–6)**
+**Historique & immutabilité (W5–W6)**
 
-- [ ] Sans CPM sur la cible : deux scans successifs → deux `scan_id` dans `GET …/wallets/scans?address=…`.
-- [ ] `GET …/wallets/scans/{scan_id}` : `result` stable après terminal ; `GET …/wallets/scans/{scan_id}/cbom` renvoie le CBOM de **ce** scan uniquement.
+- [ ] Sans CPM sur la cible : deux scans successifs → deux `scan_id` dans `GET /api/discovery/v1/wallets/scans?address=…`.
+- [ ] `GET /api/discovery/v1/wallets/scans/{scan_id}` : `result` stable après terminal ; `GET …/cbom` renvoie le CBOM de **ce** scan uniquement.
+- [ ] Aucune réponse API n’expose **`RUNNING`** ou **`running`** (lifecycle : **`started`**).
 
-**CPM & scan (W7, W8, W1, W2)**
+**CPM & scan (W7, W1, W2)**
 
-- [ ] Dernier scan `started` : `POST …/scan` → **409** `SCAN_IN_PROGRESS` ; CPM explore → **400**.
-- [ ] Dernier scan `failed` : `POST …/scan` → **OK** (nouvelle ligne) ; CPM explore → **400**.
-- [ ] **A `completed` + B `failed`** (B plus récent) : `latest=true` → A ; `POST …/scan` **OK** ; CPM → **400**.
-- [ ] Dernier scan `completed` : `latest=true` renvoie ce `scan_id` ; CPM explore/persist OK (**W2**).
-- [ ] Avec CPM persistée : `POST …/scan` → **409** (**W1**).
-- [ ] CPM sur `scan_id` historique → **400** (**W2**).
+- [ ] **`POST /api/discovery/v1/scan`** : newest `requested` \| `started` → **409** `SCAN_IN_PROGRESS`.
+- [ ] Newest `failed` + no policy/draft → scan **accepté** ; CPM explore/persist → **400** `LATEST_SCAN_NOT_COMPLETED`.
+- [ ] Newest `failed` + draft/policy → **409** `CPM_EXISTS_FOR_WALLET_TARGET` jusqu’à **`DELETE /api/cpm/v1/drafts?id=…`** / finalize policy.
+- [ ] **`completed` A + `failed` B** (B newer) : CPM **400** `LATEST_SCAN_NOT_COMPLETED` même pour `scan_id` A ; `POST …/scan` **OK** seulement si **W1** OK.
+- [ ] **W7** CPM : newest row via `limit=1` — **pas** `latest=true`.
+- [ ] **W2** CPM : `GET …/wallets/scans?address=&latest=true` — **pas** `limit=1` seul.
+- [ ] Historical `scan_id` → **400** `SCAN_ID_NOT_LATEST_FOR_TARGET`.
+- [ ] **`DELETE /api/cpm/v1/drafts?id=…`** contractualisé ; débloque rescan après suppression draft.
+- [ ] UX : export local → delete draft → scan → reload — [`IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md).
+
+**TLS**
+
+- [ ] TLS : historique Discovery + CBOM optionnel ; **pas** de cible CPM assessment/remediation produit actuel.
+- [ ] **`DELETE /api/discovery/v1/tls/scans/{scan_id}`** → **409** défensif si policy référence le `scan_id`.
 
 **Suppression (W3–W4)**
 
-- [ ] `DELETE …/policies?id=` : scan(s) toujours listables.
-- [ ] `DELETE …/wallets/scans/{scan_id}` avec policy encore liée → **409** `SCAN_REFERENCED_BY_POLICY`.
-- [ ] Après `DELETE` policy : `DELETE` scan → **204** ; scan retiré de la liste.
+- [ ] `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables.
+- [ ] `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → **409** `SCAN_REFERENCED_BY_POLICY`.
+- [ ] Après suppression policies : DELETE scan → **204**.
+
+**Cleanup (IMM-11)**
+
+- [ ] Anciennes routes (`/discovery/scans`, `/discovery/tls/scans`, `/discovery/cbom/*`, etc.) retirées code + edge + OpenAPI.
 
 **Doc**
 
-- [ ] `WORKPLAN_API.md` §2.2 W1–W8 et §4.2.1 à jour (source de vérité).
+- [ ] `WORKPLAN_API.md` §2.2 W1–W7, §4.2.1, §5.4.6 à jour (source de vérité).
 
 ---
 
@@ -538,7 +620,7 @@ Refactor `WalletWriter` and `TLSWriter` so each NATS scan lifecycle operates on 
 
 ### Acceptance criteria
 
-- [ ] `OnStarted`: inserts row with `id = scan_id`, status `RUNNING`; does **not** no-op when another terminal row exists for the same address/URL.
+- [ ] `OnStarted`: inserts row with `id = scan_id`, **`status = started`** (lifecycle API — **not** `RUNNING` / `running` in API responses).
 - [ ] `OnCompleted` / `OnFailed`: update `WHERE id = scan_id`; optional insert-if-missing for event replay without target-level upsert.
 - [ ] Re-scan same wallet address: **two** rows with distinct `scan_id`; first row’s `result` unchanged when second completes.
 - [ ] Same behavior for TLS scans (per `url`).
@@ -547,7 +629,7 @@ Refactor `WalletWriter` and `TLSWriter` so each NATS scan lifecycle operates on 
 
 ### Out of scope
 
-- `GET /discovery/v1/wallets/scans` filter fix (IMM-4).
+- `GET /api/discovery/v1/wallets/scans` filter fix (IMM-4).
 - Redis / legacy API paths (IMM-5).
 
 ### Implementation hints
@@ -609,11 +691,13 @@ Implement **WORKPLAN_API.md §4.2.1** list filters and **`?latest=true`** on **`
 - [ ] `?address=` only: all executions for address, paginated.
 - [ ] `?address=&chain_id=`: list query + `walletEntityMatchesChainID`; **not** single-row lookup only.
 - [ ] `?address=&latest=true`: **≤1** item, last **`completed`** only (**W2**); `total` 0 if no **`completed`** exists; **400** if `latest=true` without `address`.
-- [ ] `POST …/scan`: **409** `SCAN_IN_PROGRESS` only if newest is `requested` / `started`; **allowed** if newest is **`failed`**.
+- [ ] `POST /api/discovery/v1/scan`: **409** `SCAN_IN_PROGRESS` if newest is `requested` / `started` (W1/draft → IMM-9).
+- [ ] No API response exposes `RUNNING` / `running` (lifecycle: `started`).
+- [ ] Newest row for W7: default sort + `limit=1` — distinct from `latest=true` (W2).
 - [ ] `?chain_id=` without `address` → **400** (unchanged).
 - [ ] Default sort: `created_at` desc, `scan_id` desc.
 - [ ] OpenAPI: query param **`latest`** documented.
-- [ ] Contract tests: `latest=true` picks last **`completed`**; POST blocked in-flight only; **`completed` + newer `failed`** → POST OK.
+- [ ] Contract tests: `latest=true` picks last **`completed`**; POST blocked in-flight; W1/draft blocking in IMM-9 tests.
 
 ### Out of scope
 
@@ -735,12 +819,12 @@ Postgres holds multiple scans per address; Redis and legacy services still assum
 
 ### Summary
 
-After IMM-3, each completed scan is a **row**. Plan limits (`WalletScanLimit`, `EndpointScanLimit`) should count **executions** (rows), not implicit unique addresses/URLs. Confirm `CountByUserID` and pre-scan checks in `POST /discovery/v1/scan` match this.
+After IMM-3, each completed scan is a **row**. Plan limits (`WalletScanLimit`, `EndpointScanLimit`) should count **executions** (rows), not implicit unique addresses/URLs. Confirm `CountByUserID` and pre-scan checks in `POST /api/discovery/v1/scan` match this.
 
 ### Acceptance criteria
 
 - [ ] `CountByUserID` on wallet/TLS repos counts all owner rows (respecting soft-delete if applicable).
-- [ ] Second `POST /discovery/v1/scan` for same address increments usage when limit is finite.
+- [ ] Second `POST /api/discovery/v1/scan` for same address increments usage when limit is finite.
 - [ ] Limit reached → **403** with existing error shape.
 - [ ] Tests for plan service / handler limit check updated or added.
 
@@ -865,7 +949,8 @@ Document safe deployment order for scan history schema + persistence writer chan
 ### Acceptance criteria
 
 - [ ] Runbook in `cafe-deploy` (e.g. `docs/RUNBOOK_SCAN_HISTORY.md` or README section): prerequisites, steps, verification, rollback.
-- [ ] States: deploy persistence migration **before** or **with** writers that insert per `scan_id`; avoid IMM-2-only window with old upsert writers in production.
+- [ ] Documents **atomic release IMM-2 + IMM-3**: separate PRs OK, **single deploy window** — no staging/prod with IMM-2 schema + old upsert writers; no staging/prod with IMM-3 writers + old unique indexes.
+- [ ] Order: DB migration (IMM-2) → persistence image (IMM-3) → backend API (IMM-4+) in the same train.
 - [ ] Release note: re-scan creates new `scan_id`; old policies keep valid `scan_id` until DELETE.
 - [ ] Optional: link to `cafe-crypto-policy-mgt` smoke script `test-discovery-v1-wallet-scans-to-cpm.sh` for post-deploy check.
 
@@ -900,7 +985,7 @@ Document safe deployment order for scan history schema + persistence writer chan
 ### Title (copy as-is)
 
 ```
-[Discovery][IMM-9] Block wallet POST /scan when a persisted CPM exists for target address
+[Discovery][IMM-9] Block wallet POST /scan when CPM policy or draft exists for target address (W1)
 ```
 
 ### Labels (suggested)
@@ -918,24 +1003,26 @@ Document safe deployment order for scan history schema + persistence writer chan
 **Type:** Technical task (**WORKPLAN §2.2 W1** + garde en cours, **IMM-4**).
 
 **Tracking ID:** IMM-9  
-**Plan:** [IMMUTABILITE_PR.md — W8, W1](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md#règles-produit-wallet--cpm-référence-workplan-22-w1w8)
+**Plan:** [IMMUTABILITE_PR.md — W7 POST, W1](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md#règles-produit-wallet--cpm-référence-workplan-22-w1w7)
 
 ### Summary
 
-Before `POST /discovery/v1/scan` with `{ "address": "0x…" }`:
+Before `POST /api/discovery/v1/scan` with `{ "address": "0x…" }` (wallet only — **W1** does not apply to TLS URL scans):
 
 1. **Scan en cours** (**IMM-4**) — newest row `requested` / `started` → **409** `SCAN_IN_PROGRESS`.
-2. **W1** — persisted CPM for **target_address** → **409** `CPM_EXISTS_FOR_WALLET_TARGET`.
+2. **W1** — internal CPM lookup (**IMM-9b**) by **normalized `target_address`** (no `scan_id` yet; Discovery must not resolve address via policy → Discovery detail) → **409** `CPM_EXISTS_FOR_WALLET_TARGET` when policy **or** draft exists.
 
-Newest row **`failed`** → **allow** new scan (retry until **`completed`**).
+Newest **`failed`** → new scan **only** if **W1** OK (no policy, no draft). User may unblock via **`DELETE /api/cpm/v1/drafts?id=…`** or finalize policy.
 
 ### Acceptance criteria
 
 - [ ] In-flight guard **before** **W1** (reuse IMM-4 helper).
-- [ ] Newest **`failed`** → new scan **accepted** (if quota + **W1** OK).
-- [ ] **W1**: **409** `CPM_EXISTS_FOR_WALLET_TARGET` when policy exists.
+- [ ] **W1**: **409** when policy **or** draft exists (**IMM-9b** lookup by normalized address).
+- [ ] Fail-closed if CPM lookup unavailable (no silent bypass).
+- [ ] Newest **`failed`** + draft present → **409** (must delete/finalize draft first).
+- [ ] Newest **`failed`** + no draft/policy → scan **accepted**.
 - [ ] OpenAPI documents `SCAN_IN_PROGRESS` + `CPM_EXISTS_FOR_WALLET_TARGET`.
-- [ ] Integration tests: in-flight blocked, failed retry OK, CPM exists.
+- [ ] Integration tests: in-flight, draft blocks, policy blocks, failed retry when W1 OK.
 
 ### Dependencies
 
@@ -961,7 +1048,7 @@ CPM explore/persist guards (**IMM-10**).
 ### Title (copy as-is)
 
 ```
-[CPM][IMM-10] Policy explore/persist only when latest scan is completed (W7 + W2)
+[CPM][IMM-10] Policy explore/persist: W7 newest row then W2 latest completed (wallet-only)
 ```
 
 ### Labels (suggested)
@@ -983,18 +1070,27 @@ CPM explore/persist guards (**IMM-10**).
 
 ### Summary
 
-`POST …/policies/decisions/explore` and `POST …/policies` for wallet targets:
+`POST /api/cpm/v1/policies/decisions/explore` and `POST /api/cpm/v1/policies` for **wallet** targets (**Option A**, wallet-only — no TLS assessment/remediation):
 
-1. **W7 (CPM)** — reject if the **newest** scan row is not **`completed`** (**400** `LATEST_SCAN_NOT_COMPLETED`) — includes **`failed`** and in-flight (even when an older **`completed`** exists).
-2. **W2** — reject if `scan_id` ≠ latest **`completed`** (**400** `SCAN_ID_NOT_LATEST_FOR_TARGET`). **Canonical latest:** Discovery **`GET …/wallets/scans?address=&latest=true`** (**IMM-4**).
+**Step 1 — W7 (newest row, not `latest=true`):**
+
+- `GET /api/discovery/v1/wallets/scans?address=0x…&limit=1` (default sort `created_at` desc, `scan_id` desc).
+- If `newest.status != completed` → **400** `LATEST_SCAN_NOT_COMPLETED` (includes `failed`, `requested`, `started`).
+
+**Step 2 — W2 (`latest=true`, not `limit=1`):**
+
+- `GET /api/discovery/v1/wallets/scans?address=0x…&latest=true`.
+- If requested `scan_id` ≠ latest **`completed`** → **400** `SCAN_ID_NOT_LATEST_FOR_TARGET`.
 
 ### Acceptance criteria
 
 - [ ] **W7** before **W2** on every explore/persist.
+- [ ] **W7** uses `limit=1` + default sort — **never** `latest=true`.
+- [ ] **W2** uses **`latest=true`** — **never** `limit=1` alone.
 - [ ] **400** when newest is **`failed`** or in-flight; **`completed` A + `failed` B** → **400** even for `scan_id` A.
 - [ ] **400** `SCAN_ID_NOT_LATEST_FOR_TARGET` when `scan_id` is historical.
-- [ ] Latest resolved via **`?latest=true`** — not `limit=1` alone.
-- [ ] Contract tests: in-flight, failed, historical `scan_id`.
+- [ ] Wallet-only; no TLS CPM path in this PR.
+- [ ] Contract tests: in-flight, failed, `completed`+`failed` newer, historical `scan_id`.
 
 ### Dependencies
 
@@ -1014,7 +1110,7 @@ Discovery **IMM-4** (`latest=true`); IMM-3 multi-row history.
 ### Title (copy as-is)
 
 ```
-[Discovery][IMM-12] GET /discovery/v1/wallets/scans/{scan_id}/cbom on demand
+[Discovery][IMM-12] GET /api/discovery/v1/wallets/scans/{scan_id}/cbom on demand
 ```
 
 ### Labels (suggested)
@@ -1040,7 +1136,7 @@ Expose CycloneDX CBOM per wallet scan via v1 API. CBOM is **generated on read** 
 
 ### Acceptance criteria
 
-- [ ] `GET /discovery/v1/wallets/scans/{scan_id}/cbom` → **200** JSON CBOM when scan exists and terminal.
+- [ ] `GET /api/discovery/v1/wallets/scans/{scan_id}/cbom` → **200** JSON CBOM when scan exists and terminal.
 - [ ] **404** if scan missing or not owner.
 - [ ] **409** or **400** if scan not terminal (document choice).
 - [ ] OpenAPI path + schema; README link.
@@ -1061,11 +1157,76 @@ IMM-3 (row stable per `scan_id`).
 
 ---
 
+## GitHub issue — IMM-11
+
+### Title (copy as-is)
+
+```
+[Discovery][IMM-11] Remove obsolete routes, OpenAPI entries, edge mappings and scripts
+```
+
+### Labels (suggested)
+
+`discovery` · `contract-alignment` · `cleanup` · `deploy`
+
+### Repository
+
+`create2-labs/cafe-discovery` (+ `cafe-deploy` edge/nginx ; scripts/tests cross-repo)
+
+### Body (copy below the line)
+
+---
+
+**Type:** Technical task (cleanup — **WORKPLAN §5.3**, **§8.7**).
+
+**Tracking ID:** IMM-11  
+**Plan:** [IMMUTABILITE_PR.md — IMM-11](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md#imm-11--remove-obsolete-routes-openapi-edge-mappings-and-scripts)
+
+### Summary
+
+After target routes are available (**IMM-4**, **IMM-12**, CPM **§0.2**), remove legacy Discovery surfaces and align edge/OpenAPI/scripts. **Before** considering the IMM chain complete.
+
+### Scope
+
+- Remove or confirm removal of legacy **`GET /discovery/scans`** (list by address).
+- Remove or confirm removal of legacy **`GET /discovery/tls/scans`** (list by URL).
+- Remove ambiguous detail routes by address or URL in path.
+- Remove **`GET /discovery/cbom/*`** if still referenced.
+- Explicit decision on **`GET /discovery/wallet-policy-contexts`** (remove if redundant with `GET /api/discovery/v1/wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
+- Clean OpenAPI, README, edge/nginx, smoke scripts, frontend/backend tests.
+
+### Acceptance criteria
+
+- [ ] Legacy routes not served on edge or backend.
+- [ ] OpenAPI documents only **§0** canonical paths.
+- [ ] QA/tests updated — no references to removed paths.
+- [ ] Deploy/nginx config matches **WORKPLAN §5.5**.
+
+### Dependencies
+
+**IMM-4**, **IMM-12** ; CPM routes stable ; **IMM-9** / **IMM-10** error codes documented.
+
+### Out of scope
+
+New API features.
+
+**Suggested branch:** `discovery/remove-obsolete-routes`  
+**Suggested PR title:** `Discovery IMM-11: remove obsolete routes, edge mappings and scripts`
+
+### Tracking
+
+| Field | Value |
+|-------|--------|
+| Issue | — |
+| PR | — |
+
+---
+
 ## Références
 
 | Document | Rôle |
 |----------|------|
-| [`WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) §2.2, §4.2, §8.4 | Contrat cible |
+| [`WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) §2.2, §4.2, §5.4.6, §8.7 | Contrat cible |
 | [`WORKPLAN_API_PR.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API_PR.md) | PR4 list/detail, PR6 DELETE — prérequis livrés |
 | [`docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`](./docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) | Mapping CPM ↔ v1 |
 | [`openapi/discovery-v1.yaml`](./openapi/discovery-v1.yaml) | Spec immutabilité `result` |
