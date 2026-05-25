@@ -91,7 +91,7 @@
 |----|----------------------|-------------------|---------------|--------|-----------|------------------------|
 | **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
 | **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
-| **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | — | **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
+| **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) | **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
 | **IMM-4** | [§ IMM-4](#github-issue--imm-4) | `discovery/scan-history-api-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste + **`latest=true`** + garde POST **en cours** (`SCAN_IN_PROGRESS`). |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-legacy-readpaths` | `cafe-discovery` | — | **IMM-3** | Redis + chemins legacy alignés. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
@@ -228,7 +228,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-3 — Persistence writers (insert par scan_id)
 
-- **Status:** en cours — branche `discovery/scan-history-persistence-writers` (pas d’issue GitHub ; ce plan suffit)
+- **Status:** mergé — PR [#66](https://github.com/create2-labs/cafe-discovery/pull/66) (pas d’issue GitHub ; ce plan suffit)
 - **Branch:** `discovery/scan-history-persistence-writers`
 - **Repository:** `cafe-discovery`
 - **Objective:** Aligner `WalletWriter` / `TLSWriter` sur **une ligne par `scan_id`**.
