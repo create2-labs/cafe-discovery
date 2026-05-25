@@ -55,7 +55,7 @@ func (w *TLSWriter) OnCompleted(scanID uuid.UUID, entity *domain.TLSScanResultEn
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
-	res := w.db.Model(entity).Where("id = ?", scanID).Select("*").Updates(entity)
+	res := w.db.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -133,7 +133,7 @@ func (w *WalletWriter) OnCompleted(scanID uuid.UUID, entity *domain.ScanResultEn
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
-	res := w.db.Model(entity).Where("id = ?", scanID).Select("*").Updates(entity)
+	res := w.db.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
 	if res.Error != nil {
 		return res.Error
 	}
