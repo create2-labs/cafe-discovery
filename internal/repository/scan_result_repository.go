@@ -16,10 +16,10 @@ type ScanResultRepository interface {
 	Create(scanResult *domain.ScanResultEntity) error
 	FindByUserID(userID uuid.UUID, limit, offset int) ([]*domain.ScanResultEntity, error)
 	FindByID(id uuid.UUID) (*domain.ScanResultEntity, error)
-	FindByUserIDAndAddress(userID uuid.UUID, address string) (*domain.ScanResultEntity, error)
 	FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error)
 	DeleteOwnedWalletScan(userID, scanID uuid.UUID) (deleted bool, err error)
 	ListOwnerWalletScansDiscoveryV1(userID uuid.UUID, address string, limit, offset int) ([]*domain.ScanResultEntity, int64, error)
+	ListOwnerWalletScansByAddress(userID uuid.UUID, address string) ([]*domain.ScanResultEntity, error)
 	CountByUserID(userID uuid.UUID) (int64, error)
 }
 
@@ -49,12 +49,6 @@ func (r *scanResultRepository) FindByUserID(userID uuid.UUID, limit, offset int)
 func (r *scanResultRepository) FindByID(id uuid.UUID) (*domain.ScanResultEntity, error) {
 	var result domain.ScanResultEntity
 	return r.findByID(id, &result)
-}
-
-// FindByUserIDAndAddress finds a scan result by user ID and address
-func (r *scanResultRepository) FindByUserIDAndAddress(userID uuid.UUID, address string) (*domain.ScanResultEntity, error) {
-	var result domain.ScanResultEntity
-	return r.findByUserIDAndField(userID, "address", address, &result)
 }
 
 // FindOwnedWalletScanByID returns a wallet scan row owned by userID, or nil if none.
@@ -100,6 +94,17 @@ func (r *scanResultRepository) ListOwnerWalletScansDiscoveryV1(userID uuid.UUID,
 		return nil, 0, err
 	}
 	return out, total, nil
+}
+
+// ListOwnerWalletScansByAddress returns all owner wallet scan rows for an address,
+// ordered the same way as the paginated v1 list. Use when filters must be applied before pagination.
+func (r *scanResultRepository) ListOwnerWalletScansByAddress(userID uuid.UUID, address string) ([]*domain.ScanResultEntity, error) {
+	tx := r.db.Where("user_id = ? AND LOWER(address) = ?", userID, strings.ToLower(strings.TrimSpace(address)))
+	var out []*domain.ScanResultEntity
+	if err := tx.Order("created_at DESC, id DESC").Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // CountByUserID counts the total number of scan results for a user

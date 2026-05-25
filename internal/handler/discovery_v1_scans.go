@@ -68,21 +68,21 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 	var total int64
 
 	if normalizedAddr != "" && chainID != nil {
-		ent, lerr := h.scanResultRepo.FindByUserIDAndAddress(userID, normalizedAddr)
+		all, lerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, normalizedAddr)
 		if lerr != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
 				"error":   "internal_error",
 				"message": lerr.Error(),
 			}))
 		}
-		if ent == nil || !walletEntityMatchesChainID(ent, *chainID, h.cfgChain) {
-			return c.JSON(fiber.Map{"items": []fiber.Map{}, "total": 0, "limit": limit, "offset": offset})
+		filtered := make([]*domain.ScanResultEntity, 0, len(all))
+		for _, ent := range all {
+			if walletEntityMatchesChainID(ent, *chainID, h.cfgChain) {
+				filtered = append(filtered, ent)
+			}
 		}
-		entities = []*domain.ScanResultEntity{ent}
-		total = 1
-		if offset > 0 {
-			entities = nil
-		}
+		total = int64(len(filtered))
+		entities = paginateWalletScanEntities(filtered, limit, offset)
 	} else if normalizedAddr != "" {
 		var qerr error
 		entities, total, qerr = h.scanResultRepo.ListOwnerWalletScansDiscoveryV1(userID, normalizedAddr, limit, offset)
@@ -113,6 +113,17 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+func paginateWalletScanEntities(in []*domain.ScanResultEntity, limit, offset int) []*domain.ScanResultEntity {
+	if offset >= len(in) {
+		return nil
+	}
+	end := offset + limit
+	if end > len(in) {
+		end = len(in)
+	}
+	return in[offset:end]
 }
 
 // GetDiscoveryV1WalletScan handles GET /discovery/v1/wallets/scans/:scan_id.

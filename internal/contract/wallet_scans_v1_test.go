@@ -31,10 +31,6 @@ func (m *memoryWalletScanRepo) FindByID(uuid.UUID) (*domain.ScanResultEntity, er
 	return nil, nil
 }
 
-func (m *memoryWalletScanRepo) FindByUserIDAndAddress(uuid.UUID, string) (*domain.ScanResultEntity, error) {
-	return nil, nil
-}
-
 func (m *memoryWalletScanRepo) FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error) {
 	for _, e := range m.byOwner[userID] {
 		if e != nil && e.ID == scanID {
@@ -66,6 +62,17 @@ func (m *memoryWalletScanRepo) ListOwnerWalletScansDiscoveryV1(userID uuid.UUID,
 	return all[offset:end], total, nil
 }
 
+func (m *memoryWalletScanRepo) ListOwnerWalletScansByAddress(userID uuid.UUID, address string) ([]*domain.ScanResultEntity, error) {
+	all := m.byOwner[userID]
+	filtered := make([]*domain.ScanResultEntity, 0)
+	for _, e := range all {
+		if e != nil && e.Address == address {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered, nil
+}
+
 func (m *memoryWalletScanRepo) CountByUserID(uuid.UUID) (int64, error) { return 0, nil }
 
 func (m *memoryWalletScanRepo) DeleteOwnedWalletScan(uuid.UUID, uuid.UUID) (bool, error) {
@@ -87,6 +94,15 @@ func walletScanEntity(id, owner uuid.UUID, address string) *domain.ScanResultEnt
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+}
+
+func walletScanEntityWithNetworks(id, owner uuid.UUID, address string, networks string, status string, createdAt time.Time) *domain.ScanResultEntity {
+	ent := walletScanEntity(id, owner, address)
+	ent.Networks = networks
+	ent.Status = status
+	ent.CreatedAt = createdAt
+	ent.UpdatedAt = createdAt
+	return ent
 }
 
 func TestDiscoveryV1WalletScans_listWithoutPrincipalReturns401(t *testing.T) {
@@ -145,6 +161,111 @@ func TestDiscoveryV1WalletScans_listWithPrincipalReturns200Envelope(t *testing.T
 	items, ok := body["items"].([]any)
 	if !ok || len(items) != 1 {
 		t.Fatalf("items = %#v", body["items"])
+	}
+}
+
+func TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0c"), owner, address, `["ethereum"]`, scan.StateRUNNING, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0b"), owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 20, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0a"), owner, address, `["ethereum"]`, scan.StateFAILED, time.Date(2026, 5, 11, 10, 10, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&limit=50", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["total"] != float64(3) {
+		t.Fatalf("total = %v, want 3", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) != 3 {
+		t.Fatalf("items len = %d, want 3", len(items))
+	}
+	first := items[0].(map[string]any)
+	if first["status"] != "started" {
+		t.Fatalf("first status = %v, want started", first["status"])
+	}
+}
+
+func TestDiscoveryV1WalletScans_chainIDFilterUsesAllAddressRowsBeforePagination(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	ethOnly := uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0b")
+	ethAndPolygon := uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0a")
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0c"), owner, address, `["polygon"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(ethOnly, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 20, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(ethAndPolygon, owner, address, `["ethereum","polygon"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 10, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{
+			{Name: "ethereum", ChainID: 1},
+			{Name: "polygon", ChainID: 137},
+		},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&chain_id=1&limit=1&offset=1", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["total"] != float64(2) {
+		t.Fatalf("total = %v, want 2", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	got := items[0].(map[string]any)["scan_id"]
+	if got != ethAndPolygon.String() {
+		t.Fatalf("scan_id = %v, want second matching chain row %s; first matching row is %s", got, ethAndPolygon, ethOnly)
 	}
 }
 

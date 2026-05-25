@@ -11,13 +11,12 @@ import (
 )
 
 const (
-	walletRedisKeyPrefix   = "wallet:scan:token:"
-	walletUserKeyPrefix    = "wallet:user:"
-	walletScanTTL          = 30 * time.Minute
+	walletRedisKeyPrefix = "wallet:scan:token:"
+	walletUserKeyPrefix  = "wallet:user:"
+	walletScanTTL        = 30 * time.Minute
 )
 
 // RedisWalletScanRepository stores wallet scan results in Redis by token (temporary, TTL).
-// User-scoped methods (FindByUserIDAndAddress, ListAddressesByUserID) read keys written by persistence-service (wallet:user:<id>:<address>).
 type RedisWalletScanRepository interface {
 	Save(ctx context.Context, tokenHash string, address string, result *domain.ScanResult) error
 	FindByAddress(ctx context.Context, tokenHash string, address string) (*domain.ScanResult, error)
@@ -25,8 +24,6 @@ type RedisWalletScanRepository interface {
 	Count(ctx context.Context, tokenHash string) (int, error)
 	Delete(ctx context.Context, tokenHash string, address string) error
 	// User-scoped (persistence-service write-through keys)
-	SaveByUserIDAndAddress(ctx context.Context, userID string, address string, result *domain.ScanResult) error
-	FindByUserIDAndAddress(ctx context.Context, userID string, address string) (*domain.ScanResult, error)
 	ListAddressesByUserID(ctx context.Context, userID string) ([]string, error)
 	CountByUserID(ctx context.Context, userID string) (int64, error)
 	DeleteByUserIDAndAddress(ctx context.Context, userID string, address string) error
@@ -142,33 +139,6 @@ func (r *redisWalletScanRepository) Delete(ctx context.Context, tokenHash string
 
 func (r *redisWalletScanRepository) getUserKey(userID string, address string) string {
 	return walletUserKeyPrefix + userID + ":" + address
-}
-
-// SaveByUserIDAndAddress writes a wallet scan result for user+address (read-through / warm cache). Same key format as persistence.
-func (r *redisWalletScanRepository) SaveByUserIDAndAddress(ctx context.Context, userID string, address string, result *domain.ScanResult) error {
-	key := r.getUserKey(userID, address)
-	data, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("marshal scan result: %w", err)
-	}
-	if err := r.redis.Set(ctx, key, data, walletScanTTL).Err(); err != nil {
-		return fmt.Errorf("redis set: %w", err)
-	}
-	return nil
-}
-
-// FindByUserIDAndAddress finds a wallet scan result by user ID and address (persistence-service keys)
-func (r *redisWalletScanRepository) FindByUserIDAndAddress(ctx context.Context, userID string, address string) (*domain.ScanResult, error) {
-	key := r.getUserKey(userID, address)
-	data, err := r.redis.Get(ctx, key).Result()
-	if err != nil {
-		return nil, err
-	}
-	var result domain.ScanResult
-	if err := json.Unmarshal([]byte(data), &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal scan result: %w", err)
-	}
-	return &result, nil
 }
 
 // DeleteByUserIDAndAddress removes the persistence-style cache key for a user's wallet scan at address.

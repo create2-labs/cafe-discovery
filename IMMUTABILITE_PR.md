@@ -92,10 +92,10 @@
 | **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
 | **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
 | **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) & [#67](https://github.com/create2-labs/cafe-discovery/pull/67)| **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
-| **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste wallet v1 multi-lignes : `address` + `chain_id`, tri stable, lifecycle. |
+| **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
 | **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | — | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
 | **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | — | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
-| **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-legacy-readpaths` | `cafe-discovery` | — | **IMM-3** | Redis + chemins legacy alignés. |
+| **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | — | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
 | **IMM-7** | [§ IMM-7](#github-issue--imm-7) | `discovery/scan-history-tests-contract` | `cafe-discovery` | — | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | [§ IMM-8](#github-issue--imm-8) | `deploy/scan-history-migration-runbook` | `cafe-deploy` | — | **IMM-2** | Runbook déploiement. |
@@ -123,7 +123,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 0. Patch **`WORKPLAN_API.md`** seulement si nécessaire (draft **DELETE**, TLS wallet-only, chemins publics).
 1. **IMM-1** — doc migration, décision Redis, contraintes release.
 2. **IMM-2** + **IMM-3** — PRs séparées possibles ; **release atomique obligatoire** (voir [§ Release IMM-2 + IMM-3](#release-imm-2--imm-3-unité-atomique)).
-3. **IMM-4a** — list filters multi-lignes (`address`, `chain_id`), tri stable, lifecycle enum conforme.
+3. **IMM-4a** — list filters multi-lignes (`address`, `chain_id`), tri stable, lifecycle enum conforme ; suppression du chemin wallet mono-ligne par adresse.
 4. **IMM-4b** — `latest=true` (**W2**) + OpenAPI.
 5. **IMM-4c** — garde **W8** sur `POST …/scan` (`SCAN_IN_PROGRESS`, y compris `requested`).
 6. **IMM-9b** (CPM) — lookup `target_address` normalisée + policy + draft.
@@ -163,9 +163,9 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 |---------|-------------------------|
 | `cmd/persistence/main.go` | ~~Crée index uniques~~ → **IMM-2** : DDL index au démarrage (drop unique + index liste). |
 | `internal/persistence/storage/postgres.go` | ~~`OnConflict` sur `(user_id, address)` / `(user_id, url)`~~ → **IMM-3** : insert/update par `scan_id` (`id` PK). |
-| `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max). |
-| `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **pas** de nouveau scan synchrone legacy. |
-| `internal/repository/base_repository.go` | `findByUserIDAndField` : `ORDER BY created_at DESC` + `First` (dernier gagnant). |
+| `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
+| `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
+| `internal/repository/base_repository.go` | `findByUserIDAndField` : `ORDER BY created_at DESC` + `First` (dernier gagnant) ; supprimer si inutilisé après retrait wallet mono-ligne. |
 
 ---
 
@@ -255,21 +255,25 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-4a — API v1 wallet list filters (multi-lignes)
 
+- **Status:** mergé — PR [#69](https://github.com/create2-labs/cafe-discovery/pull/69) (pas d’issue GitHub ; ce plan suffit)
 - **Branch:** `discovery/scan-history-list-filters`
 - **Repository:** `cafe-discovery`
-- **Objective:** Corriger les listes wallet v1 pour l'historique multi-lignes (**WORKPLAN §4.2.1**) sans introduire encore `latest=true` ni garde POST.
+- **Objective:** Corriger les listes wallet v1 pour l'historique multi-lignes (**WORKPLAN §4.2.1**) et retirer les lectures wallet mono-ligne par adresse qui contredisent le modèle immutable, sans introduire encore `latest=true` ni garde POST.
 - **Scope:**
   - `ListDiscoveryV1WalletScans` : branche `normalizedAddr != "" && chainID != nil` → lister toutes les lignes owner/address puis filtrer avec `walletEntityMatchesChainID`, **pas** `FindByUserIDAndAddress` seul.
   - `GET …/wallets/scans?address=` : toutes les exécutions pour l'adresse, paginées.
   - Liste par défaut : tri **`created_at`** desc, **`scan_id`** desc — newest row pour **W7** (`limit=1`).
   - Lifecycle API : `requested` \| `started` \| `completed` \| `failed` uniquement (**§5.4.1**), aucune réponse API avec `RUNNING` / `running`.
+  - Supprimer le chemin wallet “scan existant par adresse” : `DiscoveryService.getExistingScan` / `ScanWallet` ne doivent plus retourner silencieusement une ligne existante au lieu de créer une nouvelle exécution.
+  - Supprimer `ScanResultRepository.FindByUserIDAndAddress` côté wallet Postgres, et le helper `findByUserIDAndField` si aucun autre repository suivi ne l'utilise.
+  - Retirer ou neutraliser les appels wallet cache/read-through qui reposent sur une clé unique `(user_id, address)` pour servir une lecture métier hors liste historique v1.
   - OpenAPI : vérifier / ajuster la description du tri par défaut et du filtre `chain_id` si nécessaire.
-  - Tests contract : `?address=` multi-lignes ; `?address=&chain_id=` multi-lignes ; `?chain_id=` sans `address` → **400**.
-- **Out of scope:** `latest=true` (**IMM-4b**) ; garde `POST …/scan` (**IMM-4c**) ; TLS list.
+  - Tests contract : `?address=` multi-lignes ; `?address=&chain_id=` multi-lignes ; `?chain_id=` sans `address` → **400** ; re-scan wallet ne réutilise pas une ancienne ligne par adresse.
+- **Out of scope:** `latest=true` (**IMM-4b**) ; garde `POST …/scan` (**IMM-4c**) ; TLS list ; migration Redis complète par `scan_id`.
 - **Dependencies:** **IMM-3**
 - **Proposed commit title:** `api: fix wallet scan history list filters`
 - **Proposed PR title:** `Discovery v1: fix wallet scan list filters for multi-row history`
-- **Completion criteria:** listes wallet conformes, tri stable, lifecycle public conforme.
+- **Completion criteria:** listes wallet conformes, tri stable, lifecycle public conforme, aucune lecture wallet mono-ligne par adresse ne court-circuite l'historique immutable.
 
 ---
 
@@ -313,18 +317,18 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ---
 
-## IMM-5 — Redis & chemins legacy lecture
+## IMM-5 — Redis cleanup post-retrait legacy wallet
 
-- **Branch:** `discovery/scan-history-redis-legacy-readpaths`
+- **Branch:** `discovery/scan-history-redis-cleanup`
 - **Repository:** `cafe-discovery`
-- **Objective:** Ne pas contredire l’historique Postgres sur les chemins encore actifs.
+- **Objective:** Nettoyer les restes Redis/cache après suppression des lectures wallet mono-ligne par adresse dans **IMM-4a**.
 - **Scope:**
-  - `DiscoveryService.getExistingScan` / `ScanWallet` : **ne pas** court-circuiter un nouveau scan API legacy si produit exige historique (ou documenter dépréciation explicite du chemin synchrone).
-  - `UserScanCacheService` : au warm / read-through, si plusieurs entités même adresse → Redis garde **le plus récent** (`created_at`) **ou** skip write-through v1 (décision IMM-1).
+  - Supprimer les méthodes wallet cache/read-through devenues inutilisées après **IMM-4a**.
+  - Vérifier que Redis n'est plus utilisé comme source métier pour une lecture wallet par `(user_id, address)` hors liste historique v1.
   - `DeleteDiscoveryV1WalletScan` : `redisWalletRepo.DeleteByUserIDAndAddress` — ne supprimer que si plus aucune ligne Postgres pour cette adresse (**IMM-3**).
-- **Out of scope:** Refonte complète Redis par `scan_id` (option future).
-- **Dependencies:** **IMM-3**
-- **Proposed commit title:** `fix: align redis and legacy scan paths with per-scan_id history`
+- **Out of scope:** Refonte complète Redis par `scan_id` (option future) ; TLS cache.
+- **Dependencies:** **IMM-4a**
+- **Proposed commit title:** `fix: clean up wallet redis read paths after scan history migration`
 - **Completion criteria:** Pas de suppression Redis qui masque un scan historique encore en Postgres.
 
 ---
@@ -732,7 +736,7 @@ Refactor `WalletWriter` and `TLSWriter` so each NATS scan lifecycle operates on 
 
 ### Summary
 
-Implement **WORKPLAN_API.md §4.2.1** list filters on **`GET …/wallets/scans`** for multi-row scan history.
+Implement **WORKPLAN_API.md §4.2.1** list filters on **`GET …/wallets/scans`** for multi-row scan history, and remove wallet read paths that still assume a single result per `(user_id, address)`.
 
 ### Acceptance criteria
 
@@ -741,8 +745,11 @@ Implement **WORKPLAN_API.md §4.2.1** list filters on **`GET …/wallets/scans`*
 - [ ] No API response exposes `RUNNING` / `running` (lifecycle: `started`).
 - [ ] `?chain_id=` without `address` → **400** (unchanged).
 - [ ] Default sort: `created_at` desc, `scan_id` desc.
+- [ ] `DiscoveryService.getExistingScan` / `ScanWallet` no longer short-circuit a new wallet execution by returning an existing address row.
+- [ ] `ScanResultRepository.FindByUserIDAndAddress` is removed for wallet scan results; any generic helper used only by that path is removed too.
+- [ ] Wallet cache/read-through calls that depend on a unique `(user_id, address)` result are removed or neutralized outside the v1 historical list path.
 - [ ] OpenAPI: list/filter descriptions aligned if needed.
-- [ ] Contract tests: address history, address+chain history, chain-only 400.
+- [ ] Contract tests: address history, address+chain history, chain-only 400, wallet re-scan does not reuse an old address row.
 
 ### Out of scope
 
@@ -753,6 +760,9 @@ Implement **WORKPLAN_API.md §4.2.1** list filters on **`GET …/wallets/scans`*
 ### Implementation hints
 
 - `internal/handler/discovery_v1_scans.go` — `ListDiscoveryV1WalletScans`
+- `internal/service/discovery.go` — remove wallet existing-scan short-circuit
+- `internal/repository/scan_result_repository.go` — replace single-row address lookup with historical list helper
+- `internal/service/user_scan_cache.go` — remove/neutralize wallet address read-through if still reachable
 - `internal/contract/wallet_scans_v1_test.go`
 
 **Suggested branch:** `discovery/scan-history-list-filters`  
@@ -911,12 +921,12 @@ Before accepting **`POST /api/discovery/v1/scan`** for a wallet target, reject i
 ### Title (copy as-is)
 
 ```
-[Discovery][IMM-5] Align Redis and legacy scan read paths with per-scan_id history
+[Discovery][IMM-5] Clean up Redis wallet read paths after scan history migration
 ```
 
 ### Labels (suggested)
 
-`discovery` · `scan-history` · `redis` · `legacy`
+`discovery` · `scan-history` · `redis`
 
 ### Repository
 
@@ -930,16 +940,16 @@ Before accepting **`POST /api/discovery/v1/scan`** for a wallet target, reject i
 
 **Tracking ID:** IMM-5  
 **Plan:** [IMMUTABILITE_PR.md — IMM-5](https://github.com/create2-labs/cafe-discovery/blob/main/IMMUTABILITE_PR.md#github-issue--imm-5)  
-**Depends on:** IMM-3
+**Depends on:** IMM-4a
 
 ### Summary
 
-Postgres holds multiple scans per address; Redis and legacy services still assume **one result per `(user_id, address)`**. Align behavior so v1 remains Postgres-backed and Redis does not hide or delete history incorrectly.
+After **IMM-4a**, wallet reads no longer rely on a single result per `(user_id, address)`. Clean up remaining Redis/cache behavior so it cannot hide or delete historical wallet rows incorrectly.
 
 ### Acceptance criteria
 
-- [ ] `DiscoveryService.getExistingScan` / synchronous `ScanWallet` documented or updated so re-scan policy matches product (no silent return of stale single row blocking new execution, unless path is explicitly deprecated).
-- [ ] `UserScanCacheService` warm/read-through: when multiple wallet rows share an address, Redis stores **latest by `created_at`** OR skips address-key cache for v1 (per IMM-1 decision); behavior documented in code comment.
+- [ ] Wallet cache/read-through methods made obsolete by **IMM-4a** are removed or unreachable.
+- [ ] Redis is not used as source of truth for wallet reads by `(user_id, address)`.
 - [ ] `DeleteDiscoveryV1WalletScan`: Redis `DeleteByUserIDAndAddress` only when **no** remaining Postgres rows for that address.
 - [ ] No regression for v1 `GET …/wallets/scans/{scan_id}` (Postgres path).
 
@@ -951,12 +961,11 @@ Postgres holds multiple scans per address; Redis and legacy services still assum
 
 | File | Role |
 |------|------|
-| `internal/service/discovery.go` | Legacy scan short-circuit |
-| `internal/service/user_scan_cache.go` | Warm / read-through |
+| `internal/service/user_scan_cache.go` | Remove obsolete wallet read-through |
 | `internal/handler/discovery_v1_scans.go` | DELETE + Redis |
 
-**Suggested branch:** `discovery/scan-history-redis-legacy-readpaths`  
-**Suggested PR title:** `Discovery: align Redis and legacy paths with scan history model`
+**Suggested branch:** `discovery/scan-history-redis-cleanup`  
+**Suggested PR title:** `Discovery: clean up Redis wallet read paths after scan history migration`
 
 ### Test plan
 
