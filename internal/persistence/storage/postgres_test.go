@@ -23,6 +23,18 @@ func setupWalletWriterTestDB(t *testing.T) *WalletWriter {
 	return NewWalletWriter(db)
 }
 
+func setupTLSWriterTestDB(t *testing.T) *TLSWriter {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&domain.TLSScanResultEntity{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return NewTLSWriter(db)
+}
+
 func TestWalletWriter_TwoScanIDsSameAddressPreservesTerminalA(t *testing.T) {
 	w := setupWalletWriterTestDB(t)
 	userID := uuid.New()
@@ -77,6 +89,9 @@ func TestWalletWriter_TwoScanIDsSameAddressPreservesTerminalA(t *testing.T) {
 	if storedA.RiskScore != 1.0 {
 		t.Fatalf("scan A risk_score: want 1.0, got %v", storedA.RiskScore)
 	}
+	if storedA.CreatedAt.IsZero() {
+		t.Fatal("scan A created_at was reset to zero after completion")
+	}
 
 	var storedB domain.ScanResultEntity
 	if err := w.db.Where("id = ?", scanB).First(&storedB).Error; err != nil {
@@ -84,6 +99,9 @@ func TestWalletWriter_TwoScanIDsSameAddressPreservesTerminalA(t *testing.T) {
 	}
 	if storedB.RiskScore != 9.0 {
 		t.Fatalf("scan B risk_score: want 9.0, got %v", storedB.RiskScore)
+	}
+	if storedB.CreatedAt.IsZero() {
+		t.Fatal("scan B created_at was reset to zero after completion")
 	}
 }
 
@@ -106,5 +124,33 @@ func TestWalletWriter_OnStartedIdempotentByScanID(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("want 1 row after duplicate start, got %d", count)
+	}
+}
+
+func TestTLSWriter_OnCompletedPreservesCreatedAt(t *testing.T) {
+	w := setupTLSWriterTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	url := "https://example.com"
+
+	if err := w.OnStarted(scanID, &userID, url); err != nil {
+		t.Fatalf("OnStarted: %v", err)
+	}
+
+	entity := &domain.TLSScanResultEntity{
+		UserID: &userID, URL: url, Host: "example.com", Port: 443,
+		ProtocolVersion: "TLS 1.3", NISTLevel: domain.NISTLevel1,
+		RiskScore: 1, PQCRisk: "medium",
+	}
+	if err := w.OnCompleted(scanID, entity); err != nil {
+		t.Fatalf("OnCompleted: %v", err)
+	}
+
+	var stored domain.TLSScanResultEntity
+	if err := w.db.Where("id = ?", scanID).First(&stored).Error; err != nil {
+		t.Fatalf("load TLS scan: %v", err)
+	}
+	if stored.CreatedAt.IsZero() {
+		t.Fatal("TLS created_at was reset to zero after completion")
 	}
 }
