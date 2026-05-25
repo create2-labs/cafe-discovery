@@ -9,6 +9,7 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/discoveryroutes"
+	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
@@ -172,21 +173,28 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		if h.pendingV1 != nil {
-			if err := h.pendingV1.Put(c.Context(), &repository.PendingV1ScanRecord{
+			reserved, err := h.pendingV1.PutWallet(c.Context(), &repository.PendingV1ScanRecord{
 				ScanID:    scanID,
 				UserID:    userID,
 				Family:    "wallet",
 				Address:   normalized,
 				CreatedAt: time.Now().UTC(),
-			}); err != nil {
+			})
+			if err != nil {
 				log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 wallet scan put failed before NATS")
 				return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
 					"error":   "service_unavailable",
 					"message": "The scan could not be accepted; please try again.",
 				}))
 			}
+			if !reserved {
+				return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanInProgressErrorBody()))
+			}
 		}
 		if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
+			if h.pendingV1 != nil {
+				_ = h.pendingV1.Delete(c.Context(), scanID)
+			}
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		return c.JSON(postScanV1AcceptedJSON(scanID, "wallet"))
@@ -293,7 +301,106 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 		}
 	}
 
+	if qe := h.checkWalletScanInFlight(c.Context(), userID, normalizedAddress); qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
+
 	return uuid.New(), userID, normalizedAddress, nil
+}
+
+func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID uuid.UUID, address string) *queueScanError {
+	if h.pendingV1 != nil {
+		rec, err := h.pendingV1.GetWalletByOwnerAddress(ctx, userID, address)
+		if err != nil {
+			return &queueScanError{
+				status: fiber.StatusServiceUnavailable,
+				body: fiber.Map{
+					"error":   "service_unavailable",
+					"message": "wallet scan queue state is temporarily unavailable",
+				},
+			}
+		}
+		if rec != nil {
+			block, stale, qe := h.pendingWalletReservationState(ctx, userID, address, rec)
+			if qe != nil {
+				return qe
+			}
+			if block {
+				return scanInProgressQueueError()
+			}
+			if stale {
+				_ = h.pendingV1.DeleteWalletReservation(ctx, userID, address, rec.ScanID)
+			}
+		}
+	}
+
+	if h.scanResultRepo == nil {
+		return nil
+	}
+	rows, err := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, address)
+	if err != nil {
+		return &queueScanError{
+			status: fiber.StatusInternalServerError,
+			body: fiber.Map{
+				"error":   "internal_error",
+				"message": err.Error(),
+			},
+		}
+	}
+	if len(rows) > 0 && walletScanEntityIsInFlight(rows[0]) {
+		return scanInProgressQueueError()
+	}
+	return nil
+}
+
+func (h *DiscoveryHandler) pendingWalletReservationState(ctx context.Context, userID uuid.UUID, address string, rec *repository.PendingV1ScanRecord) (block bool, stale bool, qe *queueScanError) {
+	if rec.ScanID == uuid.Nil {
+		return false, true, nil
+	}
+	if h.scanResultRepo != nil {
+		ent, err := h.scanResultRepo.FindOwnedWalletScanByID(userID, rec.ScanID)
+		if err != nil {
+			return false, false, &queueScanError{
+				status: fiber.StatusInternalServerError,
+				body: fiber.Map{
+					"error":   "internal_error",
+					"message": err.Error(),
+				},
+			}
+		}
+		if ent != nil {
+			return walletScanEntityIsInFlight(ent), !walletScanEntityIsInFlight(ent), nil
+		}
+	}
+	if rec.CreatedAt.IsZero() {
+		return false, true, nil
+	}
+	if rec.UserID == userID && rec.Family == "wallet" && strings.EqualFold(rec.Address, address) {
+		return true, false, nil
+	}
+	return false, true, nil
+}
+
+func walletScanEntityIsInFlight(e *domain.ScanResultEntity) bool {
+	if e == nil {
+		return false
+	}
+	st := walletScanLifecycleStatusV1(e.Status)
+	return st == "requested" || st == "started"
+}
+
+func scanInProgressQueueError() *queueScanError {
+	return &queueScanError{
+		status: fiber.StatusConflict,
+		body:   scanInProgressErrorBody(),
+	}
+}
+
+func scanInProgressErrorBody() fiber.Map {
+	return fiber.Map{
+		"error":   "SCAN_IN_PROGRESS",
+		"message": "A wallet scan is already in progress for this target.",
+	}
 }
 
 func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, normalized string) *queueScanError {
