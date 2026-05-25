@@ -93,7 +93,7 @@
 | **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
 | **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) & [#67](https://github.com/create2-labs/cafe-discovery/pull/67)| **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
 | **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
-| **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | — | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
+| **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
 | **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | — | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | — | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
@@ -255,7 +255,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-4a — API v1 wallet list filters (multi-lignes)
 
-- **Status:** mergé — PR [#69](https://github.com/create2-labs/cafe-discovery/pull/69) (pas d’issue GitHub ; ce plan suffit)
+- **Status:** mergé — PR [#69](https://github.com/create2-labs/cafe-discovery/pull/69)
 - **Branch:** `discovery/scan-history-list-filters`
 - **Repository:** `cafe-discovery`
 - **Objective:** Corriger les listes wallet v1 pour l'historique multi-lignes (**WORKPLAN §4.2.1**) et retirer les lectures wallet mono-ligne par adresse qui contredisent le modèle immutable, sans introduire encore `latest=true` ni garde POST.
@@ -279,6 +279,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-4b — API v1 `latest=true` (W2)
 
+- **Status:** mergé — PR [#70](https://github.com/create2-labs/cafe-discovery/pull/70) 
 - **Branch:** `discovery/scan-history-latest-completed`
 - **Repository:** `cafe-discovery`
 - **Objective:** Ajouter **`GET …/wallets/scans?address=&latest=true`** pour **W2** (dernier `completed` uniquement), sans route `/latest`.
