@@ -84,12 +84,15 @@ func (r *redisPendingV1ScanRepository) PutWallet(ctx context.Context, rec *Pendi
 	}
 	rec.Family = "wallet"
 	key := pendingV1WalletAddressRedisKey(rec.UserID, rec.Address)
-	reserved, err := r.redis.SetNX(ctx, key, rec.ScanID.String(), pendingV1ScanTTL).Result()
+	_, err := r.redis.SetArgs(ctx, key, rec.ScanID.String(), goredis.SetArgs{
+		Mode: "NX",
+		TTL:  pendingV1ScanTTL,
+	}).Result()
 	if err != nil {
+		if errors.Is(err, goredis.Nil) {
+			return false, nil
+		}
 		return false, fmt.Errorf("redis reserve pending v1 wallet scan: %w", err)
-	}
-	if !reserved {
-		return false, nil
 	}
 	if err := r.Put(ctx, rec); err != nil {
 		_ = r.redis.Del(ctx, key).Err()
