@@ -214,6 +214,176 @@ func TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions(t *testing.T) 
 	}
 }
 
+func TestDiscoveryV1WalletScans_latestReturnsNewestCompletedOnly(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	completedID := uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0b")
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0c"), owner, address, `["ethereum"]`, scan.StateFAILED, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(completedID, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 20, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0a"), owner, address, `["ethereum"]`, scan.StateRUNNING, time.Date(2026, 5, 11, 10, 10, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&latest=true", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["total"] != float64(1) {
+		t.Fatalf("total = %v, want 1", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	item := items[0].(map[string]any)
+	if item["scan_id"] != completedID.String() {
+		t.Fatalf("scan_id = %v, want latest completed %s", item["scan_id"], completedID)
+	}
+	if item["status"] != "completed" {
+		t.Fatalf("status = %v, want completed", item["status"])
+	}
+}
+
+func TestDiscoveryV1WalletScans_latestReturnsEmptyWhenNoCompletedScanExists(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0c"), owner, address, `["ethereum"]`, scan.StateFAILED, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0b"), owner, address, `["ethereum"]`, scan.StateRUNNING, time.Date(2026, 5, 11, 10, 20, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&latest=true", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["total"] != float64(0) {
+		t.Fatalf("total = %v, want 0", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) != 0 {
+		t.Fatalf("items len = %d, want 0", len(items))
+	}
+}
+
+func TestDiscoveryV1WalletScans_latestRequiresAddress(t *testing.T) {
+	t.Parallel()
+	h := handler.NewDiscoveryHandlerForContractTest(&memoryWalletScanRepo{}, nil)
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?latest=true", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryV1WalletScans_latestChainIDReturnsNewestCompletedMatchingChain(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	ethereumID := uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0b")
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0c"), owner, address, `["polygon"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(ethereumID, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 20, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{
+			{Name: "ethereum", ChainID: 1},
+			{Name: "polygon", ChainID: 137},
+		},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&latest=true&chain_id=1", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	items := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	got := items[0].(map[string]any)["scan_id"]
+	if got != ethereumID.String() {
+		t.Fatalf("scan_id = %v, want newest completed chain match %s", got, ethereumID)
+	}
+}
+
 func TestDiscoveryV1WalletScans_chainIDFilterUsesAllAddressRowsBeforePagination(t *testing.T) {
 	t.Parallel()
 	owner := uuid.MustParse("11111111-1111-1111-1111-111111111111")

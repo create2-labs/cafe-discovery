@@ -163,10 +163,13 @@ paths:
         descending (deterministic tie-breaker). **`status`** is **lifecycle only**, not crypto posture.
 
         **`chain_id` without `address` → 400.** Do not use address in path; use query `address`.
+        **`latest=true` requires `address` → 400.** It returns at most one item: the newest
+        `completed` scan for that address, optionally refined by `chain_id`.
       operationId: listWalletScans
       parameters:
         - $ref: "#/components/parameters/QueryAddress"
         - $ref: "#/components/parameters/QueryChainId"
+        - $ref: "#/components/parameters/QueryLatest"
         - $ref: "#/components/parameters/QueryLimit"
         - $ref: "#/components/parameters/QueryOffset"
       responses:
@@ -437,6 +440,17 @@ components:
         type: integer
         format: int64
       description: Chain refinement; **only** with `address`.
+    QueryLatest:
+      name: latest
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: false
+      description: >
+        When `true`, requires `address` and returns at most the newest wallet scan whose
+        lifecycle status is `completed`. With `chain_id`, selection is limited to completed
+        scans matching that chain. Do not use this query for W7 newest-row readiness checks.
     QueryLimit:
       name: limit
       in: query

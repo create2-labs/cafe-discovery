@@ -24,6 +24,19 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 
 	chainQ := strings.TrimSpace(c.Query("chain_id"))
 	addrQ := strings.TrimSpace(c.Query("address"))
+	latest, latestErr := parseWalletScansLatestQuery(c.Query("latest"))
+	if latestErr != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
+			"error":   "invalid_request",
+			"message": latestErr.Error(),
+		}))
+	}
+	if latest && addrQ == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
+			"error":   "invalid_request",
+			"message": "latest requires address",
+		}))
+	}
 	if chainQ != "" && addrQ == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
 			"error":   "invalid_request",
@@ -67,7 +80,26 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 	var entities []*domain.ScanResultEntity
 	var total int64
 
-	if normalizedAddr != "" && chainID != nil {
+	if latest {
+		all, lerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, normalizedAddr)
+		if lerr != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+				"error":   "internal_error",
+				"message": lerr.Error(),
+			}))
+		}
+		for _, ent := range all {
+			if !walletEntityIsCompleted(ent) {
+				continue
+			}
+			if chainID != nil && !walletEntityMatchesChainID(ent, *chainID, h.cfgChain) {
+				continue
+			}
+			entities = []*domain.ScanResultEntity{ent}
+			total = 1
+			break
+		}
+	} else if normalizedAddr != "" && chainID != nil {
 		all, lerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, normalizedAddr)
 		if lerr != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
@@ -113,6 +145,22 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+func parseWalletScansLatestQuery(raw string) (bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fiber.NewError(fiber.StatusBadRequest, "latest must be a boolean")
+	}
+	return v, nil
+}
+
+func walletEntityIsCompleted(e *domain.ScanResultEntity) bool {
+	return e != nil && strings.ToUpper(strings.TrimSpace(e.Status)) == scan.StateSUCCESS
 }
 
 func paginateWalletScanEntities(in []*domain.ScanResultEntity, limit, offset int) []*domain.ScanResultEntity {
