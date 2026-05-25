@@ -36,16 +36,16 @@ func (s *stubScanResultRepository) FindByID(id uuid.UUID) (*domain.ScanResultEnt
 	return nil, nil
 }
 
-func (s *stubScanResultRepository) FindByUserIDAndAddress(uuid.UUID, string) (*domain.ScanResultEntity, error) {
-	return nil, errors.New("not implemented")
-}
-
 func (s *stubScanResultRepository) FindOwnedWalletScanByID(uuid.UUID, uuid.UUID) (*domain.ScanResultEntity, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (s *stubScanResultRepository) ListOwnerWalletScansDiscoveryV1(uuid.UUID, string, int, int) ([]*domain.ScanResultEntity, int64, error) {
 	return nil, 0, errors.New("not implemented")
+}
+
+func (s *stubScanResultRepository) ListOwnerWalletScansByAddress(uuid.UUID, string) ([]*domain.ScanResultEntity, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (s *stubScanResultRepository) CountByUserID(uuid.UUID) (int64, error) {

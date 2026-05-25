@@ -12,47 +12,29 @@ import (
 
 const maxItemsForWarmOrReadThrough = 10000
 
-// UserScanCacheService provides read-through from Postgres to Redis and warm cache on sign-in.
+// UserScanCacheService provides TLS read-through from Postgres to Redis and warm cache on sign-in.
 type UserScanCacheService struct {
-	scanResultRepo   repository.ScanResultRepository
 	tlsScanResultRepo repository.TLSScanResultRepository
-	redisWalletRepo  repository.RedisWalletScanRepository
-	redisTLSRepo     repository.RedisTLSScanRepository
+	redisTLSRepo      repository.RedisTLSScanRepository
 }
 
 // NewUserScanCacheService creates a UserScanCacheService.
 func NewUserScanCacheService(
-	scanResultRepo repository.ScanResultRepository,
 	tlsScanResultRepo repository.TLSScanResultRepository,
-	redisWalletRepo repository.RedisWalletScanRepository,
 	redisTLSRepo repository.RedisTLSScanRepository,
 ) *UserScanCacheService {
 	return &UserScanCacheService{
-		scanResultRepo:    scanResultRepo,
 		tlsScanResultRepo: tlsScanResultRepo,
-		redisWalletRepo:   redisWalletRepo,
 		redisTLSRepo:      redisTLSRepo,
 	}
 }
 
-// WarmForUser loads all wallet and TLS scan results for the user from Postgres into Redis (e.g. after sign-in).
+// WarmForUser loads TLS scan results for the user from Postgres into Redis (e.g. after sign-in).
+// Wallet scans are intentionally not warmed by address: wallet history is keyed by scan_id in Postgres.
 func (s *UserScanCacheService) WarmForUser(ctx context.Context, userID uuid.UUID) error {
 	uid := userID.String()
 
-	// Warm wallet scans
-	entities, err := s.scanResultRepo.FindByUserID(userID, maxItemsForWarmOrReadThrough, 0)
-	if err != nil {
-		log.Printf("user_scan_cache: warm wallets FindByUserID: %v", err)
-		return err
-	}
-	for _, e := range entities {
-		dto := e.ToScanResult()
-		if err := s.redisWalletRepo.SaveByUserIDAndAddress(ctx, uid, e.Address, dto); err != nil {
-			log.Printf("user_scan_cache: warm wallet %s: %v", e.Address, err)
-		}
-	}
-
-	// Warm TLS scans (user's own only; defaults are warmed separately at startup or on first list read-through)
+	// Warm TLS scans (user's own only; defaults are warmed separately at startup or on first list read-through).
 	tlsEntities, err := s.tlsScanResultRepo.FindByUserID(userID, maxItemsForWarmOrReadThrough, 0)
 	if err != nil {
 		log.Printf("user_scan_cache: warm TLS FindByUserID: %v", err)
@@ -66,32 +48,6 @@ func (s *UserScanCacheService) WarmForUser(ctx context.Context, userID uuid.UUID
 	}
 
 	return nil
-}
-
-// ListWalletAddresses returns wallet addresses for the user with read-through: if Redis is empty, load from Postgres and fill Redis.
-func (s *UserScanCacheService) ListWalletAddresses(ctx context.Context, userID uuid.UUID, limit, offset int) ([]string, int64, error) {
-	uid := userID.String()
-	addresses, err := s.redisWalletRepo.ListAddressesByUserID(ctx, uid)
-	if err != nil {
-		addresses = nil
-	}
-	if len(addresses) == 0 {
-		// Read-through from Postgres
-		entities, loadErr := s.scanResultRepo.FindByUserID(userID, maxItemsForWarmOrReadThrough, 0)
-		if loadErr != nil {
-			return nil, 0, loadErr
-		}
-		total := int64(len(entities))
-		addresses = make([]string, 0, len(entities))
-		for _, e := range entities {
-			dto := e.ToScanResult()
-			_ = s.redisWalletRepo.SaveByUserIDAndAddress(ctx, uid, e.Address, dto)
-			addresses = append(addresses, e.Address)
-		}
-		return paginateStrings(addresses, limit, offset), total, nil
-	}
-	total := int64(len(addresses))
-	return paginateStrings(addresses, limit, offset), total, nil
 }
 
 // ListTLSURLs returns TLS URLs for the user plus default endpoints, with read-through for both user and defaults.
@@ -147,22 +103,6 @@ func (s *UserScanCacheService) ListTLSURLs(ctx context.Context, userID uuid.UUID
 	}
 	total := int64(len(merged))
 	return paginateStrings(merged, limit, offset), total, nil
-}
-
-// GetWalletScan returns a wallet scan by address with read-through.
-func (s *UserScanCacheService) GetWalletScan(ctx context.Context, userID uuid.UUID, address string) (*domain.ScanResult, error) {
-	uid := userID.String()
-	res, err := s.redisWalletRepo.FindByUserIDAndAddress(ctx, uid, address)
-	if err == nil && res != nil {
-		return res, nil
-	}
-	entity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, address)
-	if err != nil || entity == nil {
-		return nil, err
-	}
-	dto := entity.ToScanResult()
-	_ = s.redisWalletRepo.SaveByUserIDAndAddress(ctx, uid, address, dto)
-	return dto, nil
 }
 
 // GetTLSScan returns a TLS scan by URL (user then default) with read-through.

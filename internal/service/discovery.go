@@ -49,10 +49,6 @@ func (s *DiscoveryService) ScanWallet(ctx context.Context, userID uuid.UUID, add
 	}
 
 	if !skipPersist {
-		existingScan, err := s.getExistingScan(userID, normalizedAddress)
-		if err != nil || existingScan != nil {
-			return existingScan, err
-		}
 		if err := s.checkPlanLimits(userID); err != nil {
 			return nil, err
 		}
@@ -80,17 +76,6 @@ func (s *DiscoveryService) RecoverPublicKeyFromTransactionData(ctx context.Conte
 	return s.engine.RecoverPublicKeyFromTransactionData(ctx, client, txData, txHash)
 }
 
-func (s *DiscoveryService) getExistingScan(userID uuid.UUID, address string) (*domain.ScanResult, error) {
-	if s.scanResultRepo == nil {
-		return nil, nil
-	}
-	existingEntity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, address)
-	if err == nil && existingEntity != nil {
-		return existingEntity.ToScanResult(), nil
-	}
-	return nil, err
-}
-
 func (s *DiscoveryService) checkPlanLimits(userID uuid.UUID) error {
 	if s.planService == nil {
 		return nil
@@ -114,21 +99,6 @@ func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanR
 	if err := s.scanResultRepo.Create(scanResultEntity); err != nil {
 		log.Printf("Failed to save wallet scan result to database (address=%s): %v", result.Address, err)
 	}
-}
-
-// GetScanByAddress retrieves a scan result by address for a specific user.
-func (s *DiscoveryService) GetScanByAddress(ctx context.Context, userID uuid.UUID, address string) (*domain.ScanResult, error) {
-	normalizedAddress, err := s.ValidateAndNormalizeAddress(address)
-	if err != nil {
-		return nil, err
-	}
-
-	entity, err := s.scanResultRepo.FindByUserIDAndAddress(userID, normalizedAddress)
-	if err != nil {
-		return nil, fmt.Errorf("scan result not found: %w", err)
-	}
-
-	return entity.ToScanResult(), nil
 }
 
 // ListScanResults lists scan results for a user with pagination.

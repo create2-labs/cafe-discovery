@@ -129,7 +129,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	redisWalletRepo := repository.NewRedisWalletScanRepository(redisConn)
 
 	// User scan cache: read-through and warm cache on sign-in
-	userScanCache := service.NewUserScanCacheService(scanResultRepo, tlsScanResultRepo, redisWalletRepo, redisTLSRepo)
+	userScanCache := service.NewUserScanCacheService(tlsScanResultRepo, redisTLSRepo)
 
 	pendingV1Repo, err := repository.NewRedisPendingV1ScanRepository(redisConn)
 	if err != nil {
