@@ -12,7 +12,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1** mergé ([#64](https://github.com/create2-labs/cafe-discovery/pull/64), [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2** en cours sur `discovery/scan-history-db-migration` ; **IMM-3+** non mergés.
+**Statut du document :** plan de découpe — **IMM-1** mergé ([#64](https://github.com/create2-labs/cafe-discovery/pull/64), [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2** mergé ([#65](https://github.com/create2-labs/cafe-discovery/pull/65)) ; **IMM-3** en cours sur `discovery/scan-history-persistence-writers` ; **IMM-4+** non mergés.
 
 ---
 
@@ -90,8 +90,8 @@
 | PR | GitHub issue (draft) | Branche (proposée) | Dépôt (issue) | PR Git | Dépend de | Objectif en une ligne |
 |----|----------------------|-------------------|---------------|--------|-----------|------------------------|
 | **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
-| **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | — | **IMM-1** (#64) | DB : retirer unicité par cible. |
-| **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | — | **IMM-2** | Writers : une ligne par `scan_id`. |
+| **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
+| **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) | **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
 | **IMM-4** | [§ IMM-4](#github-issue--imm-4) | `discovery/scan-history-api-list-filters` | `cafe-discovery` | — | **IMM-3** | Liste + **`latest=true`** + garde POST **en cours** (`SCAN_IN_PROGRESS`). |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-legacy-readpaths` | `cafe-discovery` | — | **IMM-3** | Redis + chemins legacy alignés. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
@@ -158,7 +158,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 | Fichier | Comportement aujourd’hui |
 |---------|-------------------------|
 | `cmd/persistence/main.go` | ~~Crée index uniques~~ → **IMM-2** : DDL index au démarrage (drop unique + index liste). |
-| `internal/persistence/storage/postgres.go` | `OnConflict` sur `(user_id, address)` / `(user_id, url)` ; commentaire *same address overwrites*. |
+| `internal/persistence/storage/postgres.go` | ~~`OnConflict` sur `(user_id, address)` / `(user_id, url)`~~ → **IMM-3** : insert/update par `scan_id` (`id` PK). |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max). |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **pas** de nouveau scan synchrone legacy. |
 | `internal/repository/base_repository.go` | `findByUserIDAndField` : `ORDER BY created_at DESC` + `First` (dernier gagnant). |
@@ -187,7 +187,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-2 — Migration DB (retirer unicité par cible)
 
-- **Status:** en cours — branche `discovery/scan-history-db-migration` (pas d’issue GitHub ; ce plan suffit)
+- **Status:** mergé — PR [#65](https://github.com/create2-labs/cafe-discovery/pull/65) (pas d’issue GitHub ; ce plan suffit)
 - **Branch:** `discovery/scan-history-db-migration`
 - **Repository:** `cafe-discovery`
 - **Objective:** Autoriser **plusieurs lignes** par `(user_id, address)` et `(user_id, url)`.
@@ -228,6 +228,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-3 — Persistence writers (insert par scan_id)
 
+- **Status:** mergé — PR [#66](https://github.com/create2-labs/cafe-discovery/pull/66) (pas d’issue GitHub ; ce plan suffit)
 - **Branch:** `discovery/scan-history-persistence-writers`
 - **Repository:** `cafe-discovery`
 - **Objective:** Aligner `WalletWriter` / `TLSWriter` sur **une ligne par `scan_id`**.

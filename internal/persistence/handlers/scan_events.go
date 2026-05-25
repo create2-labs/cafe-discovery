@@ -93,7 +93,7 @@ func (h *ScanEventHandler) handleTLSCompleted(ctx context.Context, msg *nats.Sca
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
 			Str("subject", subjectScanCompleted).
-			Msg("persistence: missing scan on completed (no row yet), will upsert")
+			Msg("persistence: missing scan on completed (no row yet), will insert")
 	}
 	if !scan.ValidTransition(current, scan.StateSUCCESS) {
 		log.Warn().
@@ -142,7 +142,7 @@ func (h *ScanEventHandler) handleWalletCompleted(ctx context.Context, msg *nats.
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
 			Str("subject", subjectScanCompleted).
-			Msg("persistence: missing scan on completed (no row yet), will upsert")
+			Msg("persistence: missing scan on completed (no row yet), will insert")
 	}
 	if !scan.ValidTransition(current, scan.StateSUCCESS) {
 		log.Warn().
@@ -252,7 +252,7 @@ func (h *ScanEventHandler) handleTLSFailed(ctx context.Context, msg *nats.ScanFa
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
 			Str("subject", subjectScanFailed).
-			Msg("persistence: missing scan on failed (no row yet), will upsert")
+			Msg("persistence: missing scan on failed (no row yet), will insert")
 	} else if !scan.ValidTransition(current, scan.StateFAILED) {
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
@@ -288,7 +288,7 @@ func (h *ScanEventHandler) handleWalletFailed(ctx context.Context, msg *nats.Sca
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
 			Str("subject", subjectScanFailed).
-			Msg("persistence: missing scan on failed (no row yet), will upsert")
+			Msg("persistence: missing scan on failed (no row yet), will insert")
 	} else if !scan.ValidTransition(current, scan.StateFAILED) {
 		log.Warn().
 			Str("scan_id", msg.ScanID.String()).
