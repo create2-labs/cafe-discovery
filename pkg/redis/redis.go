@@ -15,7 +15,9 @@ import (
 type Connection interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	SetArgs(ctx context.Context, key string, value interface{}, args redis.SetArgs) *redis.StatusCmd
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd
 	Keys(ctx context.Context, pattern string) *redis.StringSliceCmd
 	Close() error
 	Ping(ctx context.Context) *redis.StatusCmd
@@ -62,8 +64,16 @@ func (rc *redisConnection) Set(ctx context.Context, key string, value interface{
 	return rc.client.Set(ctx, key, value, expiration)
 }
 
+func (rc *redisConnection) SetArgs(ctx context.Context, key string, value interface{}, args redis.SetArgs) *redis.StatusCmd {
+	return rc.client.SetArgs(ctx, key, value, args)
+}
+
 func (rc *redisConnection) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	return rc.client.Del(ctx, keys...)
+}
+
+func (rc *redisConnection) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	return rc.client.Eval(ctx, script, keys, args...)
 }
 
 func (rc *redisConnection) Keys(ctx context.Context, pattern string) *redis.StringSliceCmd {

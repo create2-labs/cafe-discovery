@@ -399,6 +399,17 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Wallet scan already in progress for this owner/address.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                scanInProgress:
+                  value:
+                    error: SCAN_IN_PROGRESS
+                    message: A wallet scan is already in progress for this target.
         "503":
           description: Scanner or dependency unavailable (if applicable).
 
