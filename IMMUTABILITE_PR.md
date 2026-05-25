@@ -94,7 +94,7 @@
 | **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) & [#67](https://github.com/create2-labs/cafe-discovery/pull/67)| **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
 | **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
 | **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
-| **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | — | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
+| **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | [#71](https://github.com/create2-labs/cafe-discovery/pull/71) | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
 | **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | — | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
 | **IMM-7** | [§ IMM-7](#github-issue--imm-7) | `discovery/scan-history-tests-contract` | `cafe-discovery` | — | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
@@ -300,6 +300,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-4c — POST scan in-flight guard (W8)
 
+- **Status:** mergé — PR [#71](https://github.com/create2-labs/cafe-discovery/pull/71) 
 - **Branch:** `discovery/block-in-flight-wallet-scan`
 - **Repository:** `cafe-discovery`
 - **Objective:** Refuser un nouveau **`POST /api/discovery/v1/scan`** wallet si un scan wallet est déjà en cours pour la cible (**W8**), y compris l'état initial `requested`.
