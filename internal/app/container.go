@@ -147,12 +147,12 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
 	}
 
-	// Initialize handlers (wallet v1 from Postgres; TLS list uses Redis read-through; plan usage from Redis counts)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, pendingV1Repo, policyRef)
+	// Initialize handlers (wallet v1 and plan quotas from Postgres; TLS list uses Redis read-through)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, pendingV1Repo, policyRef)
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
-	planHandler := handler.NewPlanHandler(planService, redisWalletRepo, redisTLSRepo)
+	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
 
 	// AUTH-05: internal scan-authorization service consumed by CPM (AUTH-02).
 	// Discovery remains the authoritative source for scan visibility; CPM

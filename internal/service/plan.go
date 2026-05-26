@@ -126,8 +126,7 @@ func (s *PlanService) GetPlanUsage(userID uuid.UUID, scanResultRepo repository.S
 	return usage, nil
 }
 
-// GetPlanUsageFromCounts returns plan usage when scan counts are provided by the backend (e.g. from Redis).
-// Used when backend has no Postgres scan repos.
+// GetPlanUsageFromCounts returns plan usage when scan counts are provided externally (tests or legacy callers).
 func (s *PlanService) GetPlanUsageFromCounts(userID uuid.UUID, walletCount, endpointCount int64) (*PlanUsage, error) {
 	if userID == uuid.Nil {
 		return nil, errors.New("user not authenticated")
@@ -161,7 +160,7 @@ func (s *PlanService) GetPlanUsageFromCounts(userID uuid.UUID, walletCount, endp
 	return usage, nil
 }
 
-// CheckScanLimitFromCounts checks if a user can perform a scan when counts come from Redis (backend Redis-only).
+// CheckScanLimitFromCounts checks if a user can perform a scan when counts are provided externally.
 func (s *PlanService) CheckScanLimitFromCounts(userID uuid.UUID, scanType string, walletCount, endpointCount int64) (bool, *PlanUsage, error) {
 	usage, err := s.GetPlanUsageFromCounts(userID, walletCount, endpointCount)
 	if err != nil {

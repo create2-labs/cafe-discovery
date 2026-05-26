@@ -38,7 +38,7 @@ func (r *redisWalletScanRepository) DeleteByUserIDAndAddress(ctx context.Context
 	return nil
 }
 
-// CountByUserID returns the number of wallet:user:* keys for a user (plan limits; IMM-6 will move to Postgres).
+// CountByUserID returns the number of wallet:user:* keys for a user (cache cleanup only; plan limits use Postgres).
 func (r *redisWalletScanRepository) CountByUserID(ctx context.Context, userID string) (int64, error) {
 	pattern := walletUserKeyPrefix + userID + ":*"
 	keys, err := r.redis.Keys(ctx, pattern).Result()

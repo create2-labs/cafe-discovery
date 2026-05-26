@@ -24,7 +24,7 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 				{Name: "ethereum-mainnet", RPC: "https://ethereum-rpc.example"},
 			},
 		},
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
