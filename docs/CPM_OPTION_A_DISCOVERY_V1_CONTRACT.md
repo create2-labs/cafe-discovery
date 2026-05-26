@@ -87,7 +87,7 @@ Implementations **must** match **`parsePolicyContextFlexible`**, **`observationF
 | `result.key_exposed` | `result.key_exposed` or flat **`key_exposed`** | **1:1** boolean → **`PublicKeyExposed`** | boolean |
 | `result.observations`, `nist_level`, `risk_score`, `type`, `networks`, `first_seen`, `last_seen` | — | **Not read** by current explore `policy_context` parser (subset struct) | Present on API for UI / future use |
 
-**List vs detail (`GET …/wallets/scans`):** synopsis items (`ScanListItem`) expose **`scan_id`, `target_address`, `chain_ids`, `created_at`, `status`** only. **Posture and algorithm** for explore should be taken from **detail** once the scan reaches a state where **`result`** is populated (see OpenAPI descriptions for **`result`** immutability after terminal states).
+**List vs detail (`GET …/wallets/scans`):** synopsis items (`ScanListItem`) expose **`scan_id`, `target_address`, `chain_ids`, `created_at`, `status`** only. **Posture and algorithm** for explore should be taken from **detail** once the scan reaches a state where **`result`** is populated (see OpenAPI descriptions for **`result`** immutability after terminal states). **Each re-scan creates a new row** — `GET …/wallets/scans?address=` may return **more than one item** per address; each `scan_id` is independent and its terminal `result` is immutable. CPM callers must resolve the correct `scan_id` using **`latest=true`** (W2) rather than assuming a single row per address.
 
 ---
 
