@@ -361,6 +361,64 @@ func TestDeleteDiscoveryV1WalletScan_DeletesRedisWhenLastAddressRowRemoved(t *te
 	}
 }
 
+func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) {
+	t.Parallel()
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	address := "0x742d35cc6634c0532925a3b844bc454e4438f44e"
+	scanID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	repo := &scanResultRepoStub{
+		byID: map[uuid.UUID]*domain.ScanResultEntity{
+			scanID: {ID: scanID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
+		},
+		byAddress: []*domain.ScanResultEntity{
+			{ID: scanID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
+		},
+	}
+	pending := newMemoryPendingV1Repo()
+	if err := pending.Put(context.Background(), &repository.PendingV1ScanRecord{
+		ScanID: scanID, UserID: userID, Family: "wallet", Address: address,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &DiscoveryHandler{
+		scanResultRepo: repo,
+		pendingV1:      pending,
+		policyRef:      policyRefStub{},
+	}
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Delete("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.DeleteDiscoveryV1WalletScan(c)
+	})
+	app.Get("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.GetDiscoveryV1WalletScan(c)
+	})
+
+	delResp, err := app.Test(httptest.NewRequest(http.MethodDelete, "/wallets/scans/"+scanID.String(), nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delResp.Body.Close()
+	if delResp.StatusCode != fiber.StatusNoContent {
+		b, _ := io.ReadAll(delResp.Body)
+		t.Fatalf("DELETE status = %d, body = %s", delResp.StatusCode, b)
+	}
+	if rec, _ := pending.Get(context.Background(), scanID); rec != nil {
+		t.Fatalf("pending still present after DELETE: %+v", rec)
+	}
+
+	getResp, err := app.Test(httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanID.String(), nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != fiber.StatusNotFound {
+		b, _ := io.ReadAll(getResp.Body)
+		t.Fatalf("GET after DELETE status = %d, want 404, body = %s", getResp.StatusCode, b)
+	}
+}
+
 func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")

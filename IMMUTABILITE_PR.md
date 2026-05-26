@@ -329,10 +329,11 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
   - Supprimer les méthodes wallet cache/read-through devenues inutilisées après **IMM-4a**.
   - Vérifier que Redis n'est plus utilisé comme source métier pour une lecture wallet par `(user_id, address)` hors liste historique v1.
   - `DeleteDiscoveryV1WalletScan` : `redisWalletRepo.DeleteByUserIDAndAddress` — ne supprimer que si plus aucune ligne Postgres pour cette adresse (**IMM-3**).
-- **Out of scope:** Refonte complète Redis par `scan_id` (option future) ; TLS cache.
+  - `DELETE …/wallets/scans/{scan_id}` (et TLS) : purger aussi la corrélation pending v1 Redis (`discovery:v1:pending_scan:*`, réservation wallet) pour que **GET** → **404** après effacement du `scan_id` (pas de fantôme `requested`).
+- **Out of scope:** Refonte complète Redis par `scan_id` (option future) ; TLS cache ; effacement global par adresse wallet (**pas** de `DELETE` par `WALLET_ADDR`).
 - **Dependencies:** **IMM-4a**
 - **Proposed commit title:** `fix: clean up wallet redis read paths after scan history migration`
-- **Completion criteria:** Pas de suppression Redis qui masque un scan historique encore en Postgres.
+- **Completion criteria:** Pas de suppression Redis qui masque un scan historique encore en Postgres ; après **DELETE** d’un `scan_id`, **GET** détail → **404** (pending v1 nettoyé).
 
 ---
 

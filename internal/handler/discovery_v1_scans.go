@@ -523,6 +523,28 @@ func respondPolicyReferenceCheckUnavailable(c *fiber.Ctx) error {
 	}))
 }
 
+// clearPendingV1ScanCorrelation removes Redis pending v1 keys for scan_id so GET detail
+// does not resurrect a deleted scan as status "requested" after the Postgres row is gone.
+func (h *DiscoveryHandler) clearPendingV1ScanCorrelation(c *fiber.Ctx, userID, scanID uuid.UUID, walletAddress string) error {
+	if h.pendingV1 == nil {
+		return nil
+	}
+	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+		return err
+	}
+	if addr := strings.TrimSpace(walletAddress); addr != "" {
+		_ = h.pendingV1.DeleteWalletReservation(c.Context(), userID, addr, scanID)
+	}
+	return nil
+}
+
+func (h *TLSHandler) clearPendingV1ScanCorrelation(c *fiber.Ctx, scanID uuid.UUID) error {
+	if h.pendingV1 == nil {
+		return nil
+	}
+	return h.pendingV1.Delete(c.Context(), scanID)
+}
+
 // DeleteDiscoveryV1WalletScan handles DELETE /discovery/v1/wallets/scans/:scan_id (WORKPLAN_API_PR PR6).
 func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 	userID, err := h.getAuthenticatedUserID(c)
@@ -607,6 +629,9 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 				_ = h.redisWalletRepo.DeleteByUserIDAndAddress(c.Context(), userID.String(), walletEnt.Address)
 			}
 		}
+		if err := h.clearPendingV1ScanCorrelation(c, userID, scanID, walletEnt.Address); err != nil {
+			return respondPolicyReferenceCheckUnavailable(c)
+		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 
@@ -690,6 +715,9 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 		}
 		if h.redisTLSRepo != nil {
 			_ = h.redisTLSRepo.DeleteByUserIDAndURL(c.Context(), userID.String(), tlsEnt.URL)
+		}
+		if err := h.clearPendingV1ScanCorrelation(c, scanID); err != nil {
+			return respondPolicyReferenceCheckUnavailable(c)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
