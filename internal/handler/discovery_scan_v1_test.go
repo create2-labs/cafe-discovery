@@ -14,6 +14,7 @@ import (
 
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
@@ -210,10 +211,20 @@ func (r *redisWalletRepoStub) DeleteByUserIDAndAddress(_ context.Context, userID
 	return nil
 }
 
-type policyRefStub struct{}
+type policyRefStub struct {
+	walletTarget policyref.WalletTargetContext
+	walletErr    error
+}
 
 func (policyRefStub) PersistedPoliciesReferenceScan(context.Context, uuid.UUID, string, uuid.UUID) (bool, error) {
 	return false, nil
+}
+
+func (s policyRefStub) ActiveWalletCPMContextForTarget(context.Context, uuid.UUID, string, string) (policyref.WalletTargetContext, error) {
+	if s.walletErr != nil {
+		return policyref.WalletTargetContext{}, s.walletErr
+	}
+	return s.walletTarget, nil
 }
 
 func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
@@ -223,6 +234,7 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
+		policyRef:        policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
@@ -441,6 +453,7 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 		scannerPresence:  alwaysScanners{},
 		pendingV1:        pending,
 		scanResultRepo:   &scanResultRepoStub{},
+		policyRef:        policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
@@ -486,6 +499,7 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 			Address: "0x742d35cc6634c0532925a3b844bc454e4438f44e",
 			Status:  scan.StateRUNNING,
 		}}},
+		policyRef: policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
@@ -509,6 +523,124 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 	}
 }
 
+func TestPostDiscoveryScanV1_WalletCPMContext409(t *testing.T) {
+	t.Parallel()
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	n := &mockNATSConn{}
+	h := &DiscoveryHandler{
+		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
+		natsConn:         n,
+		scannerPresence:  alwaysScanners{},
+		pendingV1:        newMemoryPendingV1Repo(),
+		scanResultRepo:   &scanResultRepoStub{},
+		policyRef: policyRefStub{
+			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
+		},
+	}
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.PostDiscoveryScanV1(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusConflict {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["error"] != "CPM_EXISTS_FOR_WALLET_TARGET" {
+		t.Fatalf("error = %v, want CPM_EXISTS_FOR_WALLET_TARGET", out["error"])
+	}
+	if n.lastSubject != "" {
+		t.Fatalf("unexpected NATS publish")
+	}
+}
+
+func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
+	t.Parallel()
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	n := &mockNATSConn{}
+	h := &DiscoveryHandler{
+		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
+		natsConn:         n,
+		scannerPresence:  alwaysScanners{},
+		pendingV1:        newMemoryPendingV1Repo(),
+		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
+			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+			UserID:  userID,
+			Address: "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+			Status:  scan.StateFAILED,
+		}}},
+		policyRef: policyRefStub{
+			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
+		},
+	}
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.PostDiscoveryScanV1(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusConflict {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
+	}
+}
+
+func TestPostDiscoveryScanV1_WalletCPMContextCheckUnavailable(t *testing.T) {
+	t.Parallel()
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	h := &DiscoveryHandler{
+		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
+		natsConn:         &mockNATSConn{},
+		scannerPresence:  alwaysScanners{},
+		pendingV1:        newMemoryPendingV1Repo(),
+		scanResultRepo:   &scanResultRepoStub{},
+		policyRef:        nil,
+	}
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.PostDiscoveryScanV1(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusServiceUnavailable {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["error"] != "CPM_CONTEXT_CHECK_UNAVAILABLE" {
+		t.Fatalf("error = %v", out["error"])
+	}
+}
+
 func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -524,6 +656,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 			Address: "0x742d35cc6634c0532925a3b844bc454e4438f44e",
 			Status:  scan.StateFAILED,
 		}}},
+		policyRef: policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {

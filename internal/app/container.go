@@ -143,7 +143,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		policyRef = cpmpolicyref.NewHTTPClient(cpmInternalBase, policyRefToken, &http.Client{Timeout: 5 * time.Second})
 	} else {
 		policyRef = nil
-		log.Printf("Warning: %s and %s must both be set for DELETE /discovery/v1/.../scans to verify CPM policy references; otherwise DELETE returns 503 fail-closed",
+		log.Printf("Warning: %s and %s must both be set for CPM reference checks (DELETE scan + POST wallet scan W1); otherwise those routes return 503 fail-closed",
 			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
 	}
 
