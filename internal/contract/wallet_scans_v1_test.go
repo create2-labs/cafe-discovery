@@ -518,3 +518,129 @@ func TestDiscoveryV1WalletScans_detailStableFieldsForOwner(t *testing.T) {
 		}
 	}
 }
+
+// IMM-7: two completed executions for the same address must both appear in the list (total >= 2).
+func TestDiscoveryV1WalletScans_twoExecutionsSameAddress_listContainsBoth(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	scanA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-000000000001")
+	scanB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-000000000002")
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(scanB, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 11, 0, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(scanA, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&limit=50", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["total"].(float64) < 2 {
+		t.Fatalf("total = %v, want >= 2 (both executions must be listed)", body["total"])
+	}
+	items := body["items"].([]any)
+	if len(items) < 2 {
+		t.Fatalf("items len = %d, want >= 2", len(items))
+	}
+	scanIDs := make(map[string]bool)
+	for _, item := range items {
+		scanIDs[item.(map[string]any)["scan_id"].(string)] = true
+	}
+	if !scanIDs[scanA.String()] {
+		t.Fatalf("historical scan_id A %s missing from list", scanA)
+	}
+	if !scanIDs[scanB.String()] {
+		t.Fatalf("newer scan_id B %s missing from list", scanB)
+	}
+}
+
+// IMM-7: after a second scan on the same address, the older scan_id still returns 200 with an
+// immutable result (target_address, wallet_type, current_pq_posture unchanged).
+func TestDiscoveryV1WalletScans_historicalScanIDDetailIsStable(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	scanA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-000000000003")
+	scanB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-000000000004")
+
+	entityA := walletScanEntity(scanA, owner, address)
+	entityA.Status = scan.StateSUCCESS
+	entityA.CreatedAt = time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC)
+	entityA.UpdatedAt = entityA.CreatedAt
+
+	entityB := walletScanEntity(scanB, owner, address)
+	entityB.Status = scan.StateSUCCESS
+	entityB.CreatedAt = time.Date(2026, 5, 11, 11, 0, 0, 0, time.UTC)
+	entityB.UpdatedAt = entityB.CreatedAt
+
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {entityB, entityA},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans/:scan_id", h.GetDiscoveryV1WalletScan)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanA.String(), nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("historical scan_id A detail status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var detail map[string]any
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail["scan_id"] != scanA.String() {
+		t.Fatalf("scan_id = %v, want historical %s", detail["scan_id"], scanA)
+	}
+	if detail["status"] != "completed" {
+		t.Fatalf("status = %v, want completed", detail["status"])
+	}
+	result, ok := detail["result"].(map[string]any)
+	if !ok {
+		t.Fatal("result is not an object on historical scan detail")
+	}
+	for _, key := range []string{"target_address", "wallet_type", "current_pq_posture"} {
+		if _, ok := result[key]; !ok {
+			t.Fatalf("historical WalletScanResult missing %q", key)
+		}
+	}
+	if result["target_address"] != address {
+		t.Fatalf("target_address = %v, want %s (result must be immutable for historical scan)", result["target_address"], address)
+	}
+}
