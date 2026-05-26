@@ -8,19 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// PlanHandler handles plan-related HTTP requests. Uses Redis for scan usage counts (IMM-6: wallet from Postgres).
+// PlanHandler handles plan-related HTTP requests. Usage counts come from Postgres scan rows (executions).
 type PlanHandler struct {
-	planService     *service.PlanService
-	redisWalletRepo repository.RedisWalletScanRepository
-	redisTLSRepo    repository.RedisTLSScanRepository
+	planService       *service.PlanService
+	scanResultRepo    repository.ScanResultRepository
+	tlsScanResultRepo repository.TLSScanResultRepository
 }
 
-// NewPlanHandler creates a new plan handler (Redis-only for usage counts).
-func NewPlanHandler(planService *service.PlanService, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository) *PlanHandler {
+// NewPlanHandler creates a new plan handler.
+func NewPlanHandler(planService *service.PlanService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository) *PlanHandler {
 	return &PlanHandler{
-		planService:     planService,
-		redisWalletRepo: redisWalletRepo,
-		redisTLSRepo:    redisTLSRepo,
+		planService:       planService,
+		scanResultRepo:    scanResultRepo,
+		tlsScanResultRepo: tlsScanResultRepo,
 	}
 }
 
@@ -83,9 +83,7 @@ func (h *PlanHandler) GetPlanUsage(c *fiber.Ctx) error {
 		})
 	}
 
-	walletCount, _ := h.redisWalletRepo.CountByUserID(c.Context(), userID.String())
-	endpointCount, _ := h.redisTLSRepo.CountByUserID(c.Context(), userID.String())
-	usage, err := h.planService.GetPlanUsageFromCounts(userID, walletCount, endpointCount)
+	usage, err := h.planService.GetPlanUsage(userID, h.scanResultRepo, h.tlsScanResultRepo)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}

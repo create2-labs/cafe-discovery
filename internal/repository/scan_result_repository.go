@@ -107,7 +107,7 @@ func (r *scanResultRepository) ListOwnerWalletScansByAddress(userID uuid.UUID, a
 	return out, nil
 }
 
-// CountByUserID counts the total number of scan results for a user
+// CountByUserID counts all wallet scan execution rows for a user (plan quota semantics).
 func (r *scanResultRepository) CountByUserID(userID uuid.UUID) (int64, error) {
 	return r.countByUserID(userID, &domain.ScanResultEntity{})
 }

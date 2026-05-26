@@ -167,7 +167,7 @@ func (r *tlsScanResultRepository) FindAllDefault() ([]*domain.TLSScanResultEntit
 	return results, nil
 }
 
-// CountByUserID counts the total number of TLS scan results for a user
+// CountByUserID counts all TLS scan execution rows for a user (plan quota semantics).
 func (r *tlsScanResultRepository) CountByUserID(userID uuid.UUID) (int64, error) {
 	return r.countByUserID(userID, &domain.TLSScanResultEntity{})
 }

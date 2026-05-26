@@ -32,37 +32,39 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Wallet v1 list/get/delete use Postgres as source of truth; plan limits use Redis counts.
+// Wallet v1 list/get/delete and plan limits use Postgres as source of truth for wallet scans.
 type DiscoveryHandler struct {
-	discoveryService *service.DiscoveryService
-	tlsService       *service.TLSService
-	cfgChain         *config.ChainConfig
-	natsConn         nats.Connection
-	planService      *service.PlanService
-	scannerPresence  ScannerPresenceChecker
-	redisWalletRepo  repository.RedisWalletScanRepository
-	redisTLSRepo     repository.RedisTLSScanRepository
-	userScanCache    *service.UserScanCacheService
-	scanResultRepo   repository.ScanResultRepository
-	pendingV1        repository.PendingV1ScanRepository
-	policyRef        policyref.Checker
+	discoveryService  *service.DiscoveryService
+	tlsService        *service.TLSService
+	cfgChain          *config.ChainConfig
+	natsConn          nats.Connection
+	planService       *service.PlanService
+	scannerPresence   ScannerPresenceChecker
+	redisWalletRepo   repository.RedisWalletScanRepository
+	redisTLSRepo      repository.RedisTLSScanRepository
+	userScanCache     *service.UserScanCacheService
+	scanResultRepo    repository.ScanResultRepository
+	tlsScanResultRepo repository.TLSScanResultRepository
+	pendingV1         repository.PendingV1ScanRepository
+	policyRef         policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
-		discoveryService: discoveryService,
-		tlsService:       tlsService,
-		cfgChain:         cfgChain,
-		natsConn:         natsConn,
-		planService:      planService,
-		scannerPresence:  scannerPresence,
-		redisWalletRepo:  redisWalletRepo,
-		redisTLSRepo:     redisTLSRepo,
-		userScanCache:    userScanCache,
-		scanResultRepo:   scanResultRepo,
-		pendingV1:        pendingV1,
-		policyRef:        policyRef,
+		discoveryService:  discoveryService,
+		tlsService:        tlsService,
+		cfgChain:          cfgChain,
+		natsConn:          natsConn,
+		planService:       planService,
+		scannerPresence:   scannerPresence,
+		redisWalletRepo:   redisWalletRepo,
+		redisTLSRepo:      redisTLSRepo,
+		userScanCache:     userScanCache,
+		scanResultRepo:    scanResultRepo,
+		tlsScanResultRepo: tlsScanResultRepo,
+		pendingV1:         pendingV1,
+		policyRef:         policyRef,
 	}
 }
 
@@ -105,19 +107,12 @@ func (h *DiscoveryHandler) getAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, erro
 	return userID, nil
 }
 
-// checkScanLimits validates scan limits using Redis key counts (wallet/TLS; IMM-6 will use Postgres for wallet).
-func (h *DiscoveryHandler) checkScanLimits(ctx context.Context, userID uuid.UUID, scanType string) (limitReached bool, errorMsg string, err error) {
+// checkScanLimits validates scan limits using persisted scan execution rows (Postgres).
+func (h *DiscoveryHandler) checkScanLimits(userID uuid.UUID, scanType string) (limitReached bool, errorMsg string, err error) {
 	if h.planService == nil {
 		return false, "", nil
 	}
-	var walletCount, endpointCount int64
-	if h.redisWalletRepo != nil {
-		walletCount, _ = h.redisWalletRepo.CountByUserID(ctx, userID.String())
-	}
-	if h.redisTLSRepo != nil {
-		endpointCount, _ = h.redisTLSRepo.CountByUserID(ctx, userID.String())
-	}
-	canScan, usage, err := h.planService.CheckScanLimitFromCounts(userID, scanType, walletCount, endpointCount)
+	canScan, usage, err := h.planService.CheckScanLimit(userID, scanType, h.scanResultRepo, h.tlsScanResultRepo)
 	if err != nil {
 		return false, "", err
 	}
@@ -279,7 +274,7 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 		}
 	}
 
-	limitReached, limitMsg, err := h.checkScanLimits(c.Context(), userID, "wallet")
+	limitReached, limitMsg, err := h.checkScanLimits(userID, "wallet")
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusInternalServerError,
@@ -468,7 +463,7 @@ func (h *DiscoveryHandler) prepareTLSScanQueue(c *fiber.Ctx, endpointURL string)
 		}
 	}
 
-	limitReached, limitMsg, err := h.checkScanLimits(c.Context(), userID, "endpoint")
+	limitReached, limitMsg, err := h.checkScanLimits(userID, "endpoint")
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusInternalServerError,
