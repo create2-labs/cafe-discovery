@@ -12,7 +12,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1** mergé ([#64](https://github.com/create2-labs/cafe-discovery/pull/64), [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2** mergé ([#65](https://github.com/create2-labs/cafe-discovery/pull/65)) ; **IMM-3** en cours sur `discovery/scan-history-persistence-writers` ; **IMM-4+** non mergés.
+**Statut du document :** plan de découpe — **IMM-1**–**IMM-4c** mergés ([#64](https://github.com/create2-labs/cafe-discovery/pull/64) … [#71](https://github.com/create2-labs/cafe-discovery/pull/71)) ; **IMM-5** en cours sur `discovery/scan-history-redis-cleanup` ; **IMM-6+** non mergés.
 
 ---
 
@@ -95,7 +95,7 @@
 | **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
 | **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
 | **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | [#71](https://github.com/create2-labs/cafe-discovery/pull/71) | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
-| **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | — | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
+| **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | [#72](https://github.com/create2-labs/cafe-discovery/pull/72) | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
 | **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | — | **IMM-3** | Quotas = exécutions scan. |
 | **IMM-7** | [§ IMM-7](#github-issue--imm-7) | `discovery/scan-history-tests-contract` | `cafe-discovery` | — | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | [§ IMM-8](#github-issue--imm-8) | `deploy/scan-history-migration-runbook` | `cafe-deploy` | — | **IMM-2** | Runbook déploiement. |
@@ -321,6 +321,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-5 — Redis cleanup post-retrait legacy wallet
 
+- **Status:** mergé dans [#72](https://github.com/create2-labs/cafe-discovery/pull/72)
 - **Branch:** `discovery/scan-history-redis-cleanup`
 - **Repository:** `cafe-discovery`
 - **Objective:** Nettoyer les restes Redis/cache après suppression des lectures wallet mono-ligne par adresse dans **IMM-4a**.
@@ -328,10 +329,11 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
   - Supprimer les méthodes wallet cache/read-through devenues inutilisées après **IMM-4a**.
   - Vérifier que Redis n'est plus utilisé comme source métier pour une lecture wallet par `(user_id, address)` hors liste historique v1.
   - `DeleteDiscoveryV1WalletScan` : `redisWalletRepo.DeleteByUserIDAndAddress` — ne supprimer que si plus aucune ligne Postgres pour cette adresse (**IMM-3**).
-- **Out of scope:** Refonte complète Redis par `scan_id` (option future) ; TLS cache.
+  - `DELETE …/wallets/scans/{scan_id}` (et TLS) : purger aussi la corrélation pending v1 Redis (`discovery:v1:pending_scan:*`, réservation wallet) pour que **GET** → **404** après effacement du `scan_id` (pas de fantôme `requested`).
+- **Out of scope:** Refonte complète Redis par `scan_id` (option future) ; TLS cache ; effacement global par adresse wallet (**pas** de `DELETE` par `WALLET_ADDR`).
 - **Dependencies:** **IMM-4a**
 - **Proposed commit title:** `fix: clean up wallet redis read paths after scan history migration`
-- **Completion criteria:** Pas de suppression Redis qui masque un scan historique encore en Postgres.
+- **Completion criteria:** Pas de suppression Redis qui masque un scan historique encore en Postgres ; après **DELETE** d’un `scan_id`, **GET** détail → **404** (pending v1 nettoyé).
 
 ---
 

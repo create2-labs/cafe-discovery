@@ -124,11 +124,11 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to create scanner presence tracker: %w", err)
 	}
 
-	// Redis scan repos (backend read-through: Redis then Postgres for scan list/get)
+	// Redis: TLS read-through cache; wallet keys for plan counts and DELETE cleanup only.
 	redisTLSRepo := repository.NewRedisTLSScanRepository(redisConn)
 	redisWalletRepo := repository.NewRedisWalletScanRepository(redisConn)
 
-	// User scan cache: read-through and warm cache on sign-in
+	// User scan cache: TLS read-through and warm on sign-in (wallet history is Postgres-only).
 	userScanCache := service.NewUserScanCacheService(tlsScanResultRepo, redisTLSRepo)
 
 	pendingV1Repo, err := repository.NewRedisPendingV1ScanRepository(redisConn)
@@ -147,7 +147,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
 	}
 
-	// Initialize handlers (read-through for scan list/get; plan usage from Redis counts)
+	// Initialize handlers (wallet v1 from Postgres; TLS list uses Redis read-through; plan usage from Redis counts)
 	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, pendingV1Repo, policyRef)
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
