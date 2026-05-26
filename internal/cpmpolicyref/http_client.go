@@ -48,6 +48,18 @@ type responseWire struct {
 	Referenced bool `json:"referenced"`
 }
 
+type walletTargetRequestWire struct {
+	TargetAddress string `json:"target_address"`
+	UserID        string `json:"user_id"`
+	TenantID      string `json:"tenant_id"`
+}
+
+type walletTargetResponseWire struct {
+	Exists       bool `json:"exists"`
+	PolicyCount  int  `json:"policy_count"`
+	DraftCount   int  `json:"draft_count"`
+}
+
 // PersistedPoliciesReferenceScan implements policyref.Checker.
 func (c *HTTPClient) PersistedPoliciesReferenceScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (bool, error) {
 	if c.baseURL == "" || c.token == "" {
@@ -90,4 +102,52 @@ func (c *HTTPClient) PersistedPoliciesReferenceScan(ctx context.Context, userID 
 		return false, fmt.Errorf("cpm policy reference: invalid response json: %w", err)
 	}
 	return rw.Referenced, nil
+}
+
+// ActiveWalletCPMContextForTarget implements policyref.Checker (IMM-9b).
+func (c *HTTPClient) ActiveWalletCPMContextForTarget(ctx context.Context, userID uuid.UUID, tenantID string, normalizedTargetAddress string) (policyref.WalletTargetContext, error) {
+	if c.baseURL == "" || c.token == "" {
+		return policyref.WalletTargetContext{}, fmt.Errorf("cpm policy reference client: base URL or token not configured")
+	}
+	u := c.baseURL + "/internal/policies/references/wallet-target"
+	body := walletTargetRequestWire{
+		TargetAddress: strings.TrimSpace(normalizedTargetAddress),
+		UserID:        userID.String(),
+		TenantID:      strings.TrimSpace(tenantID),
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return policyref.WalletTargetContext{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	if err != nil {
+		return policyref.WalletTargetContext{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return policyref.WalletTargetContext{}, err
+	}
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return policyref.WalletTargetContext{}, errors.Join(readErr, closeErr)
+	}
+	if closeErr != nil {
+		return policyref.WalletTargetContext{}, fmt.Errorf("cpm wallet-target reference: close response body: %w", closeErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return policyref.WalletTargetContext{}, fmt.Errorf("cpm wallet-target reference: unexpected status %d", resp.StatusCode)
+	}
+	var rw walletTargetResponseWire
+	if err := json.Unmarshal(respBody, &rw); err != nil {
+		return policyref.WalletTargetContext{}, fmt.Errorf("cpm wallet-target reference: invalid response json: %w", err)
+	}
+	return policyref.WalletTargetContext{
+		Exists:      rw.Exists,
+		PolicyCount: rw.PolicyCount,
+		DraftCount:  rw.DraftCount,
+	}, nil
 }

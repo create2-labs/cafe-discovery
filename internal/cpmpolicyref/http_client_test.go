@@ -76,6 +76,38 @@ func TestHTTPClient_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestHTTPClient_WalletTargetExists(t *testing.T) {
+	t.Parallel()
+	uid := uuid.New()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/policies/references/wallet-target" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		if err := json.Unmarshal(b, &body); err != nil {
+			t.Fatal(err)
+		}
+		if body["target_address"] != "0x742d35cc6634c0532925a3b844bc454e4438f44e" {
+			t.Fatalf("target_address = %v", body["target_address"])
+		}
+		if body["user_id"] != uid.String() {
+			t.Fatalf("user_id = %v", body["user_id"])
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"exists": true, "policy_count": 1, "draft_count": 0})
+	}))
+	defer srv.Close()
+
+	c := NewHTTPClient(srv.URL, "tok", &http.Client{Timeout: 2 * time.Second})
+	ctx, err := c.ActiveWalletCPMContextForTarget(context.Background(), uid, "tenant-x", "0x742d35cc6634c0532925a3b844bc454e4438f44e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ctx.Exists || ctx.PolicyCount != 1 || ctx.DraftCount != 0 {
+		t.Fatalf("got %+v", ctx)
+	}
+}
+
 func TestHTTPClient_MissingConfig(t *testing.T) {
 	t.Parallel()
 	c := NewHTTPClient("", "tok", &http.Client{Timeout: 2 * time.Second})

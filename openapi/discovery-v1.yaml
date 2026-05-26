@@ -400,7 +400,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
-          description: Wallet scan already in progress for this owner/address.
+          description: |
+            Wallet scan rejected: in-flight scan (**W8**) or active CPM policy/draft on the target (**W1**).
           content:
             application/json:
               schema:
@@ -410,8 +411,21 @@ paths:
                   value:
                     error: SCAN_IN_PROGRESS
                     message: A wallet scan is already in progress for this target.
+                cpmExistsForWalletTarget:
+                  value:
+                    error: CPM_EXISTS_FOR_WALLET_TARGET
+                    message: A crypto policy or draft already exists for this wallet address. Finalize or delete it before starting a new scan.
         "503":
-          description: Scanner or dependency unavailable (if applicable).
+          description: Scanner unavailable, or CPM context check failed (fail-closed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                cpmContextCheckUnavailable:
+                  value:
+                    error: CPM_CONTEXT_CHECK_UNAVAILABLE
+                    message: The scan could not be accepted because CPM context could not be verified.
 
 components:
   securitySchemes:

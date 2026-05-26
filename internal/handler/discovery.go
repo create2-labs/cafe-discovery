@@ -299,8 +299,25 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 	if qe := h.checkWalletScanInFlight(c.Context(), userID, normalizedAddress); qe != nil {
 		return uuid.Nil, uuid.Nil, "", qe
 	}
+	if qe := h.checkWalletCPMContext(c, userID, normalizedAddress); qe != nil {
+		return uuid.Nil, uuid.Nil, "", qe
+	}
 
 	return uuid.New(), userID, normalizedAddress, nil
+}
+
+func (h *DiscoveryHandler) checkWalletCPMContext(c *fiber.Ctx, userID uuid.UUID, normalizedAddress string) *queueScanError {
+	if h.policyRef == nil {
+		return cpmContextCheckUnavailableQueueError()
+	}
+	active, err := h.policyRef.ActiveWalletCPMContextForTarget(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress)
+	if err != nil {
+		return cpmContextCheckUnavailableQueueError()
+	}
+	if active.Exists {
+		return cpmExistsForWalletTargetQueueError()
+	}
+	return nil
 }
 
 func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID uuid.UUID, address string) *queueScanError {
@@ -395,6 +412,30 @@ func scanInProgressErrorBody() fiber.Map {
 	return fiber.Map{
 		"error":   "SCAN_IN_PROGRESS",
 		"message": "A wallet scan is already in progress for this target.",
+	}
+}
+
+func cpmExistsForWalletTargetQueueError() *queueScanError {
+	return &queueScanError{
+		status: fiber.StatusConflict,
+		body:   cpmExistsForWalletTargetErrorBody(),
+	}
+}
+
+func cpmExistsForWalletTargetErrorBody() fiber.Map {
+	return fiber.Map{
+		"error":   "CPM_EXISTS_FOR_WALLET_TARGET",
+		"message": "A crypto policy or draft already exists for this wallet address. Finalize or delete it before starting a new scan.",
+	}
+}
+
+func cpmContextCheckUnavailableQueueError() *queueScanError {
+	return &queueScanError{
+		status: fiber.StatusServiceUnavailable,
+		body: fiber.Map{
+			"error":   "CPM_CONTEXT_CHECK_UNAVAILABLE",
+			"message": "The scan could not be accepted because CPM context could not be verified.",
+		},
 	}
 }
 
