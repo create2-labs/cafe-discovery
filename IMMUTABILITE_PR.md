@@ -12,7 +12,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1** mergé ([#64](https://github.com/create2-labs/cafe-discovery/pull/64), [`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)) ; **IMM-2** mergé ([#65](https://github.com/create2-labs/cafe-discovery/pull/65)) ; **IMM-3** en cours sur `discovery/scan-history-persistence-writers` ; **IMM-4+** non mergés.
+**Statut du document :** plan de découpe — **IMM-1**–**IMM-4c** mergés ([#64](https://github.com/create2-labs/cafe-discovery/pull/64) … [#71](https://github.com/create2-labs/cafe-discovery/pull/71)) ; **IMM-5** en cours sur `discovery/scan-history-redis-cleanup` ; **IMM-6+** non mergés.
 
 ---
 
@@ -321,6 +321,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-5 — Redis cleanup post-retrait legacy wallet
 
+- **Status:** en cours — branche `discovery/scan-history-redis-cleanup`
 - **Branch:** `discovery/scan-history-redis-cleanup`
 - **Repository:** `cafe-discovery`
 - **Objective:** Nettoyer les restes Redis/cache après suppression des lectures wallet mono-ligne par adresse dans **IMM-4a**.

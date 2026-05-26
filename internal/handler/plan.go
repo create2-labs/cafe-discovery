@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// PlanHandler handles plan-related HTTP requests. Uses Redis for scan counts (no Postgres).
+// PlanHandler handles plan-related HTTP requests. Uses Redis for scan usage counts (IMM-6: wallet from Postgres).
 type PlanHandler struct {
 	planService     *service.PlanService
 	redisWalletRepo repository.RedisWalletScanRepository

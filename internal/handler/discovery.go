@@ -32,7 +32,7 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Scan list/get use read-through (Redis then Postgres); plan limits use Redis counts.
+// Wallet v1 list/get/delete use Postgres as source of truth; plan limits use Redis counts.
 type DiscoveryHandler struct {
 	discoveryService *service.DiscoveryService
 	tlsService       *service.TLSService
@@ -48,7 +48,7 @@ type DiscoveryHandler struct {
 	policyRef        policyref.Checker
 }
 
-// NewDiscoveryHandler creates a new discovery handler (read-through for scan data).
+// NewDiscoveryHandler creates a new discovery handler.
 func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
@@ -105,7 +105,7 @@ func (h *DiscoveryHandler) getAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, erro
 	return userID, nil
 }
 
-// checkScanLimits validates scan limits using counts from Redis (backend has no Postgres).
+// checkScanLimits validates scan limits using Redis key counts (wallet/TLS; IMM-6 will use Postgres for wallet).
 func (h *DiscoveryHandler) checkScanLimits(ctx context.Context, userID uuid.UUID, scanType string) (limitReached bool, errorMsg string, err error) {
 	if h.planService == nil {
 		return false, "", nil

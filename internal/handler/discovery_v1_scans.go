@@ -596,7 +596,16 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 			}))
 		}
 		if h.redisWalletRepo != nil {
-			_ = h.redisWalletRepo.DeleteByUserIDAndAddress(c.Context(), userID.String(), walletEnt.Address)
+			remaining, rerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, walletEnt.Address)
+			if rerr != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
+					"error":   "internal_error",
+					"message": rerr.Error(),
+				}))
+			}
+			if len(remaining) == 0 {
+				_ = h.redisWalletRepo.DeleteByUserIDAndAddress(c.Context(), userID.String(), walletEnt.Address)
+			}
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
