@@ -87,22 +87,22 @@
 
 ## Table de suivi des PR
 
-| PR | GitHub issue (draft) | Branche (proposée) | Dépôt (issue) | PR Git | Dépend de | Objectif en une ligne |
-|----|----------------------|-------------------|---------------|--------|-----------|------------------------|
-| **IMM-1** | [§ IMM-1](#github-issue--imm-1) | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
-| **IMM-2** | [§ IMM-2](#github-issue--imm-2) | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
-| **IMM-3** | [§ IMM-3](#github-issue--imm-3) | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66) & [#67](https://github.com/create2-labs/cafe-discovery/pull/67)| **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
-| **IMM-4a** | [§ IMM-4a](#github-issue--imm-4a) | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
-| **IMM-4b** | [§ IMM-4b](#github-issue--imm-4b) | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query **`latest=true`** (**W2**) + OpenAPI. |
-| **IMM-4c** | [§ IMM-4c](#github-issue--imm-4c) | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | [#71](https://github.com/create2-labs/cafe-discovery/pull/71) | **IMM-4a** | **W8** : `POST …/scan` → **409** `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
-| **IMM-5** | [§ IMM-5](#github-issue--imm-5) | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | [#72](https://github.com/create2-labs/cafe-discovery/pull/72) | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
-| **IMM-6** | [§ IMM-6](#github-issue--imm-6) | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | [#73](https://github.com/create2-labs/cafe-discovery/pull/73) | **IMM-3** | Quotas = exécutions scan. |
-| **IMM-7** | [§ IMM-7](#github-issue--imm-7) | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
-| **IMM-8** | [§ IMM-8](#github-issue--imm-8) | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
-| **IMM-9** | [§ IMM-9](#github-issue--imm-9) | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | **W8** déjà en place + **W1** (policy **ou** draft). |
-| **IMM-10** | [§ IMM-10](#github-issue--imm-10) | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | — | **IMM-4b** | **W7** (newest row) + **W2** (`latest=true`), wallet-only. |
-| **IMM-12** | [§ IMM-12](#github-issue--imm-12) | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | — | **IMM-3** | **W6** : `GET …/wallets/scans/{scan_id}/cbom` à la demande. |
-| **IMM-11** | [§ IMM-11](#github-issue--imm-11) | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | — | **IMM-4a–4c**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
+| PR | Branche (proposée) | Dépôt | PR Git | Dépend de | Objectif |
+| --- | --- | --- | --- | --- | --- |
+| **IMM-1** | `docs/scan-immutability-gap-and-migration` | `cafe-discovery` | [#64](https://github.com/create2-labs/cafe-discovery/pull/64) | — | Doc : écart vs WORKPLAN, stratégie migration. |
+| **IMM-2** | `discovery/scan-history-db-migration` | `cafe-discovery` | [#65](https://github.com/create2-labs/cafe-discovery/pull/65) | **IMM-1** (#64) | DB : retirer unicité par cible. |
+| **IMM-3** | `discovery/scan-history-persistence-writers` | `cafe-discovery` | [#66](https://github.com/create2-labs/cafe-discovery/pull/66), [#67](https://github.com/create2-labs/cafe-discovery/pull/67) | **IMM-2** (#65) | Writers : une ligne par `scan_id`. |
+| **IMM-4a** | `discovery/scan-history-list-filters` | `cafe-discovery` | [#69](https://github.com/create2-labs/cafe-discovery/pull/69) | **IMM-3** | Liste wallet v1 multi-lignes + retrait lectures wallet mono-ligne par adresse. |
+| **IMM-4b** | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query `latest=true` (W2) + OpenAPI. |
+| **IMM-4c** | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | [#71](https://github.com/create2-labs/cafe-discovery/pull/71) | **IMM-4a** | W8 : `POST /scan` → 409 `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
+| **IMM-5** | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | [#72](https://github.com/create2-labs/cafe-discovery/pull/72) | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
+| **IMM-6** | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | [#73](https://github.com/create2-labs/cafe-discovery/pull/73) | **IMM-3** | Quotas = exécutions scan. |
+| **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
+| **IMM-8** | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
+| **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
+| **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
+| **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | — | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
+| **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | — | **IMM-4a–4c**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
 
 **Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8** → `cafe-deploy`, les autres → `cafe-discovery`).
 
@@ -371,6 +371,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-8 — Deploy runbook (cafe-deploy)
 
+- **Status:** mergé dans [#20](https://github.com/create2-labs/cafe-deploy/pull/20)
+- **Branch:** `discovery/scan-history-tests-contract`
 - **Branch:** `deploy/scan-history-migration-runbook`
 - **Repository:** `cafe-deploy`
 - **Objective:** Procédure release safe pour IMM-2 + IMM-3.
@@ -387,6 +389,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-9 — Gardes POST scan (en cours + **W1**)
 
+- **Status:** mergé dans [#76](https://github.com/create2-labs/cafe-discovery/pull/76)
 - **Dépôts :** `cafe-discovery` ; appel CPM interne (**IMM-9b**) pour **W1**.
 - **Endpoint :** `POST /api/discovery/v1/scan` avec `{ "address": "0x…" }` (wallet only pour **W1**).
 - **Ordre des gardes :**
@@ -400,6 +403,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ## IMM-10 — CPM explore/persist (**W7** + **W2**)
 
+- **Status:** mergé dans [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) 
 - **Dépôt principal :** `cafe-crypto-policy-mgt` — [`workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) § IMM-10.
 - **Wallet-only** — pas d’assessment/remediation TLS.
 - **Step 1 — W7 :** `GET /api/discovery/v1/wallets/scans?address=…&limit=1` (newest row) ; si `status != completed` → **400** `LATEST_SCAN_NOT_COMPLETED`.
