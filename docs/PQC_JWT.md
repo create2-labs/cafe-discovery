@@ -162,7 +162,7 @@ curl -X POST http://localhost:8080/auth/signin \
 }
 
 # Use the token for authenticated requests
-curl -X GET http://localhost:8080/discovery/scans \
+curl -X GET http://localhost:8080/discovery/v1/wallets/scans \
   -H "Authorization: Bearer eyJwYXlsb2FkIjoi..."
 ```
 

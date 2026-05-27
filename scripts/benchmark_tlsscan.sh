@@ -28,15 +28,16 @@ fi
   }'| jq -r '.token')
 
 
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=0" \
+# Canonical TLS list path (v1); legacy GET /discovery/tls/scans was removed (IMM-11).
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans?limit=10&offset=0" \
   -H "Authorization: Bearer $TOKEN" | jq . > cafediscovery_tlsscan.json
-                                             
-curl -X GET "http://localhost:8080/discovery/tls/scans?limit=10&offset=10" \
+
+curl -X GET "http://localhost:8080/discovery/v1/tls/scans?limit=10&offset=10" \
   -H "Authorization: Bearer $TOKEN" | jq . >> cafediscovery_tlsscan.json
 
-jq -r '.results[].url' cafediscover_tlsscans.json
+jq -r '.items[].endpoint' cafediscovery_tlsscan.json
 
-for url in $(jq -r '.results[].url' cafediscover_tlsscans.json); do
+for url in $(jq -r '.items[].endpoint' cafediscovery_tlsscan.json); do
   echo "Scanning $url"
 #  $TESTSSL $url | tee $OUTPUT_FILE
 #√ cafe-discovery % ~/dev/github/testssl.sh/testssl.sh  -4 --ip one --json https://mainnet.base.org
