@@ -102,7 +102,7 @@
 | **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | — | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
-| **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | — | **IMM-4a–4c**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
+| **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
 
 **Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8** → `cafe-deploy`, les autres → `cafe-discovery`).
 
@@ -413,6 +413,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 ---
 
 ## IMM-11 — Remove obsolete routes, OpenAPI, edge mappings and scripts
+
+- **Livré dans cette branche (complément PR54/57)** : régression **`TestDiscoveryLegacyRoutesRemoved_IMM11`** + constantes **`internal/discoveryroutes/legacy_removed.go`** ; smoke deploy **`discovery-v1-http-smoke.sh`** (GET listes/context legacy → **404**) ; script bench TLS sur **`GET /discovery/v1/tls/scans`**.
 
 - **Branch:** `discovery/remove-obsolete-routes`
 - **Repositories:** `cafe-discovery`, `cafe-deploy` (edge/nginx), scripts/tests frontend si applicable.
