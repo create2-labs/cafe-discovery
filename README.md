@@ -66,6 +66,7 @@
       4. [POST /discovery/v1/scan](#post-discoveryv1scan)
       5. [GET /discovery/v1/wallets/scans](#get-discoveryv1walletsscans)
       6. [GET /discovery/v1/wallets/scans/:scan_id](#get-discoveryv1walletsscansscan_id)
+      7. [GET /discovery/v1/wallets/scans/:scan_id/cbom](#get-discoveryv1walletsscansscan_idcbom)
       7. [GET /discovery/v1/tls/scans](#get-discoveryv1tlsscans)
       8. [GET /discovery/v1/tls/scans/defaults](#get-discoveryv1tlsscansdefaults)
       9. [GET /discovery/v1/tls/scans/:scan_id](#get-discoveryv1tlsscansscan_id)
@@ -1520,6 +1521,18 @@ curl -X GET "http://localhost:8080/discovery/v1/wallets/scans/550e8400-e29b-41d4
 ```
 
 Address contract note: wallet addresses are accepted in any valid EVM hex casing, and Discovery returns canonical lowercase addresses in machine-oriented API fields.
+
+### GET /discovery/v1/wallets/scans/:scan_id/cbom
+
+Returns a CycloneDX v1.7 CBOM envelope for **this** `scan_id`, generated on read from persisted scan fields (not stored as a blob). Available only after a **terminal** lifecycle state (`completed` or `failed`). While the scan is `requested` or `started`, the API returns **409** with `SCAN_NOT_TERMINAL`.
+
+OpenAPI: [`openapi/discovery-v1.yaml`](openapi/discovery-v1.yaml) (`getWalletScanCbom`).
+
+Example:
+```bash
+curl -X GET "http://localhost:8080/discovery/v1/wallets/scans/550e8400-e29b-41d4-a716-446655440000/cbom" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
 
 ### GET /discovery/v1/tls/scans
 

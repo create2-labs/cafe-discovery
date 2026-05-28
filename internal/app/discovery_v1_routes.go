@@ -41,10 +41,12 @@ func registerDiscoveryV1Routes(
 	w.Post("/", wallets.CreateWallet)
 	if discovery != nil {
 		w.Get("/scans", discovery.ListDiscoveryV1WalletScans)
+		w.Get("/scans/:scan_id/cbom", discovery.GetDiscoveryV1WalletScanCBOM)
 		w.Get("/scans/:scan_id", discovery.GetDiscoveryV1WalletScan)
 		w.Delete("/scans/:scan_id", discovery.DeleteDiscoveryV1WalletScan)
 	} else {
 		w.Get("/scans", discoveryV1NotImplemented("GET "+discoveryroutes.WalletScans))
+		w.Get("/scans/:scan_id/cbom", discoveryV1NotImplemented("GET "+discoveryroutes.WalletScanCBOMByID(":scan_id")))
 		w.Get("/scans/:scan_id", discoveryV1NotImplemented("GET "+discoveryroutes.WalletScans+"/:scan_id"))
 		w.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE "+discoveryroutes.WalletScans+"/:scan_id"))
 	}
@@ -56,11 +58,13 @@ func registerDiscoveryV1Routes(
 	if tls != nil {
 		tlsGroup.Get("/scans", tls.ListDiscoveryV1TLSScans)
 		tlsGroup.Get("/scans/defaults", tls.ListDiscoveryV1TLSDefaultScans)
+		tlsGroup.Get("/scans/:scan_id/cbom", tls.GetDiscoveryV1TLSScanCBOM)
 		tlsGroup.Get("/scans/:scan_id", tls.GetDiscoveryV1TLSScan)
 		tlsGroup.Delete("/scans/:scan_id", tls.DeleteDiscoveryV1TLSScan)
 	} else {
 		tlsGroup.Get("/scans", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScans))
 		tlsGroup.Get("/scans/defaults", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScansDefaults))
+		tlsGroup.Get("/scans/:scan_id/cbom", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScanCBOMByID(":scan_id")))
 		tlsGroup.Get("/scans/:scan_id", discoveryV1NotImplemented("GET "+discoveryroutes.TLSScans+"/:scan_id"))
 		tlsGroup.Delete("/scans/:scan_id", discoveryV1NotImplemented("DELETE "+discoveryroutes.TLSScans+"/:scan_id"))
 	}
