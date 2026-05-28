@@ -243,6 +243,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /wallets/scans/{scan_id}/cbom:
+    parameters:
+      - $ref: "#/components/parameters/ScanId"
+    get:
+      tags: [wallet-scans]
+      summary: Get CycloneDX CBOM for a wallet scan execution
+      description: |
+        **W6** — CBOM is generated on read from persisted scan fields for **this** `scan_id`; it is
+        never stored as a blob. Owner-scoped; same access rules as scan detail. **409**
+        `SCAN_NOT_TERMINAL` while lifecycle is non-terminal (`requested`, `started`). Replaces the
+        removed `GET /discovery/cbom/*` address-keyed route.
+      operationId: getWalletScanCbom
+      responses:
+        "200":
+          description: CycloneDX CBOM envelope for the scan execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletCbomDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Scan exists but is not in a terminal lifecycle state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notTerminal:
+                  value:
+                    error: SCAN_NOT_TERMINAL
+                    message: CBOM is available only after the scan reaches a terminal state.
+
   /tls/scans:
     get:
       tags: [tls-scans]
@@ -336,6 +371,35 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Policy reference verification unavailable (fail-closed); see WORKPLAN_API_PR PR6.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tls/scans/{scan_id}/cbom:
+    parameters:
+      - $ref: "#/components/parameters/ScanId"
+    get:
+      tags: [tls-scans]
+      summary: Get CycloneDX CBOM for a TLS scan execution
+      description: |
+        Optional TLS sibling of wallet **W6**. CBOM generated on read for **this** `scan_id`; owner scans
+        and shared catalog defaults (`is_default` rows) use the same lookup as scan detail. **409**
+        `SCAN_NOT_TERMINAL` while non-terminal.
+      operationId: getTlsScanCbom
+      responses:
+        "200":
+          description: CycloneDX CBOM envelope for the TLS scan execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TlsCbomDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Scan exists but is not in a terminal lifecycle state.
           content:
             application/json:
               schema:
@@ -752,6 +816,69 @@ components:
           type: string
         curve:
           type: string
+
+    WalletCbomDocument:
+      type: object
+      description: |
+        CycloneDX CBOM envelope for a wallet scan execution (W6). Generated on read; not stored as a
+        blob. Top-level fields mirror the former `GET /discovery/cbom/{address}` response.
+      properties:
+        address:
+          type: string
+        type:
+          type: string
+        algorithm:
+          type: string
+        nist_level:
+          type: integer
+        key_exposed:
+          type: boolean
+        risk_score:
+          type: number
+          format: double
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        networks:
+          type: array
+          items:
+            type: string
+        scanned_at:
+          type: string
+          format: date-time
+        cbom:
+          type: object
+          description: CycloneDX v1.7 fragment (`bomFormat`, `components`, `metadata`, …).
+          additionalProperties: true
+      additionalProperties: true
+
+    TlsCbomDocument:
+      type: object
+      description: CycloneDX CBOM envelope for a TLS scan execution (W6 sibling).
+      properties:
+        url:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        protocol_version:
+          type: string
+        nist_level:
+          type: integer
+        risk_score:
+          type: number
+          format: double
+        scanned_at:
+          type: string
+          format: date-time
+        cbom:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
 
     PostScanRequest:
       oneOf:

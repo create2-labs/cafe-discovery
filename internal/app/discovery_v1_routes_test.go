@@ -61,6 +61,16 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
+	cbom := httptest.NewRequest("GET", discoveryroutes.WalletScanCBOMByID("550e8400-e29b-41d4-a716-446655440000"), nil)
+	respCbom, err := app.Test(cbom, -1)
+	if err != nil {
+		t.Fatalf("GET wallets/scans/:id/cbom: %v", err)
+	}
+	if respCbom.StatusCode != fiber.StatusNotImplemented {
+		t.Fatalf("GET .../wallets/scans/:id/cbom status = %d, want %d", respCbom.StatusCode, fiber.StatusNotImplemented)
+	}
+	_ = respCbom.Body.Close()
+
 	del := httptest.NewRequest("DELETE", discoveryroutes.WalletScanByID("550e8400-e29b-41d4-a716-446655440000"), nil)
 	respDel, err := app.Test(del, -1)
 	if err != nil {
@@ -102,6 +112,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 	for _, path := range []string{
 		discoveryroutes.TLSScans,
 		discoveryroutes.TLSScansDefaults,
+		discoveryroutes.TLSScanCBOMByID("550e8400-e29b-41d4-a716-446655440000"),
 		discoveryroutes.TLSScanByID("550e8400-e29b-41d4-a716-446655440000"),
 	} {
 		req := httptest.NewRequest("GET", path, nil)
