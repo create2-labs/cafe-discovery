@@ -1,6 +1,8 @@
 # Scan immutability — gap analysis & migration strategy (IMM-1)
 
-**Status:** **IMM-1** delivered in PR [#64](https://github.com/create2-labs/cafe-discovery/pull/64). Implementation sequence **IMM-2 → IMM-8** ; index DDL (**IMM-2**) au boot `cmd/persistence` (pas de package migration).
+**Status:** **IMM-1** delivered in PR [#64](https://github.com/create2-labs/cafe-discovery/pull/64). Implementation sequence **IMM-2 → IMM-8**; index DDL (**IMM-2**) applied at `cmd/persistence` startup (no separate migration package).
+
+> **English product summary:** [functional-specifications.md](https://github.com/create2-labs/cafe-documentation/blob/main/functional-specifications.md).
 
 **Product contract:** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/workplans/WORKPLAN_API.md) — **§2.2** (scan lifecycle, invariants, **W1–W8**), **§4.2.1** (list/detail envelopes).
 
@@ -35,7 +37,7 @@ This document records the gap, target invariants, **data migration policy**, Red
 | Latest completed (**W2**) | No `latest=true` query | `GET …/wallets/scans?address=&latest=true` → ≤1 **`completed`** |
 | POST scan guards (**W8**, **W1**) | No in-progress / CPM guards | **409** `SCAN_IN_PROGRESS` / `CPM_EXISTS_FOR_WALLET_TARGET` (IMM-4, IMM-9) |
 | CPM explore/persist (**W7**, **W2**) | No lifecycle guard | Newest row must be **`completed`**; persist only latest **`completed`** `scan_id` (IMM-10) |
-| CBOM (**W6**) | Legacy `/discovery/cbom/*` removed | `GET …/wallets/scans/{scan_id}/cbom` on demand (IMM-12) |
+| CBOM (**W6**) | CBOM not on legacy HTTP surface | `GET …/wallets/scans/{scan_id}/cbom` on demand (IMM-12) |
 | Redis | One key per **address** / **URL** | Accelerator only; v1 list/detail **Postgres-first** after IMM-5 |
 | Quotas | `CountByUserID` ≈ distinct targets | Count **executions** (IMM-6) |
 

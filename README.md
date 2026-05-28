@@ -74,8 +74,7 @@
       11. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
       12. [Option A: Discovery wallet scan v1 ↔ CPM contract](#option-a-discovery-wallet-scan-v1--cpm-contract)
       13. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
-      14. [Removed legacy Discovery routes](#removed-legacy-discovery-routes)
-      15. [GET /version](#get-version)
+      14. [GET /version](#get-version)
       16. [GET /health](#get-health)
       17. [GET /metrics](#get-metrics)
       18. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
@@ -1643,19 +1642,6 @@ Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Manag
 
 Discovery still publishes wallet **observations** on the bus; CPM owns the explicit `policy.assessment.requested.v0.1` command (see `cafe-crypto-policy-mgt` and WORKPLAN_API_PR **PR13g**).
 
-### Removed legacy Discovery routes
-
-The following routes are no longer primary API references and should not be used by frontend or integration scripts:
-
-- `POST /discovery/scan`
-- `GET /discovery/scans`
-- `GET /discovery/cbom/*`
-- **`GET /discovery/wallet-policy-contexts`** (historical façade **removed**; use **`GET /discovery/v1/wallets/scans`** + **`GET /discovery/v1/wallets/scans/{scan_id}`** — see **`docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md`**)
-- `POST /discovery/tls/scan`
-- `GET /discovery/tls/scans`
-
-Use the `/discovery/v1` routes above, and retrieve details by `scan_id`.
-
 ### GET /discovery/v1/rpcs
 
 Returns the list of configured RPC endpoints. **No authentication required.**
@@ -2343,6 +2329,8 @@ docker compose down
 
 ## Additional Resources
 
+- [CAFE functional specifications](https://github.com/create2-labs/cafe-documentation/blob/main/functional-specifications.md) — product behavior (English)
+- [CAFE technical specifications](https://github.com/create2-labs/cafe-documentation/blob/main/technical-specifications.md) — architecture and testing (English)
 - [Option A: Discovery v1 wallet scans ↔ CPM](docs/CPM_OPTION_A_DISCOVERY_V1_CONTRACT.md) — contract reference for **`policy_context`** and related CPM routes
 - [Scan immutability & migration strategy (IMM-1)](docs/SCAN_IMMUTABILITY_MIGRATION.md) — gap vs **WORKPLAN_API.md** §2.2, rollout **IMM-2…IMM-8**
 - [Scan immutability PR plan](IMMUTABILITE_PR.md) — per-PR branches and acceptance criteria

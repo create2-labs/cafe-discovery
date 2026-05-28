@@ -15,7 +15,7 @@ This document binds **Crypto Policy Management (CPM) Option A** flows to the **c
 | CPM `policy_context` validation (source of truth for mapping) | `cafe-crypto-policy-mgt/internal/api/explore_policy_context.go` ([GitHub](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/internal/api/explore_policy_context.go)) |
 | Observation vocabulary enums | [`cafe-contracts/observation/wallet/v01/vocabulary.go`](https://github.com/create2-labs/cafe-contracts/blob/main/observation/wallet/v01/vocabulary.go) |
 
-Historical note: **`GET /discovery/wallet-policy-contexts`** existed in an older integration path and was **removed** in favor of v1 (**PR11a** — see WORKPLAN_API_PR). Clients, scripts, and UI must **not** treat it as an active route.
+Historical note: **la façade policy-context historique** existed in an older integration path and was **removed** in favor of v1 (**PR11a** — see WORKPLAN_API_PR). Clients, scripts, and UI must **not** treat it as an active route.
 
 ---
 
@@ -94,5 +94,5 @@ Implementations **must** match **`parsePolicyContextFlexible`**, **`observationF
 ## 4. Reviewer checklist
 
 - Every row in **§3.1** traced to **`openapi/discovery-v1.yaml`** (`WalletScanDetail`, `WalletScanResult`, `ScanListItem`, `ScanLifecycleStatus`) and CPM **`explore_policy_context.go`**.
-- No documentation presents **`wallet-policy-contexts`** as a current public path without the **historical / removed** qualification.
+- No documentation presents **`façade policy-context (retirée)`** as a current public path without the **historical / removed** qualification.
 - **Explore** vs **assessment** body rules (**`policy_context`** required vs forbidden) repeated in onboarding copy wherever integrators choose HTTP routes.
