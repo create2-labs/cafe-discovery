@@ -441,70 +441,28 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 ---
 
-## Séquence recommandée
-
-```text
-IMM-1 (doc)
-   ↓
-IMM-2 (DB) + IMM-3 (writers)  ← release ATOMIQUE (IMM-8 runbook)
-   ↓
-IMM-4a (list filters)
-   ↓
-IMM-4b (latest=true / W2)      IMM-4c (POST in-flight / W8)
-   ↓
-IMM-9b (CPM lookup) → IMM-9 (POST guards)
-   ↓
-IMM-10 (CPM W7+W2)     IMM-12 (CBOM)
-   ↓
-IMM-11 (cleanup routes / edge / OpenAPI)
-   ↓
-IMM-7 (tests contract) ; IMM-5, IMM-6 en parallèle si besoin
-   ↓
-FE-IMM-1…5 (frontend, après backend stable)
-```
-
-**Merge train minimal :** IMM-1 → (**IMM-2 + IMM-3** atomique) → IMM-4a → IMM-4b + IMM-4c → IMM-9b → IMM-9 → IMM-10 → IMM-12 → **IMM-11** → IMM-7. **PR6** (DELETE + 409) : pas de PR IMM dédiée.
-
----
-
 ## Critères d’acceptation produit (fin de chaîne)
 
-**Historique & immutabilité (W5–W6)**
-
-- [ ] Sans CPM sur la cible : deux scans successifs → deux `scan_id` dans `GET /api/discovery/v1/wallets/scans?address=…`.
-- [ ] `GET /api/discovery/v1/wallets/scans/{scan_id}` : `result` stable après terminal ; `GET …/cbom` renvoie le CBOM de **ce** scan uniquement.
-- [ ] Aucune réponse API n’expose **`RUNNING`** ou **`running`** (lifecycle : **`started`**).
-
-**CPM & scan (W7, W1, W2)**
-
-- [ ] **`POST /api/discovery/v1/scan`** : newest `requested` \| `started` → **409** `SCAN_IN_PROGRESS`.
-- [ ] Newest `failed` + no policy/draft → scan **accepté** ; CPM explore/persist → **400** `LATEST_SCAN_NOT_COMPLETED`.
-- [ ] Newest `failed` + draft/policy → **409** `CPM_EXISTS_FOR_WALLET_TARGET` jusqu’à **`DELETE /api/cpm/v1/drafts?id=…`** / finalize policy.
-- [ ] **`completed` A + `failed` B** (B newer) : CPM **400** `LATEST_SCAN_NOT_COMPLETED` même pour `scan_id` A ; `POST …/scan` **OK** seulement si **W1** OK.
-- [ ] **W7** CPM : newest row via `limit=1` — **pas** `latest=true`.
-- [ ] **W2** CPM : `GET …/wallets/scans?address=&latest=true` — **pas** `limit=1` seul.
-- [ ] Historical `scan_id` → **400** `SCAN_ID_NOT_LATEST_FOR_TARGET`.
-- [ ] **`DELETE /api/cpm/v1/drafts?id=…`** contractualisé ; débloque rescan après suppression draft.
-- [ ] UX : export local → delete draft → scan → reload — [`IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md).
-
-**TLS**
-
-- [ ] TLS : historique Discovery + CBOM optionnel ; **pas** de cible CPM assessment/remediation produit actuel.
-- [ ] **`DELETE /api/discovery/v1/tls/scans/{scan_id}`** → **409** défensif si policy référence le `scan_id`.
-
-**Suppression (W3–W4)**
-
-- [ ] `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables.
-- [ ] `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → **409** `SCAN_REFERENCED_BY_POLICY`.
-- [ ] Après suppression policies : DELETE scan → **204**.
-
-**Cleanup (IMM-11)**
-
-- [ ] Anciennes routes (`/discovery/scans`, `/discovery/tls/scans`, `/discovery/cbom/*`, etc.) retirées code + edge + OpenAPI.
-
-**Doc**
-
-- [ ] `WORKPLAN_API.md` §2.2 W1–W7, §4.2.1, §5.4.6 à jour (source de vérité).
+|  | Domaine | Critère | Validation (test/script) |
+|---|---|---|---|
+| ✅ | Historique & immutabilité (W5–W6) | Sans CPM sur la cible : deux scans successifs → deux `scan_id` dans `GET /api/discovery/v1/wallets/scans?address=…`. | `internal/contract/wallet_scans_v1_test. go::TestDiscoveryV1WalletScans_twoExecutionsSameAddress_listContainsBoth` |
+| ✅ | Historique & immutabilité (W5–W6) | `GET /api/discovery/v1/wallets/scans/{scan_id}` : `result` stable après terminal ; `GET …/cbom` renvoie le CBOM de ce scan uniquement. | `internal/contract/wallet_scans_v1_test.go::TestDiscoveryV1WalletScans_historicalScanIDDetailIsStable`; `internal/handler/discovery_v1_cbom_test.go`; `cafe-deploy/scripts/test-discovery-imm12-wallet-scan-cbom.sh` |
+| ✅ | Historique & immutabilité (W5–W6) | Aucune réponse API n’expose `RUNNING`/`running` (lifecycle: `started`). | `internal/contract/wallet_scans_v1_test.go::TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions` |
+| ✅ | CPM & scan (W7, W1, W2) | `POST /api/discovery/v1/scan` : newest `requested` \| `started` → `409 SCAN_IN_PROGRESS`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletPendingRequested409`; `...WalletRunningRow409` |
+| ✅ | CPM & scan (W7, W1, W2) | Newest `failed` + no policy/draft → scan accepté ; CPM explore/persist → `400 LATEST_SCAN_NOT_COMPLETED`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletFailedNewestAccepted`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | Newest `failed` + draft/policy → `409 CPM_EXISTS_FOR_WALLET_TARGET` jusqu’à `DELETE /api/cpm/v1/drafts?id=…` / finalize policy. | partiel: `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft`; `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | `completed` A + `failed` B (B newer): CPM `400 LATEST_SCAN_NOT_COMPLETED` même pour `scan_id` A ; `POST …/scan` OK seulement si W1 OK. | `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
+| ✅ | CPM & scan (W7, W1, W2) | W7 CPM : newest row via `limit=1` (pas `latest=true`). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W7RejectsWhenNewestIsFailed`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | W2 CPM : `GET …/wallets/scans?address=&latest=true` (pas `limit=1` seul). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
+| ✅ | CPM & scan (W7, W1, W2) | Historical `scan_id` → `400 SCAN_ID_NOT_LATEST_FOR_TARGET`. | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | `DELETE /api/cpm/v1/drafts?id=…` contractualisé ; débloque rescan après suppression draft. | `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | UX : export local → delete draft → scan → reload. | N/A backend (validation frontend/manuelle) |
+| ⏳ | TLS | TLS : historique Discovery + CBOM optionnel ; pas de cible CPM assessment/remediation produit actuel. | `cafe-crypto-policy-mgt/internal/app/assessment_request_test.go::TestPoliciesAssessmentRequest_tlsScanNotFound`; `cafe-crypto-policy-mgt/internal/api/wallet_scan_detail_test.go::TestObservationPayloadFromDiscoveryWalletScanDetail_tlsRejected`; `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_ExploreRejectsTLSScanIDAsNotFound`; `...PersistRejectsTLSScanIDAsNotFound` |
+| ✅ | Suppression (W3–W4) | `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
+| ✅ | Suppression (W3–W4) | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → `409 SCAN_REFERENCED_BY_POLICY`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
+| ✅ | Suppression (W3–W4) | Après suppression policies : DELETE scan → `204`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
+| ✅ | Cleanup (IMM-11) | Anciennes routes (`/discovery/scans`, `/discovery/tls/scans`, `/discovery/cbom/*`, etc.) retirées code + edge + OpenAPI. | `cafe-deploy/scripts/lib/discovery-v1-http-smoke.sh` |
+| ✅ | Doc | `WORKPLAN_API.md` §2.2 W1–W7, §4.2.1, §5.4.6 à jour (source de vérité). | Vérification documentaire manuelle |
 
 ---
 
@@ -1167,17 +1125,6 @@ Document safe deployment order for scan history schema + persistence writer chan
 **Suggested branch:** `deploy/scan-history-migration-runbook`  
 **Suggested PR title:** `Deploy: runbook for Discovery scan history migration`
 
-### Test plan
-
-- [ ] Dry-run review with operator checklist
-- [ ] Post-deploy: list + detail v1 + optional CPM smoke on staging
-
-### Tracking
-
-| Field | Value |
-|-------|--------|
-| Issue | — |
-| PR | — |
 
 ---
 
