@@ -1,5 +1,7 @@
 # Scan immutability & history — PR plan (Discovery)
 
+> **English product summary:** [CAFE functional specifications](https://github.com/create2-labs/cafe-documentation/blob/main/functional-specifications.md) and [technical specifications](https://github.com/create2-labs/cafe-documentation/blob/main/technical-specifications.md). This file remains the **implementation PR tracker** (mixed FR/EN).
+
 **Propriétaire runtime :** `cafe-discovery` (API, persistence-service, Postgres, Redis cache scan).
 
 **Source de vérité (contrat produit) :** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) — **§0**, **§2.2** (invariants, couplage **W1–W7**), **§4.2.1**, **§5.4.6**, **§8.4–§8.8**. **Ce fichier** = découpage PR / écarts **implémentation** vs ce workplan.
@@ -73,7 +75,7 @@
 | **DELETE CPM** | Ne supprime pas le scan (déjà). | Inchangé (**règle 4**). |
 | **Quotas plan** | `CountByUserID` ≈ adresses uniques. | Compter exécutions ; re-scan rare (bloqué si CPM). |
 | **Redis** | Une clé par adresse. | Latest + historique Postgres ; **IMM-5**. |
-| **CBOM** | Route `/discovery/cbom/*` retirée. | **`GET …/wallets/scans/{scan_id}/cbom`** à la demande (**règle 6**). |
+| **CBOM** | Route CBOM historique retirée. | **`GET …/wallets/scans/{scan_id}/cbom`** à la demande (**règle 6**). |
 
 **Décision d’architecture :** l’**historique** est porté par **Postgres** (`scan_results`, `tls_scan_results`) avec **`id` = `scan_id`** ; Redis reste un **accélérateur** optionnel, pas la source de vérité v1.
 
@@ -102,7 +104,7 @@
 | **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
-| **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait anciennes routes, OpenAPI, edge, scripts. |
+| **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
 
 **Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8** → `cafe-deploy`, les autres → `cafe-discovery`).
 
@@ -420,17 +422,17 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 - **Repositories:** `cafe-discovery`, `cafe-deploy` (edge/nginx), scripts/tests frontend si applicable.
 - **Objective:** Retirer les surfaces obsolètes **après** disponibilité des routes cibles (**IMM-4a–4c**, **IMM-12**, CPM **§0.2**) — **avant** de considérer la chaîne IMM terminée.
 - **Scope:**
-  - Retirer ou confirmer le retrait de l’ancien **`GET /discovery/scans`** (liste par adresse).
-  - Retirer ou confirmer le retrait de l’ancien **`GET /discovery/tls/scans`** (liste par URL).
+  - Retirer ou confirmer le retrait de l’ancien **la liste wallet historique** (liste par adresse).
+  - Retirer ou confirmer le retrait de l’ancien **la liste TLS historique** (liste par URL).
   - Retirer les routes de détail ambiguës par adresse ou URL en path.
-  - Retirer **`GET /discovery/cbom/*`** si encore référencé.
-  - Décider explicitement du sort de **`GET /discovery/wallet-policy-contexts`** (supprimer si redondant avec `wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
+  - Retirer **CBOM historique** si encore référencé.
+  - Décider explicitement du sort de **la façade policy-context historique** (supprimer si redondant avec `wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
   - Nettoyer OpenAPI, README, edge/nginx, scripts smoke, tests frontend/backend.
 - **Dependencies:** IMM-4a–4c, IMM-12 ; CPM routes stables ; **IMM-9**/**IMM-10** pour erreurs documentées.
 - **Out of scope:** Nouvelles fonctionnalités API.
 - **Proposed commit title:** `chore: remove obsolete discovery routes and align edge/OpenAPI`
 - **Proposed PR title:** `Discovery IMM-11: remove obsolete routes, edge mappings and scripts`
-- **Completion criteria:** Anciennes routes non routées ; OpenAPI et edge alignés **§0** ; tests QA mis à jour.
+- **Completion criteria:** Routes hors contrat §0 non routées ; OpenAPI et edge alignés **§0** ; tests QA mis à jour.
 
 ---
 
@@ -461,7 +463,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 | ✅ | Suppression (W3–W4) | `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
 | ✅ | Suppression (W3–W4) | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → `409 SCAN_REFERENCED_BY_POLICY`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
 | ✅ | Suppression (W3–W4) | Après suppression policies : DELETE scan → `204`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
-| ✅ | Cleanup (IMM-11) | Anciennes routes (`/discovery/scans`, `/discovery/tls/scans`, `/discovery/cbom/*`, etc.) retirées code + edge + OpenAPI. | `cafe-deploy/scripts/lib/discovery-v1-http-smoke.sh` |
+| ✅ | Cleanup (IMM-11) | Routes hors contrat §0 retirées (code + edge + OpenAPI). | `cafe-deploy/scripts/lib/discovery-v1-http-smoke.sh` |
 | ✅ | Doc | `WORKPLAN_API.md` §2.2 W1–W7, §4.2.1, §5.4.6 à jour (source de vérité). | Vérification documentaire manuelle |
 
 ---
@@ -1280,7 +1282,7 @@ Discovery **IMM-4b** (`latest=true`) and **IMM-4a** (multi-row history).
 
 ### Summary
 
-Expose CycloneDX CBOM per wallet scan via v1 API. CBOM is **generated on read** from persisted scan fields (`ToCBOM()`), not stored. Restores user-facing CBOM per historical `scan_id` after PR13c removed `/discovery/cbom/*`.
+Expose CycloneDX CBOM per wallet scan via v1 API. CBOM is **generated on read** from persisted scan fields (`ToCBOM()`), not stored. Restores user-facing CBOM per historical `scan_id` after PR13c removed CBOM historique.
 
 ### Acceptance criteria
 
@@ -1336,11 +1338,11 @@ After target routes are available (**IMM-4a–4c**, **IMM-12**, CPM **§0.2**), 
 
 ### Scope
 
-- Remove or confirm removal of legacy **`GET /discovery/scans`** (list by address).
-- Remove or confirm removal of legacy **`GET /discovery/tls/scans`** (list by URL).
+- Remove or confirm removal of legacy **la liste wallet historique** (list by address).
+- Remove or confirm removal of legacy **la liste TLS historique** (list by URL).
 - Remove ambiguous detail routes by address or URL in path.
-- Remove **`GET /discovery/cbom/*`** if still referenced.
-- Explicit decision on **`GET /discovery/wallet-policy-contexts`** (remove if redundant with `GET /api/discovery/v1/wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
+- Remove **CBOM historique** if still referenced.
+- Explicit decision on **la façade policy-context historique** (remove if redundant with `GET /api/discovery/v1/wallets/scans` + `GET /api/cpm/v1/policies?scan_id=`).
 - Clean OpenAPI, README, edge/nginx, smoke scripts, frontend/backend tests.
 
 ### Acceptance criteria
