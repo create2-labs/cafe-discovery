@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown, branche `discovery/plan-usage-api-breakdown`) ; **IMM-6b-6…8** + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown, branche `discovery/plan-usage-api-breakdown`) ; **IMM-6b-6** (backfill ledger — **annulé**, pas de prod + reset DB) ; **IMM-6b-7…8** + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
 
 ---
 
@@ -104,7 +104,7 @@
 | **IMM-6b-3** | `discovery/plan-post-scan-guards` | `cafe-discovery` | [#85](https://github.com/create2-labs/cafe-discovery/pull/85) | **IMM-6b-2** | POST : **`successful + in_flight < limit`** + cap **`min(limit, 3)`**. |
 | **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | [#86](https://github.com/create2-labs/cafe-discovery/pull/86) | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
 | **IMM-6b-5** | `discovery/plan-usage-api-breakdown` | `cafe-discovery` | [#87](https://github.com/create2-labs/cafe-discovery/pull/87) | **IMM-6b-4** | **`GET /plans/usage`** : `used` / `visible` / `deleted_by_user`. |
-| **IMM-6b-6** | `discovery/plan-usage-backfill` | `cafe-discovery` | — | **IMM-6b-2** | Backfill ledger depuis lignes **`completed` success** uniquement. |
+| **IMM-6b-6** | `discovery/plan-usage-backfill` | `cafe-discovery` | — | **IMM-6b-2** | ~~Backfill ledger~~ **annulé** (pas de prod ; reset DB ; ledger rempli par IMM-6b-4 à partir du go-live). |
 | **IMM-6b-7** | `discovery/cbom-success-only` | `cafe-discovery` | — | **IMM-12** | CBOM **404** si scan ≠ **`completed` success** (W6 / P1). |
 | **IMM-6b-8** | `discovery/plan-quota-integration-tests` | `cafe-discovery` | — | **IMM-6b-3…7** | Tests race, monotonic DELETE, CBOM, stub limit. |
 | **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
@@ -184,8 +184,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 | `internal/persistence/handlers/scan_events.go` | **IMM-6b-4** : commit atomique `scan.completed` — ledger + success ou stub `PLAN_LIMIT_EXCEEDED`. |
 | `internal/persistence/planlimit/resolver.go` | **IMM-6b-4** : résolution limites plan pour persistence completion. |
 | `pkg/scan/quota.go` | **IMM-6b-4** : constante `PLAN_LIMIT_EXCEEDED`. |
-| Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` G1/G2 + parité SQL Postgres (optionnel). |
-| Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` commit G3 + parité SQL slot-at-limit (optionnel). |
+| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..6}-*.sh`, `test-discovery-imm6b-all.sh` | `--software` \| `--postgres` \| `--api` \| `--all` (aucun test sans flag) ; libs `scripts/lib/imm6b-*.sh` |
 | `internal/persistence/storage/postgres.go` | **IMM-3** : insert/update par `scan_id` ; **IMM-6b-4** : `OnCompletedInTx`, `OnPlanLimitExceededInTx`. |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
@@ -480,7 +479,7 @@ DELETE scan (success row)
 - **Dependencies:** **IMM-6b-2**
 - **Proposed commit title:** `plan: atomic success slot on scan completed with stripped over-limit failure`
 - **Completion criteria:** 2 completions concurrentes à limit−1 → 1 success riche + 1 failed stub ; stub **GET detail** sans données bypass ; ledger +1 seulement pour le success.
-- **Smoke:** `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh`
+- **Smoke:** `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` (`--software` \| `--postgres` \| `--api` \| `--all`)
 
 ### IMM-6b-5 — API `GET /plans/usage` (used / visible / deleted)
 
@@ -499,15 +498,9 @@ DELETE scan (success row)
 
 ### IMM-6b-6 — Backfill ledger (success historiques)
 
-- **Status:** à faire
-- **Branch:** `discovery/plan-usage-backfill`
-- **Repository:** `cafe-discovery`
-- **Objective:** Insérer events pour lignes **`status = success/completed`** existantes (**incl. soft-deleted**).
-- **Scope:** Job one-shot idempotent au boot ou script maintenance.
-- **Out of scope:** Lignes **`failed`**, **`plan_limit_exceeded`**, in-flight.
-- **Dependencies:** **IMM-6b-2**
-- **Proposed commit title:** `plan: backfill scan usage ledger from historical successes`
-- **Completion criteria:** `used` post-backfill ≥ succès Postgres ; pas de doublons **`scan_id`**.
+- **Status:** **annulé** — pas de données prod à migrer ; environnements cibles = **reset DB** puis ledger alimenté uniquement par **IMM-6b-4** (complétions success après go-live).
+- **Branch:** ~~`discovery/plan-usage-backfill`~~
+- **Décision:** ne pas exécuter de backfill au boot persistence ni script maintenance ; évite complexité smoke/restart pour un cas absent.
 
 ### IMM-6b-7 — CBOM success-only (W6 / P1)
 
@@ -1581,7 +1574,7 @@ New API features.
 
 Replace row-count quota (**IMM-6**) with success-only ledger (**IMM-6b**). **P1:** usage counts **completed successes** only; never decreases on DELETE. **G1–G4:** POST guards (`successful + in_flight < limit`, cap `min(limit,3)`), atomic commit on completion, stripped failure if over limit (keep address), CBOM success-only.
 
-**PR sequence:** IMM-6b-1 (schema) → IMM-6b-2 (repo) → IMM-6b-3 (POST guards) → IMM-6b-4 (persistence commit) → IMM-6b-5 (usage API) → IMM-6b-6 (backfill) → IMM-6b-7 (CBOM) → IMM-6b-8 (tests).
+**PR sequence:** IMM-6b-1 (schema) → IMM-6b-2 (repo) → IMM-6b-3 (POST guards) → IMM-6b-4 (persistence commit) → IMM-6b-5 (usage API) → ~~IMM-6b-6 (backfill, annulé)~~ → IMM-6b-7 (CBOM) → IMM-6b-8 (tests).
 
 See [IMM-6b section](#imm-6b--quotas-plan--ledger-success-only-garde-post-commit-atomique-option-b).
 

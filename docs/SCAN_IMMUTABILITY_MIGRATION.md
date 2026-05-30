@@ -111,11 +111,8 @@ sequenceDiagram
 | Ledger repository | `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : `RecordSuccessUsage`, compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`, `RecordSuccessUsageIfUnderLimitInTx` |
 | POST plan guards | `internal/service/plan.go` (`CheckPostScanQuota`), `internal/handler/discovery.go` | **IMM-6b-3** : **G1** `successful+in_flight<limit` ; **G2** `in_flight<min(limit,3)` (illimité → cap 3) |
 | Persistence completion quota | `internal/persistence/handlers/scan_events.go`, `internal/persistence/storage/postgres.go` | **IMM-6b-4** : transaction `RecordSuccessUsageIfUnderLimitInTx` + rich success **or** stub `PLAN_LIMIT_EXCEEDED` (no Redis rich write) |
-| Smoke IMM-6b-2 | `cafe-deploy/scripts/test-discovery-imm6b2-ledger-repo.sh` | `go test -run ScanUsageLedger` + parité SQL Postgres (optionnel) |
-| Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` POST guards + parité SQL G1/G2 (optionnel) |
-| Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` persistence G3 commit + parité SQL slot-at-limit (optionnel) |
 | Usage API breakdown | `internal/service/plan.go`, `internal/handler/plan.go` | **IMM-6b-5** : `GET /plans/usage` — `used` (ledger), `visible`, `deleted_by_user`, `in_flight` |
-| Smoke IMM-6b-5 | `cafe-deploy/scripts/test-discovery-imm6b5-usage-api-breakdown.sh` | `go test` usage breakdown + parité SQL DELETE → used stable + **HTTP E2E** `GET /plans/usage` (optionnel) |
+| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..5}-*.sh` | Modes explicites : `--software`, `--postgres`, `--api`, `--all` ; suite : `test-discovery-imm6b-all.sh` (IMM-6b-6 backfill annulé) |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |
@@ -160,6 +157,10 @@ Re-scans that already ran under the **upsert** model **overwrote** the previous 
 ### 6.2 Existing environments (one row per target)
 
 No data migration script is required before IMM-2 for typical deployments: each `(user_id, address)` / `(user_id, url)` already has **at most one** row. IMM-2 only relaxes the constraint for **future** inserts.
+
+### 6.2.1 Ledger backfill (**IMM-6b-6**) — cancelled
+
+No production data to migrate; target deployments use a **Postgres reset** before go-live. **`scan_usage_events`** is populated only by **IMM-6b-4** on new successful completions (no boot backfill in persistence).
 
 ### 6.3 CPM policies referencing old `scan_id`
 
