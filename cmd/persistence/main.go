@@ -58,23 +58,6 @@ func main() {
 		}
 	}
 
-	// IMM-6b-6: idempotent ledger backfill for historical completed-success rows (incl. soft-deleted).
-	if backfill, err := repository.BackfillScanUsageLedgerFromHistoricalSuccesses(db.GetDB()); err != nil {
-		log.Fatal().Err(err).Msg("scan usage ledger backfill failed")
-	} else if backfill.WalletInserted > 0 || backfill.EndpointInserted > 0 {
-		log.Info().
-			Int64("wallet_candidates", backfill.WalletCandidates).
-			Int64("wallet_inserted", backfill.WalletInserted).
-			Int64("endpoint_candidates", backfill.EndpointCandidates).
-			Int64("endpoint_inserted", backfill.EndpointInserted).
-			Msg("scan usage ledger backfill applied")
-	} else {
-		log.Debug().
-			Int64("wallet_candidates", backfill.WalletCandidates).
-			Int64("endpoint_candidates", backfill.EndpointCandidates).
-			Msg("scan usage ledger backfill up to date")
-	}
-
 	// Redis
 	redis, err := redisconn.New()
 	if err != nil {

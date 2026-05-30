@@ -106,18 +106,13 @@ sequenceDiagram
 
 | Component | File | Behaviour |
 |-----------|------|-----------|
-| Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup ; **IMM-6b-1** : `scan_usage_events` ledger + `(user_id, scan_kind)` index ; **IMM-6b-6** : ledger backfill at boot |
+| Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup ; **IMM-6b-1** : `scan_usage_events` ledger + `(user_id, scan_kind)` index |
 | Ledger entity | `internal/domain/scan_usage_event.go` | Append-only quota ledger (**IMM-6b-1**); writes on success completion (**IMM-6b-4**, [#85](https://github.com/create2-labs/cafe-discovery/pull/85)) |
 | Ledger repository | `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : `RecordSuccessUsage`, compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`, `RecordSuccessUsageIfUnderLimitInTx` |
 | POST plan guards | `internal/service/plan.go` (`CheckPostScanQuota`), `internal/handler/discovery.go` | **IMM-6b-3** : **G1** `successful+in_flight<limit` ; **G2** `in_flight<min(limit,3)` (illimité → cap 3) |
 | Persistence completion quota | `internal/persistence/handlers/scan_events.go`, `internal/persistence/storage/postgres.go` | **IMM-6b-4** : transaction `RecordSuccessUsageIfUnderLimitInTx` + rich success **or** stub `PLAN_LIMIT_EXCEEDED` (no Redis rich write) |
 | Usage API breakdown | `internal/service/plan.go`, `internal/handler/plan.go` | **IMM-6b-5** : `GET /plans/usage` — `used` (ledger), `visible`, `deleted_by_user`, `in_flight` |
-| Ledger backfill | `internal/repository/scan_usage_ledger_backfill.go`, `cmd/persistence/main.go` | **IMM-6b-6** : idempotent boot backfill from historical `SUCCESS` rows (incl. soft-deleted) |
-| Smoke IMM-6b-2 | `cafe-deploy/scripts/test-discovery-imm6b2-ledger-repo.sh` | `go test -run ScanUsageLedger` + parité SQL Postgres (optionnel) |
-| Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` POST guards + parité SQL G1/G2 (optionnel) |
-| Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` persistence G3 commit + parité SQL slot-at-limit (optionnel) |
-| Smoke IMM-6b-5 | `cafe-deploy/scripts/test-discovery-imm6b5-usage-api-breakdown.sh` | `go test` usage breakdown + parité SQL DELETE → used stable + **HTTP E2E** `GET /plans/usage` (optionnel). |
-| Smoke IMM-6b-6 | `cafe-deploy/scripts/test-discovery-imm6b6-usage-backfill.sh` | `go test` backfill idempotent + parité SQL used ≥ succès Postgres (optionnel). |
+| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..5}-*.sh` | Modes explicites : `--software`, `--postgres`, `--api`, `--all` ; suite : `test-discovery-imm6b-all.sh` (IMM-6b-6 backfill annulé) |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |
@@ -163,9 +158,9 @@ Re-scans that already ran under the **upsert** model **overwrote** the previous 
 
 No data migration script is required before IMM-2 for typical deployments: each `(user_id, address)` / `(user_id, url)` already has **at most one** row. IMM-2 only relaxes the constraint for **future** inserts.
 
-### 6.2.1 Ledger backfill (**IMM-6b-6**, [#88](https://github.com/create2-labs/cafe-discovery/pull/88))
+### 6.2.1 Ledger backfill (**IMM-6b-6**) — cancelled
 
-Distinct from §6.1 (no reconstruction of **lost** scan rows): **IMM-6b-6** inserts **`scan_usage_events`** for **`SUCCESS`** rows that already exist in Postgres (including soft-deleted), so **`GET /plans/usage`** `used` matches historical successful completions after deploying **IMM-6b-4**. Idempotent at **persistence-service** boot (`BackfillScanUsageLedgerFromHistoricalSuccesses`); excludes `FAILED`, `PLAN_LIMIT_EXCEEDED`, in-flight, and default TLS endpoints. Smoke: `cafe-deploy/scripts/test-discovery-imm6b6-usage-backfill.sh`.
+No production data to migrate; target deployments use a **Postgres reset** before go-live. **`scan_usage_events`** is populated only by **IMM-6b-4** on new successful completions (no boot backfill in persistence).
 
 ### 6.3 CPM policies referencing old `scan_id`
 

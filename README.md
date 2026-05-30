@@ -1633,6 +1633,8 @@ Product invariants (**`scan_id`** stable per row, immutable terminal **`result`*
 
 Implementation is split across PRs **IMM-1…IMM-12** in **[`IMMUTABILITE_PR.md`](IMMUTABILITE_PR.md)**. Gap analysis, **no-backfill** data policy, Redis vs Postgres roles, and deployment ordering: **[`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)** (IMM-1). Start **IMM-2** only after that document is reviewed.
 
+**IMM-6b smoke scripts** (plan quota ledger, guards, usage API) live in sibling repo **`cafe-deploy/scripts/`** — not run by default; pass explicit modes: `--software` (go test + vet + vuln + lint), `--postgres`, `--api`, or `--all`. Suite: `test-discovery-imm6b-all.sh`. IMM-6b-6 ledger backfill was cancelled (no prod data; DB reset). See **`cafe-deploy/README.md`** § *Discovery/CPM smoke scripts*.
+
 ### Policy assessment (CPM-owned)
 
 Policy assessment HTTP is **not** served by Discovery. Use **Crypto Policy Management (CPM)**:
@@ -1951,7 +1953,7 @@ Get the current user's subscription plan.
 
 #### GET /plans/usage
 
-Get current usage statistics for the authenticated user. Counts follow the **success-only ledger** (IMM-6b P1): `used` never decreases when a user deletes a scan from history. On deploy, **persistence-service** backfills ledger rows for pre-existing successful scans (**IMM-6b-6**).
+Get current usage statistics for the authenticated user. Counts follow the **success-only ledger** (IMM-6b P1): `used` never decreases when a user deletes a scan from history. Ledger rows are written on each successful scan completion (**IMM-6b-4**).
 
 **Authentication**: Required (JWT token)
 
