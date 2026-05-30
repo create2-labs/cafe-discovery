@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"encoding/binary"
 	"errors"
 	"time"
 
@@ -202,8 +201,8 @@ func lockUserKindQuota(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind)
 
 // userKindAdvisoryLockKey returns two int4 keys for pg_advisory_xact_lock(int, int).
 func userKindAdvisoryLockKey(userID uuid.UUID, kind domain.ScanUsageKind) (int32, int32) {
-	k1 := int32(binary.BigEndian.Uint32(userID[0:4]) & 0x7fffffff)
-	k2 := int32(binary.BigEndian.Uint32(userID[4:8]) & 0x7fffffff)
+	k1 := uuidBytesToLockKeyInt32(userID[0:4])
+	k2 := uuidBytesToLockKeyInt32(userID[4:8])
 	var mix int32
 	switch kind {
 	case domain.ScanUsageKindWallet:
@@ -214,4 +213,9 @@ func userKindAdvisoryLockKey(userID uuid.UUID, kind domain.ScanUsageKind) (int32
 		mix = 3
 	}
 	return k1, k2 ^ mix
+}
+
+// uuidBytesToLockKeyInt32 folds four UUID bytes into a stable int32 without uint32 casts (gosec G115).
+func uuidBytesToLockKeyInt32(b []byte) int32 {
+	return int32(b[0])<<24 | int32(b[1])<<16 | int32(b[2])<<8 | int32(b[3])
 }
