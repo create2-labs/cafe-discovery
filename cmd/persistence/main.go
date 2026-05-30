@@ -12,8 +12,10 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/persistence/handlers"
+	"cafe-discovery/internal/persistence/planlimit"
 	persistenceNats "cafe-discovery/internal/persistence/nats"
 	persistenceStorage "cafe-discovery/internal/persistence/storage"
+	"cafe-discovery/internal/repository"
 	natsconn "cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
@@ -87,7 +89,15 @@ func main() {
 	tlsWriter := persistenceStorage.NewTLSWriter(db.GetDB())
 	walletWriter := persistenceStorage.NewWalletWriter(db.GetDB())
 	cache := persistenceStorage.NewRedisCache(redis)
-	scanHandler := handlers.NewScanEventHandler(tlsWriter, walletWriter, cache, nc, cfgChain.ChainIDByNetwork())
+	ledgerRepo := repository.NewScanUsageLedgerRepository(db.GetDB())
+	planLimits := planlimit.NewResolver(
+		repository.NewUserRepository(db.GetDB()),
+		repository.NewPlanRepository(db.GetDB()),
+	)
+	scanHandler := handlers.NewScanEventHandler(
+		tlsWriter, walletWriter, cache, nc, cfgChain.ChainIDByNetwork(),
+		db.GetDB(), ledgerRepo, planLimits,
+	)
 
 	subs, err := persistenceNats.SubscribeScanEvents(nc, scanHandler)
 	if err != nil {

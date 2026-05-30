@@ -52,15 +52,38 @@ func (w *TLSWriter) OnStarted(scanID uuid.UUID, userID *uuid.UUID, url string) e
 
 // OnCompleted updates the row by scan_id; inserts on replay when the row is missing.
 func (w *TLSWriter) OnCompleted(scanID uuid.UUID, entity *domain.TLSScanResultEntity) error {
+	return w.OnCompletedInTx(w.db, scanID, entity)
+}
+
+// OnCompletedInTx is the transactional variant of OnCompleted.
+func (w *TLSWriter) OnCompletedInTx(tx *gorm.DB, scanID uuid.UUID, entity *domain.TLSScanResultEntity) error {
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
-	res := w.db.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
+	res := tx.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return w.db.Create(entity).Error
+		return tx.Create(entity).Error
+	}
+	return nil
+}
+
+// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3).
+func (w *TLSWriter) OnPlanLimitExceededInTx(tx *gorm.DB, scanID uuid.UUID, userID *uuid.UUID, url string) error {
+	stub := &domain.TLSScanResultEntity{
+		ID: scanID, UserID: userID, URL: url, Host: "", Port: 0,
+		ProtocolVersion: "unknown", NISTLevel: domain.NISTLevel1,
+		RiskScore: 0, PQCRisk: "unknown", Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
+		Certificate: "", CipherSuites: "[]", SupportedPQCs: "[]", Recommendations: "[]", NISTLevels: "{}",
+	}
+	res := tx.Model(stub).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(stub)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return tx.Create(stub).Error
 	}
 	return nil
 }
@@ -130,15 +153,38 @@ func (w *WalletWriter) OnStarted(scanID, userID uuid.UUID, address string) error
 
 // OnCompleted updates the row by scan_id; inserts on replay when the row is missing.
 func (w *WalletWriter) OnCompleted(scanID uuid.UUID, entity *domain.ScanResultEntity) error {
+	return w.OnCompletedInTx(w.db, scanID, entity)
+}
+
+// OnCompletedInTx is the transactional variant of OnCompleted.
+func (w *WalletWriter) OnCompletedInTx(tx *gorm.DB, scanID uuid.UUID, entity *domain.ScanResultEntity) error {
 	entity.ID = scanID
 	entity.Status = scan.StateSUCCESS
 	entity.Error = ""
-	res := w.db.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
+	res := tx.Model(entity).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(entity)
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return w.db.Create(entity).Error
+		return tx.Create(entity).Error
+	}
+	return nil
+}
+
+// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3).
+func (w *WalletWriter) OnPlanLimitExceededInTx(tx *gorm.DB, scanID, userID uuid.UUID, address string) error {
+	stub := &domain.ScanResultEntity{
+		ID: scanID, UserID: userID, Address: address, Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+		KeyExposed: false, IsEOA: true, IsERC4337: false, RiskScore: 0,
+		Networks: "[]", Connections: "[]",
+	}
+	res := tx.Model(stub).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(stub)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return tx.Create(stub).Error
 	}
 	return nil
 }

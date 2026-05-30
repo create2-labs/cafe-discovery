@@ -107,11 +107,13 @@ sequenceDiagram
 | Component | File | Behaviour |
 |-----------|------|-----------|
 | Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup ; **IMM-6b-1** : `scan_usage_events` ledger + `(user_id, scan_kind)` index |
-| Ledger entity | `internal/domain/scan_usage_event.go` | Append-only quota ledger (**IMM-6b-1**); writes in **IMM-6b-4** |
-| Ledger repository | `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : `RecordSuccessUsage`, compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot` |
+| Ledger entity | `internal/domain/scan_usage_event.go` | Append-only quota ledger (**IMM-6b-1**); writes on success completion (**IMM-6b-4**, [#85](https://github.com/create2-labs/cafe-discovery/pull/85)) |
+| Ledger repository | `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : `RecordSuccessUsage`, compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`, `RecordSuccessUsageIfUnderLimitInTx` |
 | POST plan guards | `internal/service/plan.go` (`CheckPostScanQuota`), `internal/handler/discovery.go` | **IMM-6b-3** : **G1** `successful+in_flight<limit` ; **G2** `in_flight<min(limit,3)` (illimité → cap 3) |
+| Persistence completion quota | `internal/persistence/handlers/scan_events.go`, `internal/persistence/storage/postgres.go` | **IMM-6b-4** : transaction `RecordSuccessUsageIfUnderLimitInTx` + rich success **or** stub `PLAN_LIMIT_EXCEEDED` (no Redis rich write) |
 | Smoke IMM-6b-2 | `cafe-deploy/scripts/test-discovery-imm6b2-ledger-repo.sh` | `go test -run ScanUsageLedger` + parité SQL Postgres (optionnel) |
 | Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` POST guards + parité SQL G1/G2 (optionnel) |
+| Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` persistence G3 commit + parité SQL slot-at-limit (optionnel) |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |

@@ -6,13 +6,16 @@ import (
 	"time"
 
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/persistence/planlimit"
 	"cafe-discovery/internal/persistence/storage"
+	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/walletobservation"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 type ScanEventHandler struct {
@@ -21,17 +24,32 @@ type ScanEventHandler struct {
 	redisCache        *storage.RedisCache
 	natsConn          nats.Connection  // optional: when set, publish scan.ready after writing to Redis so API can return result on GET
 	chainIDsByNetwork map[string]int64 // blockchains[].name → chain_id; optional, from config.ChainConfig.ChainIDByNetwork()
+	db                *gorm.DB
+	ledger            repository.ScanUsageLedgerRepository
+	planLimits        *planlimit.Resolver
 }
 
 const IGNORE_SCAN_MSG = "unknown scan kind, ignoring"
 
-func NewScanEventHandler(tlsWriter *storage.TLSWriter, walletWriter *storage.WalletWriter, redisCache *storage.RedisCache, natsConn nats.Connection, chainIDsByNetwork map[string]int64) *ScanEventHandler {
+func NewScanEventHandler(
+	tlsWriter *storage.TLSWriter,
+	walletWriter *storage.WalletWriter,
+	redisCache *storage.RedisCache,
+	natsConn nats.Connection,
+	chainIDsByNetwork map[string]int64,
+	db *gorm.DB,
+	ledger repository.ScanUsageLedgerRepository,
+	planLimits *planlimit.Resolver,
+) *ScanEventHandler {
 	return &ScanEventHandler{
 		tlsWriter:         tlsWriter,
 		walletWriter:      walletWriter,
 		redisCache:        redisCache,
 		natsConn:          natsConn,
 		chainIDsByNetwork: chainIDsByNetwork,
+		db:                db,
+		ledger:            ledger,
+		planLimits:        planLimits,
 	}
 }
 
@@ -115,9 +133,14 @@ func (h *ScanEventHandler) handleTLSCompleted(ctx context.Context, msg *nats.Sca
 	}
 	entity := domain.FromTLSScanResult(userID, &result, result.Default)
 	entity.ID = msg.ScanID
-	if err := h.tlsWriter.OnCompleted(msg.ScanID, entity); err != nil {
-		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: OnCompleted TLS failed")
+	acquired, err := h.commitTLSCompletion(msg, entity, &result)
+	if err != nil {
+		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: commit TLS completion failed")
 		return err
+	}
+	if !acquired {
+		h.publishScanReady(msg.UserID, "tls", msg.Endpoint, "", "failed")
+		return nil
 	}
 	if err := h.redisCache.SaveTLSScan(ctx, msg.UserID, msg.Endpoint, &result); err != nil {
 		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: Redis TLS write failed")
@@ -161,9 +184,19 @@ func (h *ScanEventHandler) handleWalletCompleted(ctx context.Context, msg *nats.
 	log.Debug().Str("scan_id", msg.ScanID.String()).Msg("persistence: wallet result decoded OK")
 	entity := domain.FromScanResult(msg.UserID, &result)
 	entity.ID = msg.ScanID
-	if err := h.walletWriter.OnCompleted(msg.ScanID, entity); err != nil {
-		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: OnCompleted wallet failed")
+	acquired, err := h.commitWalletCompletion(msg, entity, &result)
+	if err != nil {
+		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: commit wallet completion failed")
 		return err
+	}
+	if !acquired {
+		log.Warn().
+			Str("scan_id", msg.ScanID.String()).
+			Str("user_id", msg.UserID.String()).
+			Str("address", msg.Address).
+			Msg("persistence: wallet completion rejected (plan limit exceeded), stub persisted")
+		h.publishScanReady(msg.UserID, "wallet", "", msg.Address, "failed")
+		return nil
 	}
 	log.Info().
 		Str("scan_id", msg.ScanID.String()).
@@ -216,6 +249,107 @@ func (h *ScanEventHandler) decodeResult(in interface{}, out interface{}) error {
 		return err
 	}
 	return json.Unmarshal(b, out)
+}
+
+func (h *ScanEventHandler) commitWalletCompletion(
+	msg *nats.ScanCompletedMessage,
+	entity *domain.ScanResultEntity,
+	result *domain.ScanResult,
+) (acquired bool, err error) {
+	if msg.UserID == uuid.Nil || h.db == nil || h.ledger == nil || h.planLimits == nil {
+		if err := h.walletWriter.OnCompleted(msg.ScanID, entity); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	limit, unlimited, err := h.planLimits.ScanLimit(msg.UserID, domain.ScanUsageKindWallet)
+	if err != nil {
+		return false, err
+	}
+
+	address := msg.Address
+	if address == "" {
+		address = entity.Address
+	}
+	if address == "" && result != nil {
+		address = result.Address
+	}
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if unlimited {
+			if err := h.ledger.RecordSuccessUsageInTx(tx, msg.UserID, msg.ScanID, domain.ScanUsageKindWallet); err != nil {
+				return err
+			}
+			acquired = true
+			return h.walletWriter.OnCompletedInTx(tx, msg.ScanID, entity)
+		}
+		var slotErr error
+		acquired, slotErr = h.ledger.RecordSuccessUsageIfUnderLimitInTx(
+			tx, msg.UserID, msg.ScanID, domain.ScanUsageKindWallet, limit,
+		)
+		if slotErr != nil {
+			return slotErr
+		}
+		if acquired {
+			return h.walletWriter.OnCompletedInTx(tx, msg.ScanID, entity)
+		}
+		return h.walletWriter.OnPlanLimitExceededInTx(tx, msg.ScanID, msg.UserID, address)
+	})
+	return acquired, err
+}
+
+func (h *ScanEventHandler) commitTLSCompletion(
+	msg *nats.ScanCompletedMessage,
+	entity *domain.TLSScanResultEntity,
+	result *domain.TLSScanResult,
+) (acquired bool, err error) {
+	if msg.UserID == uuid.Nil || h.db == nil || h.ledger == nil || h.planLimits == nil {
+		if err := h.tlsWriter.OnCompleted(msg.ScanID, entity); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	limit, unlimited, err := h.planLimits.ScanLimit(msg.UserID, domain.ScanUsageKindEndpoint)
+	if err != nil {
+		return false, err
+	}
+
+	url := msg.Endpoint
+	if url == "" && result != nil {
+		url = result.URL
+	}
+	if url == "" {
+		url = entity.URL
+	}
+
+	userID := &msg.UserID
+	if msg.UserID == uuid.Nil {
+		userID = nil
+	}
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if unlimited {
+			if err := h.ledger.RecordSuccessUsageInTx(tx, msg.UserID, msg.ScanID, domain.ScanUsageKindEndpoint); err != nil {
+				return err
+			}
+			acquired = true
+			return h.tlsWriter.OnCompletedInTx(tx, msg.ScanID, entity)
+		}
+		var slotErr error
+		acquired, slotErr = h.ledger.RecordSuccessUsageIfUnderLimitInTx(
+			tx, msg.UserID, msg.ScanID, domain.ScanUsageKindEndpoint, limit,
+		)
+		if slotErr != nil {
+			return slotErr
+		}
+		if acquired {
+			return h.tlsWriter.OnCompletedInTx(tx, msg.ScanID, entity)
+		}
+		return h.tlsWriter.OnPlanLimitExceededInTx(tx, msg.ScanID, userID, url)
+	})
+	return acquired, err
 }
 
 const subjectScanFailed = "scan.failed"
