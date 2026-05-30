@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)) livré ; **IMM-6b-2…8** (quota P1/G1–G4) + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3…8** (quota P1/G1–G4) + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
 
 ---
 
@@ -100,7 +100,7 @@
 | **IMM-5** | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | [#72](https://github.com/create2-labs/cafe-discovery/pull/72) | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
 | **IMM-6** | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | [#73](https://github.com/create2-labs/cafe-discovery/pull/73) | **IMM-3** | Quotas = exécutions scan (row count — **supersédé par IMM-6b** pour l’affichage limite). |
 | **IMM-6b-1** | `discovery/plan-usage-ledger-schema` | `cafe-discovery` | [#83](https://github.com/create2-labs/cafe-discovery/pull/83) | **IMM-6** | DDL **`scan_usage_events`** (ledger append-only). |
-| **IMM-6b-2** | `discovery/plan-usage-ledger-repo` | `cafe-discovery` | — | **IMM-6b-1** | Repo ledger + comptage **`in_flight`** / **`successful`**. |
+| **IMM-6b-2** | `discovery/plan-usage-ledger-repo` | `cafe-discovery` | [#84](https://github.com/create2-labs/cafe-discovery/pull/84) | **IMM-6b-1** | Repo ledger + comptage **`in_flight`** / **`successful`**. |
 | **IMM-6b-3** | `discovery/plan-post-scan-guards` | `cafe-discovery` | — | **IMM-6b-2** | POST : **`successful + in_flight < limit`** + cap **`min(limit, 3)`**. |
 | **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | — | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
 | **IMM-6b-5** | `discovery/plan-usage-api-breakdown` | `cafe-discovery` | — | **IMM-6b-4** | **`GET /plans/usage`** : `used` / `visible` / `deleted_by_user`. |
@@ -178,6 +178,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 |---------|-------------------------|
 | `cmd/persistence/main.go` | **IMM-2** : DDL index au démarrage (drop unique + index liste) ; **IMM-6b-1** : `AutoMigrate` **`scan_usage_events`** + index `(user_id, scan_kind)`. |
 | `internal/domain/scan_usage_event.go` | Entity ledger append-only **IMM-6b-1** ; écriture quota en **IMM-6b-4**. |
+| `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : ledger + compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`. |
 | `internal/persistence/storage/postgres.go` | ~~`OnConflict` sur `(user_id, address)` / `(user_id, url)`~~ → **IMM-3** : insert/update par `scan_id` (`id` PK). |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
@@ -430,7 +431,7 @@ DELETE scan (success row)
 
 ### IMM-6b-2 — Repository ledger + compteurs plan
 
-- **Status:** à faire
+- **Status:** livré — PR [#84](https://github.com/create2-labs/cafe-discovery/pull/84)
 - **Branch:** `discovery/plan-usage-ledger-repo`
 - **Repository:** `cafe-discovery`
 - **Objective:** API repository :
@@ -439,10 +440,11 @@ DELETE scan (success row)
   - **`CountInFlightScans(userID, kind)`** — lifecycle non terminal
   - **`CountVisibleSuccessScans(userID, kind)`** — success actifs (non deleted)
   - **`TryAcquireSuccessSlot(userID, kind, limit)`** — atomique (transaction) ; retourne bool
-- **Scope:** `internal/repository/` ; tests unitaires idempotence + in_flight.
+  - **`RecordSuccessUsageIfUnderLimitInTx`** — insert atomique si `count < limit` (Postgres/SQLite ; **IMM-6b-4**)
+- **Scope:** `internal/repository/scan_usage_ledger_repository.go` ; tests idempotence, in_flight, concurrence.
 - **Dependencies:** **IMM-6b-1**
 - **Proposed commit title:** `plan: scan usage ledger and plan counter queries`
-- **Completion criteria:** Tests verts ; **`TryAcquireSuccessSlot`** empêche dépassement sous concurrence simulée.
+- **Completion criteria:** Tests verts ; **`TryAcquireSuccessSlot`** + insert sous limite empêchent dépassement sous concurrence simulée.
 
 ### IMM-6b-3 — Garde POST (`successful + in_flight` + cap parallèle)
 
