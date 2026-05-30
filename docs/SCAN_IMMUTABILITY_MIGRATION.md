@@ -115,7 +115,7 @@ sequenceDiagram
 | Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` POST guards + parité SQL G1/G2 (optionnel) |
 | Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` persistence G3 commit + parité SQL slot-at-limit (optionnel) |
 | Usage API breakdown | `internal/service/plan.go`, `internal/handler/plan.go` | **IMM-6b-5** : `GET /plans/usage` — `used` (ledger), `visible`, `deleted_by_user`, `in_flight` |
-| Smoke IMM-6b-5 | `cafe-deploy/scripts/test-discovery-imm6b5-usage-api-breakdown.sh` | `go test` usage breakdown + parité SQL DELETE → used stable (optionnel) |
+| Smoke IMM-6b-5 | `cafe-deploy/scripts/test-discovery-imm6b5-usage-api-breakdown.sh` | `go test` usage breakdown + parité SQL DELETE → used stable + **HTTP E2E** `GET /plans/usage` (optionnel) |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |
