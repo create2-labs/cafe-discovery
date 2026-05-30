@@ -39,7 +39,7 @@ This document records the gap, target invariants, **data migration policy**, Red
 | CPM explore/persist (**W7**, **W2**) | No lifecycle guard | Newest row must be **`completed`**; persist only latest **`completed`** `scan_id` (IMM-10) |
 | CBOM (**W6**) | CBOM not on legacy HTTP surface | `GET …/wallets/scans/{scan_id}/cbom` on demand (IMM-12) |
 | Redis | One key per **address** / **URL** | Accelerator only; v1 list/detail **Postgres-first** after IMM-5 |
-| Quotas | `CountByUserID` ≈ distinct targets | Count **executions** (IMM-6) |
+| Quotas | Row count at POST ; DELETE frees usage | **P1** success-only ledger ; **G1** `successful+in_flight<limit` ; **G2** cap `min(limit,3)` ; **G3** atomic commit ; **G4** CBOM success-only (**IMM-6b**) |
 
 **Already close to target:** **`DELETE …/wallets/scans/{scan_id}`** with **409** `SCAN_REFERENCED_BY_POLICY` when a CPM policy references the scan (**PR6**, **W3**). **`DELETE` CPM** does not delete scans (**W4**).
 
@@ -106,7 +106,8 @@ sequenceDiagram
 
 | Component | File | Behaviour |
 |-----------|------|-----------|
-| Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup |
+| Index DDL | `cmd/persistence/main.go` | **IMM-2** : drop legacy unique indexes; create list indexes at startup ; **IMM-6b-1** : `scan_usage_events` ledger + `(user_id, scan_kind)` index |
+| Ledger entity | `internal/domain/scan_usage_event.go` | Append-only quota ledger (**IMM-6b-1**); writes in **IMM-6b-4** |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |

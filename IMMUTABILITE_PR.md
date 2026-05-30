@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** plan de découpe — **IMM-1**–**IMM-4c** mergés ([#64](https://github.com/create2-labs/cafe-discovery/pull/64) … [#71](https://github.com/create2-labs/cafe-discovery/pull/71)) ; **IMM-5** en cours sur `discovery/scan-history-redis-cleanup` ; **IMM-6+** non mergés.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)) livré ; **IMM-6b-2…8** (quota P1/G1–G4) + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
 
 ---
 
@@ -73,7 +73,7 @@
 | **DELETE wallet** | **PR6** : `DELETE …/{scan_id}` + **409** si policy. | **W3** inchangé : action user — d’abord `DELETE` policy, puis scan. |
 | **CPM persist** | Tout `scan_id` owner valide. | **W7** + **`scan_id` = latest `completed`** (**W2**). |
 | **DELETE CPM** | Ne supprime pas le scan (déjà). | Inchangé (**règle 4**). |
-| **Quotas plan** | `CountByUserID` ≈ adresses uniques. | Compter exécutions ; re-scan rare (bloqué si CPM). |
+| **Quotas plan** | **IMM-6** : row count ; DELETE diminue l’usage. | **IMM-6b** : ledger **success-only** ; garde POST **`successful + in_flight < limit`** + cap **`min(limit, 3)`** ; commit atomique à la complétion ; **P1** monotonic + visibilité effacés. |
 | **Redis** | Une clé par adresse. | Latest + historique Postgres ; **IMM-5**. |
 | **CBOM** | Route CBOM historique retirée. | **`GET …/wallets/scans/{scan_id}/cbom`** à la demande (**règle 6**). |
 
@@ -98,7 +98,15 @@
 | **IMM-4b** | `discovery/scan-history-latest-completed` | `cafe-discovery` | [#70](https://github.com/create2-labs/cafe-discovery/pull/70) | **IMM-4a** | Query `latest=true` (W2) + OpenAPI. |
 | **IMM-4c** | `discovery/block-in-flight-wallet-scan` | `cafe-discovery` | [#71](https://github.com/create2-labs/cafe-discovery/pull/71) | **IMM-4a** | W8 : `POST /scan` → 409 `SCAN_IN_PROGRESS` si scan wallet en cours, y compris `requested`. |
 | **IMM-5** | `discovery/scan-history-redis-cleanup` | `cafe-discovery` | [#72](https://github.com/create2-labs/cafe-discovery/pull/72) | **IMM-4a** | Nettoyage Redis résiduel après retrait des lectures wallet mono-ligne. |
-| **IMM-6** | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | [#73](https://github.com/create2-labs/cafe-discovery/pull/73) | **IMM-3** | Quotas = exécutions scan. |
+| **IMM-6** | `discovery/scan-history-plan-quota-semantics` | `cafe-discovery` | [#73](https://github.com/create2-labs/cafe-discovery/pull/73) | **IMM-3** | Quotas = exécutions scan (row count — **supersédé par IMM-6b** pour l’affichage limite). |
+| **IMM-6b-1** | `discovery/plan-usage-ledger-schema` | `cafe-discovery` | [#83](https://github.com/create2-labs/cafe-discovery/pull/83) | **IMM-6** | DDL **`scan_usage_events`** (ledger append-only). |
+| **IMM-6b-2** | `discovery/plan-usage-ledger-repo` | `cafe-discovery` | — | **IMM-6b-1** | Repo ledger + comptage **`in_flight`** / **`successful`**. |
+| **IMM-6b-3** | `discovery/plan-post-scan-guards` | `cafe-discovery` | — | **IMM-6b-2** | POST : **`successful + in_flight < limit`** + cap **`min(limit, 3)`**. |
+| **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | — | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
+| **IMM-6b-5** | `discovery/plan-usage-api-breakdown` | `cafe-discovery` | — | **IMM-6b-4** | **`GET /plans/usage`** : `used` / `visible` / `deleted_by_user`. |
+| **IMM-6b-6** | `discovery/plan-usage-backfill` | `cafe-discovery` | — | **IMM-6b-2** | Backfill ledger depuis lignes **`completed` success** uniquement. |
+| **IMM-6b-7** | `discovery/cbom-success-only` | `cafe-discovery` | — | **IMM-12** | CBOM **404** si scan ≠ **`completed` success** (W6 / P1). |
+| **IMM-6b-8** | `discovery/plan-quota-integration-tests` | `cafe-discovery` | — | **IMM-6b-3…7** | Tests race, monotonic DELETE, CBOM, stub limit. |
 | **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
 | **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
@@ -133,8 +141,10 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 8. **IMM-10** (CPM) — W7 via newest row ; W2 via `latest=true`.
 9. **IMM-12** — CBOM by `scan_id`.
 10. **IMM-11** — cleanup routes / edge / OpenAPI / scripts.
-11. Frontend **FE-IMM-1…5** — après stabilisation backend.
-12. **IMM-7** — tests contract E2E (peut chevaucher **IMM-11**).
+12. **IMM-6b-1…8** — ledger success-only + garde POST + commit atomique + CBOM (**P1**) ; **avant** frontend **FE-IMM-0**.
+13. **IMM-W1-1…3** (CPM) — **`DELETE /api/cpm/v1/drafts?id=…`**.
+14. Frontend **FE-IMM-0…5** — après **IMM-6b-5** + **IMM-W1-3** minimum.
+15. **IMM-7** — tests contract E2E (peut chevaucher **IMM-11**).
 
 **IMM-8** (runbook deploy) : en parallèle de **IMM-2**, mis à jour pour release atomique **IMM-2+IMM-3**.
 
@@ -148,14 +158,17 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 1. **`scan_id`** alloué à l’acceptation (`requested`).
 2. **Une exécution** = **une ligne** Postgres (`id` = `scan_id`).
-3. **`result`** **gelé** après état terminal ; **CBOM** dérivé à la demande (**IMM-12**), jamais stocké en blob.
+3. **`result`** **gelé** après état terminal **`completed` success** ; **CBOM** (**W6**) **uniquement** si **`completed` success** — **IMM-6b-7**.
 4. **Historique** : plusieurs lignes par `target_address` ; listage **`GET …/wallets/scans?address=`** (règle **5**).
 5. **W7** : CPM bloquée si dernier scan ≠ **`completed`** ; **`POST …/scan`** bloqué si en cours, ou si **W1** (policy/draft), sinon retry possible si **`failed`**.
 6. **W1** : au plus un contexte CPM actif — pas de scan si policy **ou** draft sur la cible.
 7. **CPM** : **W7** sur newest row (`limit=1`, tri défaut) ; **W2** sur dernier **`completed`** (`latest=true`).
 8. **Effacement scan** : `DELETE …/wallets/scans/{scan_id}` ; **409** si policy référencée ; parcours **W3** (d’abord supprimer CPM).
 9. **Effacement CPM** : `DELETE …/policies?id=` sans toucher aux scans (**W4**).
-10. **CBOM** : `GET …/wallets/scans/{scan_id}/cbom` à la demande (**W6**).
+10. **CBOM** : `GET …/wallets/scans/{scan_id}/cbom` — **404** sauf scan **`completed` success** (**IMM-6b-7**).
+11. **Quota plan (P1)** : **`wallet_scans_used`** = succès comptabilisés (ledger) ; **ne diminue jamais** (DELETE scan/policy/draft) ; exposer **`visible`** / **`deleted_by_user`** (**IMM-6b-5**).
+12. **Anti-bypass quota** : slot atomique à la persistance du success ; si quota dépassé → **`failed`** + **`PLAN_LIMIT_EXCEEDED`**, **adresse conservée**, **résultat jeté** (**IMM-6b-4**).
+13. **Garde POST quota** : autoriser démarrage seulement si **`successful + in_flight < limit`** et **`in_flight < min(limit, 3)`** (**IMM-6b-3**).
 
 ---
 
@@ -163,7 +176,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 | Fichier | Comportement aujourd’hui |
 |---------|-------------------------|
-| `cmd/persistence/main.go` | ~~Crée index uniques~~ → **IMM-2** : DDL index au démarrage (drop unique + index liste). |
+| `cmd/persistence/main.go` | **IMM-2** : DDL index au démarrage (drop unique + index liste) ; **IMM-6b-1** : `AutoMigrate` **`scan_usage_events`** + index `(user_id, scan_kind)`. |
+| `internal/domain/scan_usage_event.go` | Entity ledger append-only **IMM-6b-1** ; écriture quota en **IMM-6b-4**. |
 | `internal/persistence/storage/postgres.go` | ~~`OnConflict` sur `(user_id, address)` / `(user_id, url)`~~ → **IMM-3** : insert/update par `scan_id` (`id` PK). |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
@@ -353,6 +367,164 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 - **Out of scope:** Changement grilles tarifaires produit.
 - **Proposed commit title:** `plan: count scan executions for quota after history model`
 - **Completion criteria:** Deux scans réussis même adresse → `WalletScansUsed` +2 (si limite non illimitée).
+
+> **Note post-merge IMM-6 :** le comptage par **`CountByUserID`** (lignes Postgres actives) fait **baisser** l’usage affiché après **`DELETE …/scans/{scan_id}`** (soft delete). La règle produit **P1** (usage monotonic) est implémentée par la série **IMM-6b** ci-dessous (**ledger option B**).
+
+---
+
+## IMM-6b — Quotas plan : ledger success-only, garde POST, commit atomique (option B)
+
+**Décisions produit (P1 + garde-fous) :**
+
+| # | Règle | Implémentation |
+|---|--------|----------------|
+| **P1-a** | **`wallet_scans_used`** / **`endpoint_scans_used`** = scans **`completed` success** comptabilisés (ledger) | Incrément ledger **uniquement** dans la transaction persistence **success** (**IMM-6b-4**) |
+| **P1-b** | Usage **ne diminue jamais** (DELETE scan / policy / draft) | Ledger append-only ; soft delete masque l’historique seulement |
+| **P1-c** | UX : **`used`**, **`visible`**, **`deleted_by_user`** | **`GET /plans/usage`** (**IMM-6b-5**) : `deleted = used - visible` (success non soft-deleted) |
+| **G1** | POST : **`successful + in_flight < limit`** | **`prepareWalletScanQueue`** / TLS (**IMM-6b-3**) |
+| **G2** | Cap parallélisme : **`in_flight < min(limit, 3)`** (illimité → cap **3**) | Même PR **IMM-6b-3** |
+| **G3** | Quota dépassé **à la complétion** : **`failed`**, code **`PLAN_LIMIT_EXCEEDED`**, **adresse conservée**, **résultat jeté** | **IMM-6b-4** — pas de payload crypto exploitable |
+| **G4** | **Pas de CBOM** si scan ≠ **`completed` success** | **IMM-6b-7** — **404** (incl. `failed`, `plan_limit_exceeded`, in-flight) |
+
+**Définitions (par `scan_kind` wallet | endpoint) :**
+
+- **`successful`** = `COUNT(scan_usage_events)` ou lignes terminal **`completed` success` comptées.
+- **`in_flight`** = lignes owner avec lifecycle **`requested` \| `started`** (API ; RUNNING interne) **non** terminal.
+- **`visible`** = lignes **`completed` success** actives (non soft-deleted) en Postgres.
+
+**Écart IMM-6 :** comptage row-based + incrément implicite à l’acceptation — **remplacé** par ce modèle. **Ne pas** utiliser **`CountByUserID`** pour les limites après **IMM-6b-5**.
+
+**Flux cible :**
+
+```text
+POST /scan
+  → G1: successful + in_flight < limit ?
+  → G2: in_flight < min(limit, 3) ?
+  → W8/W1… → publish scan.started
+
+scan.completed (persistence)
+  → BEGIN
+  → try_acquire_success_slot(user, kind)   -- atomic: used < limit
+  → IF slot:
+        write SUCCESS + full result + ledger event (scan_id)
+    ELSE:
+        write FAILED + PLAN_LIMIT_EXCEEDED + address kept + NO result payload
+        NO ledger event
+  → COMMIT
+
+DELETE scan (success row)
+  → soft delete ; ledger unchanged ; used unchanged ; visible decreases
+```
+
+### IMM-6b-1 — Schéma DB ledger
+
+- **Status:** livré — PR [#83](https://github.com/create2-labs/cafe-discovery/pull/83)
+- **Branch:** `discovery/plan-usage-ledger-schema`
+- **Repository:** `cafe-discovery`
+- **Objective:** Table **`scan_usage_events`** : `(id, user_id, scan_id UUID UNIQUE, scan_kind, consumed_at)`.
+- **Scope:** DDL boot persistence ; index `(user_id, scan_kind)` ; entity GORM si partagée backend.
+- **Out of scope:** Logique POST/persistence.
+- **Dependencies:** **IMM-6** (mergé)
+- **Proposed commit title:** `db: add scan_usage_events ledger for success-only plan quota`
+- **Completion criteria:** Table + indexes ; build persistence OK.
+
+### IMM-6b-2 — Repository ledger + compteurs plan
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-usage-ledger-repo`
+- **Repository:** `cafe-discovery`
+- **Objective:** API repository :
+  - **`RecordSuccessUsage(userID, scanID, kind)`** — idempotent (`ON CONFLICT scan_id DO NOTHING`)
+  - **`CountSuccessUsage(userID, kind)`**
+  - **`CountInFlightScans(userID, kind)`** — lifecycle non terminal
+  - **`CountVisibleSuccessScans(userID, kind)`** — success actifs (non deleted)
+  - **`TryAcquireSuccessSlot(userID, kind, limit)`** — atomique (transaction) ; retourne bool
+- **Scope:** `internal/repository/` ; tests unitaires idempotence + in_flight.
+- **Dependencies:** **IMM-6b-1**
+- **Proposed commit title:** `plan: scan usage ledger and plan counter queries`
+- **Completion criteria:** Tests verts ; **`TryAcquireSuccessSlot`** empêche dépassement sous concurrence simulée.
+
+### IMM-6b-3 — Garde POST (`successful + in_flight` + cap parallèle)
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-post-scan-guards`
+- **Repository:** `cafe-discovery`
+- **Objective:** Remplacer **`CheckScanLimit`** row-count par :
+  1. **`successful + in_flight < limit`** (limit illimité → pas de check G1)
+  2. **`in_flight < min(limit, 3)`** (limit 0/unlimited → **`in_flight < 3`**)
+- **Scope:** `prepareWalletScanQueue`, `prepareTLSScanQueue`, `checkScanLimits` ; **403** message existant ou enrichi ; OpenAPI erreur plan si documenté.
+- **Out of scope:** Persistence completed ; CBOM.
+- **Dependencies:** **IMM-6b-2**
+- **Proposed commit title:** `plan: post scan guards on successful plus in-flight and parallel cap`
+- **Completion criteria:** À limit=5, used=4, in_flight=1 → POST **403** ; in_flight=0 → POST OK ; ≥3 in_flight avec cap → **403** même si quota restant.
+
+### IMM-6b-4 — Commit atomique au success (persistence)
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-commit-on-success`
+- **Repository:** `cafe-discovery` (persistence-service + éventuellement handler)
+- **Objective:** Dans **`handleWalletCompleted`** / **`handleTLSCompleted`** :
+  - Transaction : **`TryAcquireSuccessSlot`** → si OK : **`OnCompleted`** + **`RecordSuccessUsage`**
+  - Sinon : **`OnFailed`** (ou update) avec **`PLAN_LIMIT_EXCEEDED`**, **conserver `address`/`url`**, **aucun champ `result` exploitable** (networks vides, pas d’exposition clé, pas de posture)
+- **Scope:** `internal/persistence/handlers/scan_events.go`, `storage/postgres.go` ; pas d’écriture Redis riche si rejet quota.
+- **Out of scope:** **`GET /plans/usage`** breakdown.
+- **Dependencies:** **IMM-6b-2**
+- **Proposed commit title:** `plan: atomic success slot on scan completed with stripped over-limit failure`
+- **Completion criteria:** 2 completions concurrentes à limit−1 → 1 success riche + 1 failed stub ; stub **GET detail** sans données bypass ; ledger +1 seulement pour le success.
+
+### IMM-6b-5 — API `GET /plans/usage` (used / visible / deleted)
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-usage-api-breakdown`
+- **Repository:** `cafe-discovery`
+- **Objective:** Enrichir **`PlanUsage`** :
+  - **`wallet_scans_used`** / **`endpoint_scans_used`** ← ledger success count
+  - **`wallet_scans_visible`** / **`endpoint_scans_visible`** ← visible success rows
+  - **`wallet_scans_deleted_by_user`** / **`endpoint_scans_deleted_by_user`** ← `used - visible`
+  - **`wallet_scans_in_flight`** / **`endpoint_scans_in_flight`** (optionnel, UX/debug)
+- **Scope:** `internal/service/plan.go`, `internal/handler/plan.go`, README/OpenAPI plans.
+- **Dependencies:** **IMM-6b-4**
+- **Proposed commit title:** `plan: expose used visible and deleted scan counts in usage API`
+- **Completion criteria:** DELETE success scan → `used` stable, `visible` −1, `deleted` +1 ; docs champs JSON.
+
+### IMM-6b-6 — Backfill ledger (success historiques)
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-usage-backfill`
+- **Repository:** `cafe-discovery`
+- **Objective:** Insérer events pour lignes **`status = success/completed`** existantes (**incl. soft-deleted**).
+- **Scope:** Job one-shot idempotent au boot ou script maintenance.
+- **Out of scope:** Lignes **`failed`**, **`plan_limit_exceeded`**, in-flight.
+- **Dependencies:** **IMM-6b-2**
+- **Proposed commit title:** `plan: backfill scan usage ledger from historical successes`
+- **Completion criteria:** `used` post-backfill ≥ succès Postgres ; pas de doublons **`scan_id`**.
+
+### IMM-6b-7 — CBOM success-only (W6 / P1)
+
+- **Status:** à faire
+- **Branch:** `discovery/cbom-success-only`
+- **Repository:** `cafe-discovery`
+- **Objective:** **`GET …/wallets/scans/{scan_id}/cbom`** et TLS sibling → **404** (ou **403** documenté) sauf scan **`completed` success** owner.
+- **Scope:** Handler CBOM v1 ; OpenAPI ; tests contract.
+- **Dependencies:** **IMM-12** (route existante)
+- **Proposed commit title:** `discovery: cbom only for completed successful scans`
+- **Completion criteria:** `failed`, in-flight, over-limit stub → **404** ; success → **200** CBOM.
+
+### IMM-6b-8 — Tests intégration quota + race
+
+- **Status:** à faire
+- **Branch:** `discovery/plan-quota-integration-tests`
+- **Repository:** `cafe-discovery`
+- **Objective:** Couvrir **G1–G4**, **P1-b**, parallélisme, CBOM.
+- **Scope:** Tests handler + persistence + plan ; script smoke optionnel.
+- **Dependencies:** **IMM-6b-3** … **IMM-6b-7**
+- **Proposed commit title:** `test: plan quota guards commit race and cbom success-only`
+- **Completion criteria:**
+  - [ ] POST blocked when `successful + in_flight >= limit`
+  - [ ] POST blocked when `in_flight >= min(limit, 3)`
+  - [ ] Concurrent complete at limit → one rich success, one stub, ledger +1
+  - [ ] DELETE success → used unchanged, visible down
+  - [ ] CBOM 404 on non-success
 
 ---
 
@@ -982,12 +1154,19 @@ After **IMM-4a**, wallet reads no longer rely on a single result per `(user_id, 
 
 After IMM-3, each completed scan is a **row**. Plan limits (`WalletScanLimit`, `EndpointScanLimit`) should count **executions** (rows), not implicit unique addresses/URLs. Confirm `CountByUserID` and pre-scan checks in `POST /api/discovery/v1/scan` match this.
 
+> **Superseded for limit enforcement:** **IMM-6b** (ledger **P1**) replaces row-count / soft-delete semantics for **`GET /plans/usage`** and **`CheckScanLimit`**. See [IMM-6b](#imm-6b--quotas-plan--ledger-dusage-monotonic-option-b).
+
 ### Acceptance criteria
 
-- [ ] `CountByUserID` on wallet/TLS repos counts all owner rows (respecting soft-delete if applicable).
-- [ ] Second `POST /api/discovery/v1/scan` for same address increments usage when limit is finite.
-- [ ] Limit reached → **403** with existing error shape.
-- [ ] Tests for plan service / handler limit check updated or added.
+- [x] `CountByUserID` on wallet/TLS repos counts all owner rows (respecting soft-delete if applicable). *(IMM-6 merged — **not** the long-term quota source.)*
+- [x] Second `POST /api/discovery/v1/scan` for same address increments usage when limit is finite.
+- [x] Limit reached → **403** with existing error shape.
+- [x] Tests for plan service / handler limit check updated or added.
+
+**Follow-up (IMM-6b):**
+
+- [ ] Ledger on **completed success** only ; POST guards **G1/G2** ; atomic commit **G3** ; CBOM success-only **G4**.
+- [ ] `GET /plans/usage` : `used`, `visible`, `deleted_by_user` ; usage never decreases on DELETE.
 
 ### Out of scope
 
@@ -1369,6 +1548,42 @@ New API features.
 |-------|--------|
 | Issue | — |
 | PR | — |
+
+---
+
+## GitHub issue — IMM-6b (ledger monotonic)
+
+### Title (copy as-is)
+
+```
+[Discovery][IMM-6b] Plan usage ledger: monotonic quota (option B)
+```
+
+### Labels (suggested)
+
+`discovery` · `scan-history` · `billing` · `plans`
+
+### Repository
+
+`create2-labs/cafe-discovery`
+
+### Summary
+
+Replace row-count quota (**IMM-6**) with success-only ledger (**IMM-6b**). **P1:** usage counts **completed successes** only; never decreases on DELETE. **G1–G4:** POST guards (`successful + in_flight < limit`, cap `min(limit,3)`), atomic commit on completion, stripped failure if over limit (keep address), CBOM success-only.
+
+**PR sequence:** IMM-6b-1 (schema) → IMM-6b-2 (repo) → IMM-6b-3 (POST guards) → IMM-6b-4 (persistence commit) → IMM-6b-5 (usage API) → IMM-6b-6 (backfill) → IMM-6b-7 (CBOM) → IMM-6b-8 (tests).
+
+See [IMM-6b section](#imm-6b--quotas-plan--ledger-success-only-garde-post-commit-atomique-option-b).
+
+### Acceptance criteria
+
+- [ ] Ledger event **only** on persisted **completed success** (one per `scan_id`).
+- [ ] POST blocked when `successful + in_flight >= limit`.
+- [ ] POST blocked when `in_flight >= min(limit, 3)`.
+- [ ] Concurrent completions at limit: one rich success, one `PLAN_LIMIT_EXCEEDED` stub (address kept, no result).
+- [ ] `GET /plans/usage` exposes `used`, `visible`, `deleted_by_user`.
+- [ ] DELETE success scan: `used` unchanged, `visible` decreases.
+- [ ] CBOM **404** unless **completed success**.
 
 ---
 

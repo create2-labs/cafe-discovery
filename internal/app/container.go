@@ -301,6 +301,7 @@ func runMigrations(db postgresdb.PostgreSQLConnection) error {
 		&domain.User{},
 		&domain.ScanResultEntity{},
 		&domain.TLSScanResultEntity{},
+		&domain.ScanUsageEventEntity{},
 		&domain.CafeWallet{},
 	); err != nil {
 		return err
