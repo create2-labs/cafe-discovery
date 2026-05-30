@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4…8** + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5…8** + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
 
 ---
 
@@ -102,7 +102,7 @@
 | **IMM-6b-1** | `discovery/plan-usage-ledger-schema` | `cafe-discovery` | [#83](https://github.com/create2-labs/cafe-discovery/pull/83) | **IMM-6** | DDL **`scan_usage_events`** (ledger append-only). |
 | **IMM-6b-2** | `discovery/plan-usage-ledger-repo` | `cafe-discovery` | [#84](https://github.com/create2-labs/cafe-discovery/pull/84) | **IMM-6b-1** | Repo ledger + comptage **`in_flight`** / **`successful`**. |
 | **IMM-6b-3** | `discovery/plan-post-scan-guards` | `cafe-discovery` | [#84](https://github.com/create2-labs/cafe-discovery/pull/84) | **IMM-6b-2** | POST : **`successful + in_flight < limit`** + cap **`min(limit, 3)`**. |
-| **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | — | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
+| **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | [#85](https://github.com/create2-labs/cafe-discovery/pull/85) | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
 | **IMM-6b-5** | `discovery/plan-usage-api-breakdown` | `cafe-discovery` | — | **IMM-6b-4** | **`GET /plans/usage`** : `used` / `visible` / `deleted_by_user`. |
 | **IMM-6b-6** | `discovery/plan-usage-backfill` | `cafe-discovery` | — | **IMM-6b-2** | Backfill ledger depuis lignes **`completed` success** uniquement. |
 | **IMM-6b-7** | `discovery/cbom-success-only` | `cafe-discovery` | — | **IMM-12** | CBOM **404** si scan ≠ **`completed` success** (W6 / P1). |
@@ -177,12 +177,16 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 | Fichier | Comportement aujourd’hui |
 |---------|-------------------------|
 | `cmd/persistence/main.go` | **IMM-2** : DDL index au démarrage (drop unique + index liste) ; **IMM-6b-1** : `AutoMigrate` **`scan_usage_events`** + index `(user_id, scan_kind)`. |
-| `internal/domain/scan_usage_event.go` | Entity ledger append-only **IMM-6b-1** ; écriture quota en **IMM-6b-4**. |
-| `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : ledger + compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`. |
+| `internal/domain/scan_usage_event.go` | Entity ledger append-only **IMM-6b-1** ; écriture quota en **IMM-6b-4** (livré [#85](https://github.com/create2-labs/cafe-discovery/pull/85)). |
+| `internal/repository/scan_usage_ledger_repository.go` | **IMM-6b-2** : ledger + compteurs `successful` / `in_flight` / `visible`, `TryAcquireSuccessSlot`, `RecordSuccessUsageIfUnderLimitInTx`. |
 | `internal/service/plan.go` (`CheckPostScanQuota`) | **IMM-6b-3** : garde POST **G1** / **G2** sur ledger. |
 | `internal/handler/discovery.go` (`checkScanLimits`) | **IMM-6b-3** : `prepareWalletScanQueue` / `prepareTLSScanQueue` via `CheckPostScanQuota`. |
+| `internal/persistence/handlers/scan_events.go` | **IMM-6b-4** : commit atomique `scan.completed` — ledger + success ou stub `PLAN_LIMIT_EXCEEDED`. |
+| `internal/persistence/planlimit/resolver.go` | **IMM-6b-4** : résolution limites plan pour persistence completion. |
+| `pkg/scan/quota.go` | **IMM-6b-4** : constante `PLAN_LIMIT_EXCEEDED`. |
 | Smoke IMM-6b-3 | `cafe-deploy/scripts/test-discovery-imm6b3-post-scan-guards.sh` | `go test` G1/G2 + parité SQL Postgres (optionnel). |
-| `internal/persistence/storage/postgres.go` | ~~`OnConflict` sur `(user_id, address)` / `(user_id, url)`~~ → **IMM-3** : insert/update par `scan_id` (`id` PK). |
+| Smoke IMM-6b-4 | `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh` | `go test` commit G3 + parité SQL slot-at-limit (optionnel). |
+| `internal/persistence/storage/postgres.go` | **IMM-3** : insert/update par `scan_id` ; **IMM-6b-4** : `OnCompletedInTx`, `OnPlanLimitExceededInTx`. |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
 | `internal/repository/base_repository.go` | `findByUserIDAndField` : `ORDER BY created_at DESC` + `First` (dernier gagnant) ; supprimer si inutilisé après retrait wallet mono-ligne. |
@@ -465,17 +469,18 @@ DELETE scan (success row)
 
 ### IMM-6b-4 — Commit atomique au success (persistence)
 
-- **Status:** à faire
+- **Status:** livré — PR [#85](https://github.com/create2-labs/cafe-discovery/pull/85)
 - **Branch:** `discovery/plan-commit-on-success`
 - **Repository:** `cafe-discovery` (persistence-service + éventuellement handler)
 - **Objective:** Dans **`handleWalletCompleted`** / **`handleTLSCompleted`** :
-  - Transaction : **`TryAcquireSuccessSlot`** → si OK : **`OnCompleted`** + **`RecordSuccessUsage`**
-  - Sinon : **`OnFailed`** (ou update) avec **`PLAN_LIMIT_EXCEEDED`**, **conserver `address`/`url`**, **aucun champ `result` exploitable** (networks vides, pas d’exposition clé, pas de posture)
-- **Scope:** `internal/persistence/handlers/scan_events.go`, `storage/postgres.go` ; pas d’écriture Redis riche si rejet quota.
+  - Transaction : **`RecordSuccessUsageIfUnderLimitInTx`** → si OK : **`OnCompletedInTx`** + ledger event
+  - Sinon : **`OnPlanLimitExceededInTx`** avec **`PLAN_LIMIT_EXCEEDED`**, **conserver `address`/`url`**, **aucun champ `result` exploitable** (networks vides, pas d’exposition clé, pas de posture)
+- **Scope:** `internal/persistence/handlers/scan_events.go`, `internal/persistence/storage/postgres.go`, `internal/persistence/planlimit/resolver.go`, `pkg/scan/quota.go` ; pas d’écriture Redis riche si rejet quota.
 - **Out of scope:** **`GET /plans/usage`** breakdown.
 - **Dependencies:** **IMM-6b-2**
 - **Proposed commit title:** `plan: atomic success slot on scan completed with stripped over-limit failure`
 - **Completion criteria:** 2 completions concurrentes à limit−1 → 1 success riche + 1 failed stub ; stub **GET detail** sans données bypass ; ledger +1 seulement pour le success.
+- **Smoke:** `cafe-deploy/scripts/test-discovery-imm6b4-commit-on-success.sh`
 
 ### IMM-6b-5 — API `GET /plans/usage` (used / visible / deleted)
 
@@ -1582,10 +1587,10 @@ See [IMM-6b section](#imm-6b--quotas-plan--ledger-success-only-garde-post-commit
 
 ### Acceptance criteria
 
-- [ ] Ledger event **only** on persisted **completed success** (one per `scan_id`).
-- [ ] POST blocked when `successful + in_flight >= limit`.
-- [ ] POST blocked when `in_flight >= min(limit, 3)`.
-- [ ] Concurrent completions at limit: one rich success, one `PLAN_LIMIT_EXCEEDED` stub (address kept, no result).
+- [x] Ledger event **only** on persisted **completed success** (one per `scan_id`) — **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85)).
+- [x] POST blocked when `successful + in_flight >= limit` — **IMM-6b-3**.
+- [x] POST blocked when `in_flight >= min(limit, 3)` — **IMM-6b-3**.
+- [x] Concurrent completions at limit: one rich success, one `PLAN_LIMIT_EXCEEDED` stub (address kept, no result) — **IMM-6b-4**.
 - [ ] `GET /plans/usage` exposes `used`, `visible`, `deleted_by_user`.
 - [ ] DELETE success scan: `used` unchanged, `visible` decreases.
 - [ ] CBOM **404** unless **completed success**.
