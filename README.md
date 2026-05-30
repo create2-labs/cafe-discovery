@@ -1951,7 +1951,7 @@ Get the current user's subscription plan.
 
 #### GET /plans/usage
 
-Get current usage statistics for the authenticated user. Counts follow the **success-only ledger** (IMM-6b P1): `used` never decreases when a user deletes a scan from history.
+Get current usage statistics for the authenticated user. Counts follow the **success-only ledger** (IMM-6b P1): `used` never decreases when a user deletes a scan from history. On deploy, **persistence-service** backfills ledger rows for pre-existing successful scans (**IMM-6b-6**).
 
 **Authentication**: Required (JWT token)
 

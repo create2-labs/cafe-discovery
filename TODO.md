@@ -14,7 +14,7 @@ Items deferred; not blocking current IMM work unless noted.
 - **`GET /plans/usage`** : **`visible`**, **`deleted_by_user`**
 - CBOM **404** sauf **completed success**
 
-**Plan:** **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)), **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2), **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence G3), **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown) livrés ; **IMM-6b-6…8** — [`IMMUTABILITE_PR.md`](./IMMUTABILITE_PR.md#imm-6b--quotas-plan--ledger-success-only-garde-post-commit-atomique-option-b).
+**Plan:** **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)), **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2), **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence G3), **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown), **IMM-6b-6** ([#88](https://github.com/create2-labs/cafe-discovery/pull/88) — backfill ledger) livrés ; **IMM-6b-7…8** — [`IMMUTABILITE_PR.md`](./IMMUTABILITE_PR.md#imm-6b--quotas-plan--ledger-success-only-garde-post-commit-atomique-option-b).
 
 **Repos:** `cafe-discovery` only.
 
