@@ -153,7 +153,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
-	planHandler := handler.NewPlanHandler(planService, scanResultRepo, tlsScanResultRepo)
+	planHandler := handler.NewPlanHandler(planService, scanUsageLedgerRepo)
 
 	// AUTH-05: internal scan-authorization service consumed by CPM (AUTH-02).
 	// Discovery remains the authoritative source for scan visibility; CPM

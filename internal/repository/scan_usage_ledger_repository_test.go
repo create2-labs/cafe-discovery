@@ -109,6 +109,54 @@ func TestScanUsageLedger_TryAcquireSuccessSlot_AtLimit(t *testing.T) {
 	}
 }
 
+func TestScanUsageLedger_CountVisibleSuccessScans_ExcludesSoftDeleted(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+
+	row := domain.ScanResultEntity{
+		ID: scanID, UserID: userID, Address: "0xdel", Status: scan.StateSUCCESS,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := repo.RecordSuccessUsage(userID, scanID, domain.ScanUsageKindWallet); err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+
+	used, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("CountSuccessUsage: %v", err)
+	}
+	visible, err := repo.CountVisibleSuccessScans(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("CountVisibleSuccessScans before delete: %v", err)
+	}
+	if used != 1 || visible != 1 {
+		t.Fatalf("before delete: used=%d visible=%d, want 1/1", used, visible)
+	}
+
+	if err := db.Delete(&domain.ScanResultEntity{}, "id = ?", scanID).Error; err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	usedAfter, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("CountSuccessUsage after delete: %v", err)
+	}
+	visibleAfter, err := repo.CountVisibleSuccessScans(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("CountVisibleSuccessScans after delete: %v", err)
+	}
+	if usedAfter != 1 {
+		t.Fatalf("used after delete = %d, want 1 (ledger unchanged)", usedAfter)
+	}
+	if visibleAfter != 0 {
+		t.Fatalf("visible after delete = %d, want 0", visibleAfter)
+	}
+}
+
 func TestScanUsageLedger_RecordSuccessUsageIfUnderLimit_Concurrent(t *testing.T) {
 	db, repo := setupScanUsageLedgerTestDB(t)
 	userID := uuid.New()

@@ -1951,7 +1951,7 @@ Get the current user's subscription plan.
 
 #### GET /plans/usage
 
-Get current usage statistics for the authenticated user.
+Get current usage statistics for the authenticated user. Counts follow the **success-only ledger** (IMM-6b P1): `used` never decreases when a user deletes a scan from history.
 
 **Authentication**: Required (JWT token)
 
@@ -1959,13 +1959,27 @@ Get current usage statistics for the authenticated user.
 ```json
 {
   "wallet_scans_used": 3,
-  "wallet_scans_limit": 5,
+  "wallet_scans_visible": 2,
+  "wallet_scans_deleted_by_user": 1,
+  "wallet_scans_in_flight": 0,
+  "wallet_scan_limit": 5,
   "endpoint_scans_used": 2,
-  "endpoint_scans_limit": 5,
-  "wallet_scans_remaining": 2,
-  "endpoint_scans_remaining": 3
+  "endpoint_scans_visible": 2,
+  "endpoint_scans_deleted_by_user": 0,
+  "endpoint_scans_in_flight": 1,
+  "endpoint_scan_limit": 5,
+  "wallet_scans_left": 2,
+  "endpoint_scans_left": 3
 }
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `wallet_scans_used` / `endpoint_scans_used` | Successful scans counted in the append-only ledger |
+| `wallet_scans_visible` / `endpoint_scans_visible` | Active (non soft-deleted) success rows in Postgres |
+| `wallet_scans_deleted_by_user` / `endpoint_scans_deleted_by_user` | `used − visible` — successes hidden by user DELETE |
+| `wallet_scans_in_flight` / `endpoint_scans_in_flight` | Scans not yet terminal (PENDING/RUNNING); omitted when zero |
+| `wallet_scans_left` / `endpoint_scans_left` | Remaining quota slots based on ledger `used`; `-1` if unlimited |
 
 ### Plan Enforcement
 

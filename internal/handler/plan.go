@@ -8,19 +8,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// PlanHandler handles plan-related HTTP requests. Usage counts come from Postgres scan rows (executions).
+// PlanHandler handles plan-related HTTP requests. Usage counts come from the success-only ledger (IMM-6b P1).
 type PlanHandler struct {
-	planService       *service.PlanService
-	scanResultRepo    repository.ScanResultRepository
-	tlsScanResultRepo repository.TLSScanResultRepository
+	planService     *service.PlanService
+	scanUsageLedger repository.ScanUsageLedgerRepository
 }
 
 // NewPlanHandler creates a new plan handler.
-func NewPlanHandler(planService *service.PlanService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository) *PlanHandler {
+func NewPlanHandler(planService *service.PlanService, scanUsageLedger repository.ScanUsageLedgerRepository) *PlanHandler {
 	return &PlanHandler{
-		planService:       planService,
-		scanResultRepo:    scanResultRepo,
-		tlsScanResultRepo: tlsScanResultRepo,
+		planService:     planService,
+		scanUsageLedger: scanUsageLedger,
 	}
 }
 
@@ -83,7 +81,7 @@ func (h *PlanHandler) GetPlanUsage(c *fiber.Ctx) error {
 		})
 	}
 
-	usage, err := h.planService.GetPlanUsage(userID, h.scanResultRepo, h.tlsScanResultRepo)
+	usage, err := h.planService.GetPlanUsage(userID, h.scanUsageLedger)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
