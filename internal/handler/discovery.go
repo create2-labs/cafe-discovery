@@ -45,12 +45,13 @@ type DiscoveryHandler struct {
 	userScanCache     *service.UserScanCacheService
 	scanResultRepo    repository.ScanResultRepository
 	tlsScanResultRepo repository.TLSScanResultRepository
+	scanUsageLedger   repository.ScanUsageLedgerRepository
 	pendingV1         repository.PendingV1ScanRepository
 	policyRef         policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService:  discoveryService,
 		tlsService:        tlsService,
@@ -63,6 +64,7 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService 
 		userScanCache:     userScanCache,
 		scanResultRepo:    scanResultRepo,
 		tlsScanResultRepo: tlsScanResultRepo,
+		scanUsageLedger:   scanUsageLedger,
 		pendingV1:         pendingV1,
 		policyRef:         policyRef,
 	}
@@ -107,26 +109,47 @@ func (h *DiscoveryHandler) getAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, erro
 	return userID, nil
 }
 
-// checkScanLimits validates scan limits using persisted scan execution rows (Postgres).
+// checkScanLimits validates IMM-6b POST guards (G1 ledger success+in-flight, G2 parallel cap).
 func (h *DiscoveryHandler) checkScanLimits(userID uuid.UUID, scanType string) (limitReached bool, errorMsg string, err error) {
 	if h.planService == nil {
 		return false, "", nil
 	}
-	canScan, usage, err := h.planService.CheckScanLimit(userID, scanType, h.scanResultRepo, h.tlsScanResultRepo)
+	if h.scanUsageLedger == nil {
+		return false, "", fmt.Errorf("scan usage ledger not configured")
+	}
+	canScan, usage, deny, err := h.planService.CheckPostScanQuota(userID, scanType, h.scanUsageLedger)
 	if err != nil {
 		return false, "", err
 	}
 	if !canScan {
-		return true, scanLimitErrorMessage(scanType, usage), nil
+		return true, postScanLimitErrorMessage(scanType, usage, deny), nil
 	}
 	return false, "", nil
 }
 
-func scanLimitErrorMessage(scanType string, usage *service.PlanUsage) string {
-	if scanType == "wallet" {
-		return fmt.Sprintf("wallet scan limit reached (%d/%d). Please upgrade your plan to continue", usage.WalletScansUsed, usage.WalletScanLimit)
+func postScanLimitErrorMessage(scanType string, usage *service.PlanUsage, deny service.PostScanQuotaDenyReason) string {
+	if deny == service.PostScanQuotaDenyParallel {
+		if scanType == "wallet" {
+			return fmt.Sprintf(
+				"too many wallet scans in progress (%d). Please wait for a scan to finish",
+				usage.WalletScansInFlight,
+			)
+		}
+		return fmt.Sprintf(
+			"too many endpoint scans in progress (%d). Please wait for a scan to finish",
+			usage.EndpointScansInFlight,
+		)
 	}
-	return fmt.Sprintf("endpoint scan limit reached (%d/%d). Please upgrade your plan to continue", usage.EndpointScansUsed, usage.EndpointScanLimit)
+	if scanType == "wallet" {
+		return fmt.Sprintf(
+			"wallet scan limit reached (%d successful + %d in progress / %d). Please upgrade your plan to continue",
+			usage.WalletScansUsed, usage.WalletScansInFlight, usage.WalletScanLimit,
+		)
+	}
+	return fmt.Sprintf(
+		"endpoint scan limit reached (%d successful + %d in progress / %d). Please upgrade your plan to continue",
+		usage.EndpointScansUsed, usage.EndpointScansInFlight, usage.EndpointScanLimit,
+	)
 }
 
 // queueScanError carries HTTP error details from tryQueue* helpers.

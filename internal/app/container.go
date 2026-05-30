@@ -106,6 +106,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	tlsScanResultRepo := repository.NewTLSScanResultRepository(db.GetDB())
 	cafeWalletRepo := repository.NewCafeWalletRepository(db.GetDB())
 	planRepo := repository.NewPlanRepository(db.GetDB())
+	scanUsageLedgerRepo := repository.NewScanUsageLedgerRepository(db.GetDB())
 
 	// Initialize plan service
 	planService := service.NewPlanService(planRepo, userRepo)
@@ -148,7 +149,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 
 	// Initialize handlers (wallet v1 and plan quotas from Postgres; TLS list uses Redis read-through)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, pendingV1Repo, policyRef)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
 	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
