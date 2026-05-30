@@ -113,13 +113,13 @@ func TestGetPlanUsage_WalletExecutionCount(t *testing.T) {
 	user := &domain.User{ID: userID, PlanID: planID}
 	svc := NewPlanService(&planQuotaPlanRepo{plan: plan}, &planQuotaUserRepo{user: user})
 
-	repo := &walletScanRepoStub{count: 2}
-	usage, err := svc.GetPlanUsage(userID, repo, nil)
+	ledger := &usageAPILedgerStub{walletUsed: 2, walletVisible: 2}
+	usage, err := svc.GetPlanUsage(userID, ledger)
 	if err != nil {
 		t.Fatalf("GetPlanUsage: %v", err)
 	}
 	if usage.WalletScansUsed != 2 {
-		t.Fatalf("WalletScansUsed = %d, want 2 (two execution rows)", usage.WalletScansUsed)
+		t.Fatalf("WalletScansUsed = %d, want 2 (ledger success count)", usage.WalletScansUsed)
 	}
 	if usage.WalletScansLeft != 3 {
 		t.Fatalf("WalletScansLeft = %d, want 3", usage.WalletScansLeft)
