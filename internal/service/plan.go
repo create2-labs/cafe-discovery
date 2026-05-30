@@ -60,13 +60,24 @@ func (s *PlanService) GetAllPlans() ([]*domain.Plan, error) {
 
 // GetPlanUsage retrieves the current usage for a user
 type PlanUsage struct {
-	WalletScansUsed   int `json:"wallet_scans_used"`
-	EndpointScansUsed int `json:"endpoint_scans_used"`
-	WalletScanLimit   int `json:"wallet_scan_limit"`
-	EndpointScanLimit int `json:"endpoint_scan_limit"`
-	WalletScansLeft   int `json:"wallet_scans_left"`   // -1 if unlimited
-	EndpointScansLeft int `json:"endpoint_scans_left"` // -1 if unlimited
+	WalletScansUsed       int `json:"wallet_scans_used"`
+	EndpointScansUsed     int `json:"endpoint_scans_used"`
+	WalletScansInFlight   int `json:"wallet_scans_in_flight,omitempty"`
+	EndpointScansInFlight int `json:"endpoint_scans_in_flight,omitempty"`
+	WalletScanLimit       int `json:"wallet_scan_limit"`
+	EndpointScanLimit     int `json:"endpoint_scan_limit"`
+	WalletScansLeft       int `json:"wallet_scans_left"`   // -1 if unlimited
+	EndpointScansLeft     int `json:"endpoint_scans_left"` // -1 if unlimited
 }
+
+// PostScanQuotaDenyReason explains why POST scan was rejected (IMM-6b G1/G2).
+type PostScanQuotaDenyReason string
+
+const (
+	PostScanQuotaOK           PostScanQuotaDenyReason = ""
+	PostScanQuotaDenyQuota    PostScanQuotaDenyReason = "quota"
+	PostScanQuotaDenyParallel PostScanQuotaDenyReason = "parallel"
+)
 
 func (s *PlanService) GetPlanUsage(userID uuid.UUID, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository) (*PlanUsage, error) {
 	if userID == uuid.Nil {
@@ -204,6 +215,110 @@ func (s *PlanService) CheckScanLimit(userID uuid.UUID, scanType string, scanResu
 	}
 
 	return canScan, usage, nil
+}
+
+// planParallelScanCap is G2: min(limit, 3) when limited, else 3 when unlimited (limit 0).
+func planParallelScanCap(limit int, unlimited bool) int {
+	if unlimited || limit <= 0 {
+		return 3
+	}
+	if limit < 3 {
+		return limit
+	}
+	return 3
+}
+
+// CheckPostScanQuota enforces IMM-6b POST guards (G1 success+in-flight, G2 parallel cap) via the ledger.
+func (s *PlanService) CheckPostScanQuota(
+	userID uuid.UUID,
+	scanType string,
+	ledger repository.ScanUsageLedgerRepository,
+) (bool, *PlanUsage, PostScanQuotaDenyReason, error) {
+	if userID == uuid.Nil {
+		return false, nil, PostScanQuotaOK, errors.New("user not authenticated")
+	}
+	if ledger == nil {
+		return false, nil, PostScanQuotaOK, errors.New("scan usage ledger required")
+	}
+
+	kind, err := scanUsageKindForPlanLimitKey(scanType)
+	if err != nil {
+		return false, nil, PostScanQuotaOK, err
+	}
+
+	plan, err := s.GetUserPlan(userID)
+	if err != nil {
+		return false, nil, PostScanQuotaOK, err
+	}
+
+	successful, err := ledger.CountSuccessUsage(userID, kind)
+	if err != nil {
+		return false, nil, PostScanQuotaOK, fmt.Errorf("count successful usage: %w", err)
+	}
+	inFlight, err := ledger.CountInFlightScans(userID, kind)
+	if err != nil {
+		return false, nil, PostScanQuotaOK, fmt.Errorf("count in-flight scans: %w", err)
+	}
+
+	usage := &PlanUsage{
+		WalletScanLimit:   plan.WalletScanLimit,
+		EndpointScanLimit: plan.EndpointScanLimit,
+	}
+	switch scanType {
+	case scan.PlanLimitKeyWallet:
+		usage.WalletScansUsed = int(successful)
+		usage.WalletScansInFlight = int(inFlight)
+		usage.WalletScansLeft = planScansLeft(plan.WalletScanLimit, successful, plan.IsUnlimited(scan.PlanLimitKeyWallet))
+	case scan.PlanLimitKeyEndpoint:
+		usage.EndpointScansUsed = int(successful)
+		usage.EndpointScansInFlight = int(inFlight)
+		usage.EndpointScansLeft = planScansLeft(plan.EndpointScanLimit, successful, plan.IsUnlimited(scan.PlanLimitKeyEndpoint))
+	default:
+		return false, usage, PostScanQuotaOK, fmt.Errorf("unknown scan type: %s", scanType)
+	}
+
+	unlimited := plan.IsUnlimited(scanType)
+	var limit int
+	switch scanType {
+	case scan.PlanLimitKeyWallet:
+		limit = plan.WalletScanLimit
+	case scan.PlanLimitKeyEndpoint:
+		limit = plan.EndpointScanLimit
+	}
+
+	parallelCap := planParallelScanCap(limit, unlimited)
+	deny := PostScanQuotaOK
+	if !unlimited && successful+inFlight >= int64(limit) {
+		deny = PostScanQuotaDenyQuota
+	}
+	if inFlight >= int64(parallelCap) {
+		if deny == PostScanQuotaOK {
+			deny = PostScanQuotaDenyParallel
+		}
+	}
+	return deny == PostScanQuotaOK, usage, deny, nil
+}
+
+func planScansLeft(limit int, successful int64, unlimited bool) int {
+	if unlimited {
+		return -1
+	}
+	left := limit - int(successful)
+	if left < 0 {
+		return 0
+	}
+	return left
+}
+
+func scanUsageKindForPlanLimitKey(scanType string) (domain.ScanUsageKind, error) {
+	switch scanType {
+	case scan.PlanLimitKeyWallet:
+		return domain.ScanUsageKindWallet, nil
+	case scan.PlanLimitKeyEndpoint:
+		return domain.ScanUsageKindEndpoint, nil
+	default:
+		return "", fmt.Errorf("unknown scan type: %s", scanType)
+	}
 }
 
 // CheckEndpointScanLimitWithCount checks if the user can perform an endpoint (TLS) scan when the caller
