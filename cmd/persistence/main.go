@@ -35,15 +35,21 @@ func main() {
 	defer db.Shutdown()
 
 	// Scan tables (persistence owns these). Dev: reset Postgres volume if schema changes brutally.
-	if err := db.GetDB().AutoMigrate(&domain.TLSScanResultEntity{}, &domain.ScanResultEntity{}); err != nil {
+	if err := db.GetDB().AutoMigrate(
+		&domain.TLSScanResultEntity{},
+		&domain.ScanResultEntity{},
+		&domain.ScanUsageEventEntity{},
+	); err != nil {
 		log.Fatal().Err(err).Msg("scan tables AutoMigrate failed")
 	}
 	// IMM-2: multiple rows per (user_id, address|url); list indexes for history queries.
+	// IMM-6b-1: ledger index for plan quota counters by user and scan kind.
 	for _, q := range []string{
 		`DROP INDEX IF EXISTS idx_scan_results_user_address`,
 		`DROP INDEX IF EXISTS idx_tls_scan_results_user_url`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_results_user_address_created_at ON scan_results (user_id, address, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_tls_scan_results_user_url_created_at ON tls_scan_results (user_id, url, created_at DESC) NULLS NOT DISTINCT`,
+		`CREATE INDEX IF NOT EXISTS idx_scan_usage_events_user_kind ON scan_usage_events (user_id, scan_kind)`,
 	} {
 		if err := db.GetDB().Exec(q).Error; err != nil {
 			log.Fatal().Err(err).Str("sql", q).Msg("scan history indexes failed")
