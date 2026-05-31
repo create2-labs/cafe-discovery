@@ -37,7 +37,7 @@ This document records the gap, target invariants, **data migration policy**, Red
 | Latest completed (**W2**) | No `latest=true` query | `GET …/wallets/scans?address=&latest=true` → ≤1 **`completed`** |
 | POST scan guards (**W8**, **W1**) | No in-progress / CPM guards | **409** `SCAN_IN_PROGRESS` / `CPM_EXISTS_FOR_WALLET_TARGET` (IMM-4, IMM-9) |
 | CPM explore/persist (**W7**, **W2**) | No lifecycle guard | Newest row must be **`completed`**; persist only latest **`completed`** `scan_id` (IMM-10) |
-| CBOM (**W6**) | CBOM not on legacy HTTP surface | `GET …/wallets/scans/{scan_id}/cbom` on demand (IMM-12) |
+| CBOM (**W6**) | CBOM not on legacy HTTP surface | `GET …/wallets/scans/{scan_id}/cbom` on demand ; **404** unless **`completed` success** (**G4**, IMM-6b-7) |
 | Redis | One key per **address** / **URL** | Accelerator only; v1 list/detail **Postgres-first** after IMM-5 |
 | Quotas | Row count at POST ; DELETE frees usage | **P1** success-only ledger ; **G1** `successful+in_flight<limit` ; **G2** cap `min(limit,3)` ; **G3** atomic commit ; **G4** CBOM success-only (**IMM-6b**) |
 
@@ -53,7 +53,7 @@ This document records the gap, target invariants, **data migration policy**, Red
 4. **Re-scan** = **new** row + **new** `scan_id`; no “continuation” under the same UUID.
 5. **History:** multiple rows per `target_address` / endpoint URL; list via **`GET …/wallets/scans?address=`** (**W5**).
 6. **CPM (wallet only):** **W1–W8** per [`IMMUTABILITE_PR.md`](../IMMUTABILITE_PR.md) — notably **W7** (CPM blocked if newest ≠ `completed`) vs **W8** (rescan allowed if newest is `failed`, independent of W7).
-7. **CBOM:** derived on read per **`scan_id`**; not stored as blob (**W6**, IMM-12).
+7. **CBOM:** derived on read per **`scan_id`**; not stored as blob ; **404** unless **`completed` success** (**W6**, IMM-12 + **G4**, IMM-6b-7).
 8. **Source of truth for v1 HTTP:** **Postgres**; Redis is optional cache (**§5**).
 
 ---

@@ -1523,7 +1523,7 @@ Address contract note: wallet addresses are accepted in any valid EVM hex casing
 
 ### GET /discovery/v1/wallets/scans/:scan_id/cbom
 
-Returns a CycloneDX v1.7 CBOM envelope for **this** `scan_id`, generated on read from persisted scan fields (not stored as a blob). Available only after a **terminal** lifecycle state (`completed` or `failed`). While the scan is `requested` or `started`, the API returns **409** with `SCAN_NOT_TERMINAL`.
+Returns a CycloneDX v1.7 CBOM envelope for **this** `scan_id`, generated on read from persisted scan fields (not stored as a blob). Available only when the scan is **`completed` success** (**G4**, IMM-6b-7). Any other lifecycle state (`requested`, `started`, `failed`, `plan_limit_exceeded`) returns **404** `not_found`.
 
 OpenAPI: [`openapi/discovery-v1.yaml`](openapi/discovery-v1.yaml) (`getWalletScanCbom`).
 

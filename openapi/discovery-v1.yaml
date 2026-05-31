@@ -250,10 +250,11 @@ paths:
       tags: [wallet-scans]
       summary: Get CycloneDX CBOM for a wallet scan execution
       description: |
-        **W6** — CBOM is generated on read from persisted scan fields for **this** `scan_id`; it is
-        never stored as a blob. Owner-scoped; same access rules as scan detail. **409**
-        `SCAN_NOT_TERMINAL` while lifecycle is non-terminal (`requested`, `started`). Replaces the
-        removed `GET /discovery/cbom/*` address-keyed route.
+        **W6 / G4** — CBOM is generated on read from persisted scan fields for **this** `scan_id`; it is
+        never stored as a blob. Owner-scoped; same access rules as scan detail. Returns **404** unless
+        the scan lifecycle is **`completed` success** (`status=SUCCESS` in persistence). Non-success
+        rows (`failed`, `plan_limit_exceeded`, in-flight) are indistinguishable from unknown scans.
+        Replaces the removed `GET /discovery/cbom/*` address-keyed route.
       operationId: getWalletScanCbom
       responses:
         "200":
@@ -265,18 +266,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
+          description: Scan not found, not owner-scoped, or not a completed-success execution.
           $ref: "#/components/responses/NotFound"
-        "409":
-          description: Scan exists but is not in a terminal lifecycle state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                notTerminal:
-                  value:
-                    error: SCAN_NOT_TERMINAL
-                    message: CBOM is available only after the scan reaches a terminal state.
 
   /tls/scans:
     get:
@@ -383,9 +374,9 @@ paths:
       tags: [tls-scans]
       summary: Get CycloneDX CBOM for a TLS scan execution
       description: |
-        Optional TLS sibling of wallet **W6**. CBOM generated on read for **this** `scan_id`; owner scans
-        and shared catalog defaults (`is_default` rows) use the same lookup as scan detail. **409**
-        `SCAN_NOT_TERMINAL` while non-terminal.
+        Optional TLS sibling of wallet **W6 / G4**. CBOM generated on read for **this** `scan_id`; owner scans
+        and shared catalog defaults (`is_default` rows) use the same lookup as scan detail. Returns **404**
+        unless the scan is **`completed` success**.
       operationId: getTlsScanCbom
       responses:
         "200":
@@ -397,13 +388,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
+          description: Scan not found or not a completed-success execution.
           $ref: "#/components/responses/NotFound"
-        "409":
-          description: Scan exists but is not in a terminal lifecycle state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /rpcs:
     get:
