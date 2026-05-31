@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
@@ -14,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestGetDiscoveryV1WalletScanCBOM_Terminal200(t *testing.T) {
+func TestGetDiscoveryV1WalletScanCBOM_Success200(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	scanID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
@@ -61,34 +62,50 @@ func TestGetDiscoveryV1WalletScanCBOM_Terminal200(t *testing.T) {
 	}
 }
 
-func TestGetDiscoveryV1WalletScanCBOM_NotTerminal409(t *testing.T) {
+func TestGetDiscoveryV1WalletScanCBOM_NonSuccess404(t *testing.T) {
 	t.Parallel()
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	scanID := uuid.New()
-	ent := &domain.ScanResultEntity{
-		ID: scanID, UserID: userID, Address: "0xabc", Status: scan.StateRUNNING,
-		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: 1,
+	cases := []struct {
+		name   string
+		status string
+		errMsg string
+	}{
+		{name: "running", status: scan.StateRUNNING},
+		{name: "failed", status: scan.StateFAILED},
+		{name: "plan_limit_exceeded", status: scan.StateFAILED, errMsg: scan.ErrPlanLimitExceeded},
+		{name: "timeout", status: scan.StateTIMEOUT},
 	}
-	h := &DiscoveryHandler{
-		scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}},
-	}
-	app := fiber.New()
-	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
-		c.Locals("user_id", userID)
-		return h.GetDiscoveryV1WalletScanCBOM(c)
-	})
-	req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-	resp, err := app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	if resp.StatusCode != fiber.StatusConflict {
-		t.Fatalf("status = %d, want 409", resp.StatusCode)
-	}
-	var out map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&out)
-	if out["error"] != "SCAN_NOT_TERMINAL" {
-		t.Fatalf("error = %v, want SCAN_NOT_TERMINAL", out["error"])
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+			scanID := uuid.New()
+			ent := &domain.ScanResultEntity{
+				ID: scanID, UserID: userID, Address: "0xabc", Status: tc.status, Error: tc.errMsg,
+				Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: 1,
+			}
+			h := &DiscoveryHandler{
+				scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}},
+			}
+			app := fiber.New()
+			app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+				c.Locals("user_id", userID)
+				return h.GetDiscoveryV1WalletScanCBOM(c)
+			})
+			req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
+			resp, err := app.Test(req, -1)
+			if err != nil {
+				t.Fatalf("app.Test: %v", err)
+			}
+			if resp.StatusCode != fiber.StatusNotFound {
+				t.Fatalf("status = %d, want 404", resp.StatusCode)
+			}
+			var out map[string]any
+			_ = json.NewDecoder(resp.Body).Decode(&out)
+			if out["error"] != "not_found" {
+				t.Fatalf("error = %v, want not_found", out["error"])
+			}
+		})
 	}
 }
 
@@ -112,12 +129,12 @@ func TestGetDiscoveryV1WalletScanCBOM_NotFound404(t *testing.T) {
 	}
 }
 
-func TestGetDiscoveryV1WalletScanCBOM_Pending409(t *testing.T) {
+func TestGetDiscoveryV1WalletScanCBOM_Pending404(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	scanID := uuid.New()
 	pending := newMemoryPendingV1Repo()
-	_, _ = pending.PutWallet(nil, &repository.PendingV1ScanRecord{
+	_, _ = pending.PutWallet(context.TODO(), &repository.PendingV1ScanRecord{
 		ScanID: scanID, UserID: userID, Family: "wallet", Address: "0xabc",
 	})
 	h := &DiscoveryHandler{
@@ -134,7 +151,7 @@ func TestGetDiscoveryV1WalletScanCBOM_Pending409(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
-	if resp.StatusCode != fiber.StatusConflict {
-		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 }

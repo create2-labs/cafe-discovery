@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetDiscoveryV1WalletScanCBOM handles GET /discovery/v1/wallets/scans/:scan_id/cbom (W6).
+// GetDiscoveryV1WalletScanCBOM handles GET /discovery/v1/wallets/scans/:scan_id/cbom (W6, G4).
 func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
@@ -34,8 +34,8 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 			}))
 		}
 		if ent != nil {
-			if !scan.IsTerminal(ent.Status) {
-				return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanNotTerminalErrorBody(ent.Status)))
+			if !scan.IsSuccess(ent.Status) {
+				return scanCBOMNotFound(c)
 			}
 			return c.JSON(h.walletCBOMFromEntity(ent))
 		}
@@ -50,14 +50,11 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 			}))
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "wallet" {
-			return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanNotTerminalErrorBody("requested")))
+			return scanCBOMNotFound(c)
 		}
 	}
 
-	return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
-		"error":   "not_found",
-		"message": "scan not found",
-	}))
+	return scanCBOMNotFound(c)
 }
 
 func (h *DiscoveryHandler) walletCBOMFromEntity(ent *domain.ScanResultEntity) fiber.Map {
@@ -71,15 +68,14 @@ func (h *DiscoveryHandler) walletCBOMFromEntity(ent *domain.ScanResultEntity) fi
 	return cbom.Wallet(sr, address)
 }
 
-func scanNotTerminalErrorBody(dbStatus string) fiber.Map {
-	st := walletScanLifecycleStatusV1(dbStatus)
-	return fiber.Map{
-		"error":   "SCAN_NOT_TERMINAL",
-		"message": "CBOM is available only after the scan reaches a terminal state (current status: " + st + ")",
-	}
+func scanCBOMNotFound(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
+		"error":   "not_found",
+		"message": "scan not found",
+	}))
 }
 
-// GetDiscoveryV1TLSScanCBOM handles GET /discovery/v1/tls/scans/:scan_id/cbom (W6, TLS sibling).
+// GetDiscoveryV1TLSScanCBOM handles GET /discovery/v1/tls/scans/:scan_id/cbom (W6, G4, TLS sibling).
 func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
@@ -111,8 +107,8 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 			}
 		}
 		if ent != nil {
-			if !scan.IsTerminal(ent.Status) {
-				return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanNotTerminalErrorBody(ent.Status)))
+			if !scan.IsSuccess(ent.Status) {
+				return scanCBOMNotFound(c)
 			}
 			return c.JSON(cbom.TLS(ent.ToTLSScanResult()))
 		}
@@ -127,12 +123,9 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 			}))
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "tls" {
-			return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanNotTerminalErrorBody("requested")))
+			return scanCBOMNotFound(c)
 		}
 	}
 
-	return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
-		"error":   "not_found",
-		"message": "scan not found",
-	}))
+	return scanCBOMNotFound(c)
 }

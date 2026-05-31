@@ -356,7 +356,7 @@ func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID u
 			}
 		}
 		if rec != nil {
-			block, stale, qe := h.pendingWalletReservationState(ctx, userID, address, rec)
+			block, stale, qe := h.pendingWalletReservationState(userID, address, rec)
 			if qe != nil {
 				return qe
 			}
@@ -388,7 +388,7 @@ func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID u
 	return nil
 }
 
-func (h *DiscoveryHandler) pendingWalletReservationState(ctx context.Context, userID uuid.UUID, address string, rec *repository.PendingV1ScanRecord) (block bool, stale bool, qe *queueScanError) {
+func (h *DiscoveryHandler) pendingWalletReservationState(userID uuid.UUID, address string, rec *repository.PendingV1ScanRecord) (block bool, stale bool, qe *queueScanError) {
 	if rec.ScanID == uuid.Nil {
 		return false, true, nil
 	}
