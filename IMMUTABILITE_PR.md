@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown, branche `discovery/plan-usage-api-breakdown`) ; **IMM-6b-6** (backfill ledger — **annulé**, pas de prod + reset DB) ; **IMM-6b-7** ([#89](https://github.com/create2-labs/cafe-discovery/pull/89) — CBOM success-only G4, branche `discovery/cbom-success-only`) livré ; **IMM-6b-8** + **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown, branche `discovery/plan-usage-api-breakdown`) ; **IMM-6b-6** (backfill ledger — **annulé**, pas de prod + reset DB) ; **IMM-6b-7** ([#89](https://github.com/create2-labs/cafe-discovery/pull/89) — CBOM success-only G4, branche `discovery/cbom-success-only`) livré ; **IMM-6b-8** ([#90](https://github.com/create2-labs/cafe-discovery/pull/90) — tests intégration quota, branche `discovery/plan-quota-integration-tests`) **à merger** ; **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
 
 ---
 
@@ -104,9 +104,9 @@
 | **IMM-6b-3** | `discovery/plan-post-scan-guards` | `cafe-discovery` | [#85](https://github.com/create2-labs/cafe-discovery/pull/85) | **IMM-6b-2** | POST : **`successful + in_flight < limit`** + cap **`min(limit, 3)`**. |
 | **IMM-6b-4** | `discovery/plan-commit-on-success` | `cafe-discovery` | [#86](https://github.com/create2-labs/cafe-discovery/pull/86) | **IMM-6b-2** | Persistence : slot atomique au **`completed` success** ; sinon **`failed`** sans résultat. |
 | **IMM-6b-5** | `discovery/plan-usage-api-breakdown` | `cafe-discovery` | [#87](https://github.com/create2-labs/cafe-discovery/pull/87) | **IMM-6b-4** | **`GET /plans/usage`** : `used` / `visible` / `deleted_by_user`. |
-| **IMM-6b-6** | `discovery/plan-usage-backfill` | `cafe-discovery` | **annulé** | **IMM-6b-2** | ~~Backfill ledger~~ **annulé** (pas de prod ; reset DB ; ledger rempli par IMM-6b-4 à partir du go-live). |
+| ~~**IMM-6b-6**~~ | `discovery/plan-usage-backfill` | `cafe-discovery` | **annulé** | **IMM-6b-2** | ~~Backfill ledger~~ **annulé** (pas de prod ; reset DB ; ledger rempli par IMM-6b-4 à partir du go-live). |
 | **IMM-6b-7** | `discovery/cbom-success-only` | `cafe-discovery` | [#89](https://github.com/create2-labs/cafe-discovery/pull/89) | **IMM-12** | CBOM **404** si scan ≠ **`completed` success** (W6 / P1). |
-| **IMM-6b-8** | `discovery/plan-quota-integration-tests` | `cafe-discovery` | — | **IMM-6b-3…7** | Tests race, monotonic DELETE, CBOM, stub limit. |
+| **IMM-6b-8** | `discovery/plan-quota-integration-tests` | `cafe-discovery` | [#90](https://github.com/create2-labs/cafe-discovery/pull/90) | **IMM-6b-3…7** | Tests race, monotonic DELETE, CBOM, stub limit. |
 | **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
 | **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
@@ -184,7 +184,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 | `internal/persistence/handlers/scan_events.go` | **IMM-6b-4** : commit atomique `scan.completed` — ledger + success ou stub `PLAN_LIMIT_EXCEEDED`. |
 | `internal/persistence/planlimit/resolver.go` | **IMM-6b-4** : résolution limites plan pour persistence completion. |
 | `pkg/scan/quota.go` | **IMM-6b-4** : constante `PLAN_LIMIT_EXCEEDED`. |
-| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..6}-*.sh`, `test-discovery-imm6b-all.sh` | `--software` \| `--postgres` \| `--api` \| `--all` (aucun test sans flag) ; libs `scripts/lib/imm6b-*.sh` |
+| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..5,7,8}-*.sh`, `test-discovery-imm6b-all.sh` | `--software` \| `--postgres` \| `--api` \| `--all` (aucun test sans flag) ; libs `scripts/lib/imm6b-*.sh` |
+| IMM-6b-8 integration tests | `internal/planquota/integration_test.go`, `internal/handler/planquota_imm6b8_test.go` | G1–G4, race G3, DELETE monotonic, CBOM ; smoke `test-discovery-imm6b8-plan-quota-integration.sh` |
 | `internal/persistence/storage/postgres.go` | **IMM-3** : insert/update par `scan_id` ; **IMM-6b-4** : `OnCompletedInTx`, `OnPlanLimitExceededInTx`. |
 | `internal/handler/discovery_v1_scans.go` | Branche `address` + `chain_id` → `FindByUserIDAndAddress` (1 item max) ; à remplacer par liste owner/address. |
 | `internal/service/discovery.go` | `getExistingScan` : retourne scan existant → **à supprimer** ; pas de compat production à préserver. |
@@ -515,19 +516,20 @@ DELETE scan (success row)
 
 ### IMM-6b-8 — Tests intégration quota + race
 
-- **Status:** à faire
+- **Status:** livré dans [#90](https://github.com/create2-labs/cafe-discovery/pull/90)
 - **Branch:** `discovery/plan-quota-integration-tests`
 - **Repository:** `cafe-discovery`
 - **Objective:** Couvrir **G1–G4**, **P1-b**, parallélisme, CBOM.
-- **Scope:** Tests handler + persistence + plan ; script smoke optionnel.
+- **Scope:** `internal/planquota/`, `internal/handler/planquota_imm6b8_test.go` ; smoke `cafe-deploy/scripts/test-discovery-imm6b8-plan-quota-integration.sh`.
 - **Dependencies:** **IMM-6b-3** … **IMM-6b-7**
 - **Proposed commit title:** `test: plan quota guards commit race and cbom success-only`
+- **Proposed PR title:** `Discovery IMM-6b-8: plan quota integration tests (G1–G4, race, DELETE)`
 - **Completion criteria:**
-  - [ ] POST blocked when `successful + in_flight >= limit`
-  - [ ] POST blocked when `in_flight >= min(limit, 3)`
-  - [ ] Concurrent complete at limit → one rich success, one stub, ledger +1
-  - [ ] DELETE success → used unchanged, visible down
-  - [ ] CBOM 404 on non-success
+  - [x] POST blocked when `successful + in_flight >= limit`
+  - [x] POST blocked when `in_flight >= min(limit, 3)`
+  - [x] Concurrent complete at limit → one rich success, one stub, ledger +1
+  - [x] DELETE success → used unchanged, visible down
+  - [x] CBOM 404 on non-success
 
 ---
 
@@ -1586,7 +1588,7 @@ See [IMM-6b section](#imm-6b--quotas-plan--ledger-success-only-garde-post-commit
 - [x] POST blocked when `in_flight >= min(limit, 3)` — **IMM-6b-3**.
 - [x] Concurrent completions at limit: one rich success, one `PLAN_LIMIT_EXCEEDED` stub (address kept, no result) — **IMM-6b-4**.
 - [x] `GET /plans/usage` exposes `used`, `visible`, `deleted_by_user`. — **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87))
-- [ ] DELETE success scan: `used` unchanged, `visible` decreases.
+- [x] DELETE success scan: `used` unchanged, `visible` decreases. — **IMM-6b-8** ([#90](https://github.com/create2-labs/cafe-discovery/pull/90))
 - [x] CBOM **404** unless **completed success**.
 
 ---
