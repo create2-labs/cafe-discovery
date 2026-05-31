@@ -1633,7 +1633,7 @@ Product invariants (**`scan_id`** stable per row, immutable terminal **`result`*
 
 Implementation is split across PRs **IMM-1…IMM-12** in **[`IMMUTABILITE_PR.md`](IMMUTABILITE_PR.md)**. Gap analysis, **no-backfill** data policy, Redis vs Postgres roles, and deployment ordering: **[`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)** (IMM-1). Start **IMM-2** only after that document is reviewed.
 
-**IMM-6b smoke scripts** (plan quota ledger, guards, usage API) live in sibling repo **`cafe-deploy/scripts/`** — not run by default; pass explicit modes: `--software` (go test + vet + vuln + lint), `--postgres`, `--api`, or `--all`. Suite: `test-discovery-imm6b-all.sh`. IMM-6b-6 ledger backfill was cancelled (no prod data; DB reset). See **`cafe-deploy/README.md`** § *Discovery/CPM smoke scripts*.
+**IMM-6b smoke scripts** (plan quota ledger, guards, usage API, integration tests) live in sibling repo **`cafe-deploy/scripts/`** — not run by default; pass explicit modes: `--software` (go test + vet + vuln + lint), `--postgres`, `--api`, or `--all`. Suite: `test-discovery-imm6b-all.sh` (includes **IMM-6b-8** `test-discovery-imm6b8-plan-quota-integration.sh`). IMM-6b-6 ledger backfill was cancelled (no prod data; DB reset). Go integration tests: `internal/planquota/` (**IMM-6b-8**). See **`cafe-deploy/README.md`** § *Discovery/CPM smoke scripts*.
 
 ### Policy assessment (CPM-owned)
 

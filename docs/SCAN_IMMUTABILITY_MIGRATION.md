@@ -112,7 +112,8 @@ sequenceDiagram
 | POST plan guards | `internal/service/plan.go` (`CheckPostScanQuota`), `internal/handler/discovery.go` | **IMM-6b-3** : **G1** `successful+in_flight<limit` ; **G2** `in_flight<min(limit,3)` (illimité → cap 3) |
 | Persistence completion quota | `internal/persistence/handlers/scan_events.go`, `internal/persistence/storage/postgres.go` | **IMM-6b-4** : transaction `RecordSuccessUsageIfUnderLimitInTx` + rich success **or** stub `PLAN_LIMIT_EXCEEDED` (no Redis rich write) |
 | Usage API breakdown | `internal/service/plan.go`, `internal/handler/plan.go` | **IMM-6b-5** : `GET /plans/usage` — `used` (ledger), `visible`, `deleted_by_user`, `in_flight` |
-| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..5}-*.sh` | Modes explicites : `--software`, `--postgres`, `--api`, `--all` ; suite : `test-discovery-imm6b-all.sh` (IMM-6b-6 backfill annulé) |
+| Smoke IMM-6b-* | `cafe-deploy/scripts/test-discovery-imm6b{1..5,7,8}-*.sh` | Modes explicites : `--software`, `--postgres`, `--api`, `--all` ; suite : `test-discovery-imm6b-all.sh` (IMM-6b-6 backfill annulé) |
+| IMM-6b-8 integration | `internal/planquota/integration_test.go` | G1–G4, race completion, DELETE monotonic ; smoke `test-discovery-imm6b8-plan-quota-integration.sh` |
 | Writers | `internal/persistence/storage/postgres.go` | `WalletWriter` / `TLSWriter` **`ON CONFLICT (user_id, address\|url)`**; `DoUpdates` includes **`id`** |
 | Event handlers | `internal/persistence/handlers/scan_events.go` | Delegates to writers; logs “will upsert” on missing row |
 | v1 list (filtered) | `internal/handler/discovery_v1_scans.go` | `address` + `chain_id` → `FindByUserIDAndAddress` (single row) |
