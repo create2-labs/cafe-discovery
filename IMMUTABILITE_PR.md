@@ -14,7 +14,7 @@
 
 **Règles d’exécution (propriétaire humain) :** l’agent / les contributeurs ne font **pas** de commit, push, merge ni tags ; revue, git et publication restent manuelles. Chaque PR : branche locale, changements ciblés, tests, puis proposition de titre/message de commit et de PR (sections **Proposed** en anglais).
 
-**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2, branche `discovery/plan-post-scan-guards`) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence, branche `discovery/plan-commit-on-success`) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown, branche `discovery/plan-usage-api-breakdown`) ; **IMM-6b-6** (backfill ledger — **annulé**, pas de prod + reset DB) ; **IMM-6b-7** ([#89](https://github.com/create2-labs/cafe-discovery/pull/89) — CBOM success-only G4, branche `discovery/cbom-success-only`) livré ; **IMM-6b-8** ([#90](https://github.com/create2-labs/cafe-discovery/pull/90) — tests intégration quota, branche `discovery/plan-quota-integration-tests`) **à merger** ; **IMM-W1-1…3** (CPM DELETE drafts) + **FE-IMM-*** **à faire**.
+**Statut du document :** **IMM-1**–**IMM-12** largement mergés ; **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)), **IMM-6b-2** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84)) livrés ; **IMM-6b-3** ([#84](https://github.com/create2-labs/cafe-discovery/pull/84) — garde POST G1/G2) ; **IMM-6b-4** ([#85](https://github.com/create2-labs/cafe-discovery/pull/85) — commit atomique persistence) ; **IMM-6b-5** ([#87](https://github.com/create2-labs/cafe-discovery/pull/87) — `GET /plans/usage` breakdown) ; **IMM-6b-6** (backfill ledger — **annulé**, pas de prod + reset DB) ; **IMM-6b-7** ([#89](https://github.com/create2-labs/cafe-discovery/pull/89) — CBOM success-only G4) ; **IMM-6b-8** ([#90](https://github.com/create2-labs/cafe-discovery/pull/90) — tests intégration quota) livré ; **IMM-W1-1…3** (CPM, [#41](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/41)–[#44](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/44)) livré ; **CPM normalisation adresse** ([#45](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/45)–[#46](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/46)) livré ; **FE-IMM-*** **à faire**.
 
 ---
 
@@ -142,7 +142,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 9. **IMM-12** — CBOM by `scan_id`.
 10. **IMM-11** — cleanup routes / edge / OpenAPI / scripts.
 12. **IMM-6b-1…8** — ledger success-only + garde POST + commit atomique + CBOM (**P1**) ; **avant** frontend **FE-IMM-0**.
-13. **IMM-W1-1…3** (CPM) — **`DELETE /api/cpm/v1/drafts?id=…`**.
+13. ~~**IMM-W1-1…3** (CPM)~~ — **`DELETE /api/cpm/v1/drafts?id=…`** — livré ([#41](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/41)–[#44](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/44)).
 14. Frontend **FE-IMM-0…5** — après **IMM-6b-5** + **IMM-W1-3** minimum.
 15. **IMM-7** — tests contract E2E (peut chevaucher **IMM-11**).
 
