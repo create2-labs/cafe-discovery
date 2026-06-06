@@ -451,7 +451,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           description: |
-            Wallet scan rejected: in-flight scan (**W8**) or active CPM policy/draft on the target (**W1**).
+            Wallet scan rejected: in-flight scan (**W8**) or persisted CPM policy on the target (**W1**).
+            Platform draft alone does not block rescan (**IMM-W1-4**).
           content:
             application/json:
               schema:
@@ -461,10 +462,11 @@ paths:
                   value:
                     error: SCAN_IN_PROGRESS
                     message: A wallet scan is already in progress for this target.
-                cpmExistsForWalletTarget:
+                cpmPolicyExistsForWalletTarget:
                   value:
                     error: CPM_EXISTS_FOR_WALLET_TARGET
-                    message: A crypto policy or draft already exists for this wallet address. Finalize or delete it before starting a new scan.
+                    blocking_kind: policy
+                    message: A persisted crypto policy already exists for this wallet address. Delete or replace it before starting a new scan.
         "503":
           description: Scanner unavailable, or CPM context check failed (fail-closed).
           content:

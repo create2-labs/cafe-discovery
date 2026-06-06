@@ -264,16 +264,20 @@ func v1ErrorBody(body fiber.Map) fiber.Map {
 	if body == nil {
 		return fiber.Map{"error": "error", "message": "request failed"}
 	}
+	out := fiber.Map{"error": "error", "message": "request failed"}
 	if msg, ok := body["message"].(string); ok {
+		out["message"] = msg
 		if code, ok := body["error"].(string); ok {
-			return fiber.Map{"error": code, "message": msg}
+			out["error"] = code
 		}
-		return fiber.Map{"error": "error", "message": msg}
+	} else if errStr, ok := body["error"].(string); ok {
+		out["error"] = "error"
+		out["message"] = errStr
 	}
-	if errStr, ok := body["error"].(string); ok {
-		return fiber.Map{"error": "error", "message": errStr}
+	if kind, ok := body["blocking_kind"].(string); ok && kind != "" {
+		out["blocking_kind"] = kind
 	}
-	return fiber.Map{"error": "error", "message": "request failed"}
+	return out
 }
 
 // prepareWalletScanQueue validates and allocates scan_id; does not publish to NATS.
@@ -337,8 +341,8 @@ func (h *DiscoveryHandler) checkWalletCPMContext(c *fiber.Ctx, userID uuid.UUID,
 	if err != nil {
 		return cpmContextCheckUnavailableQueueError()
 	}
-	if active.Exists {
-		return cpmExistsForWalletTargetQueueError()
+	if active.PolicyCount > 0 {
+		return cpmPolicyExistsForWalletTargetQueueError()
 	}
 	return nil
 }
@@ -438,17 +442,18 @@ func scanInProgressErrorBody() fiber.Map {
 	}
 }
 
-func cpmExistsForWalletTargetQueueError() *queueScanError {
+func cpmPolicyExistsForWalletTargetQueueError() *queueScanError {
 	return &queueScanError{
 		status: fiber.StatusConflict,
-		body:   cpmExistsForWalletTargetErrorBody(),
+		body:   cpmPolicyExistsForWalletTargetErrorBody(),
 	}
 }
 
-func cpmExistsForWalletTargetErrorBody() fiber.Map {
+func cpmPolicyExistsForWalletTargetErrorBody() fiber.Map {
 	return fiber.Map{
-		"error":   "CPM_EXISTS_FOR_WALLET_TARGET",
-		"message": "A crypto policy or draft already exists for this wallet address. Finalize or delete it before starting a new scan.",
+		"error":          "CPM_EXISTS_FOR_WALLET_TARGET",
+		"blocking_kind":  "policy",
+		"message":        "A persisted crypto policy already exists for this wallet address. Delete or replace it before starting a new scan.",
 	}
 }
 

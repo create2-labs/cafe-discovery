@@ -31,8 +31,9 @@
 
 | WORKPLAN | Règle | Discovery | CPM | Frontend |
 |----------|--------|-----------|-----|----------|
-| **W7** | **CPM** bloquée si le **dernier scan** n’est pas **`completed`**. **`POST …/scan`** : refus si **en cours** ; retry si **`failed`** **et** **W1** OK | `SCAN_IN_PROGRESS` si en cours ; CPM → **400** | explore/persist → **400** | Scan : off si en cours ou **W1** ; CPM off si dernier ≠ **`completed`** |
-| **W1** | **Un seul contexte CPM actif / adresse** : pas de scan si **policy** ou **draft plateforme** | `POST …/scan` → **409** | Lookup policies **+** drafts (**IMM-9b**) | Finaliser / supprimer draft plateforme ; ou export local → delete draft → rescan (UX frontend) |
+| **W7** | **CPM** bloquée si le **dernier scan** n’est pas **`completed`**. **`POST …/scan`** : refus si **en cours** ; retry si **`failed`** **et** **W1** OK (pas de **policy**) | `SCAN_IN_PROGRESS` si en cours ; CPM → **400** | explore/persist → **400** | Scan : off si en cours ; CPM off si dernier ≠ **`completed`** |
+| **W1** | **Policy persistée** bloque le rescan ; **draft seul** non (**IMM-W1-4**) | `POST …/scan` → **409** si **policy** | Lookup policies (**IMM-9b**) pour guard POST | Finaliser / supprimer **policy** ; draft → bannière info optionnelle |
+| **W1b** | **Draft orphelin** après rescan → rebind **W2** avant explore/persist CPM | — | `POST …/drafts` rebind | **Rebind to last scan for this address** (**FE-IMM-4**) |
 | **W2** | CPM **uniquement** sur le dernier scan **`completed`** | **`GET …?address=&latest=true`** (≤1 item **`completed`**) | **400** si `scan_id` ≠ latest **`completed`** | Référence policy via **`latest=true`** |
 | **W3** | **DELETE scan** : l’utilisateur **supprime d’abord la CPM**, puis **`DELETE …/wallets/scans/{scan_id}`** | **409** `SCAN_REFERENCED_BY_POLICY` tant que policy liée ; **204** après | `GET ?scan_id=` puis `DELETE ?id=` | Guide 409 → supprimer policy → retry DELETE |
 | **W4** | **DELETE CPM** sans effet sur les scans | Inchangé | `DELETE …/policies?id=` | Bouton supprimer policy |
@@ -47,7 +48,7 @@
 |-------|-------------------|------------------|-----|
 | Persistance | 1 ligne / `(user_id, address)` upsert | Multi-lignes, `scan_id` stable | IMM-2, IMM-3 |
 | Garde readiness | Pas de blocage | **W7** (CPM : dernier `completed` ; POST : en cours seulement) | IMM-4c, IMM-9, IMM-10 |
-| POST scan | Pas de garde CPM / en cours | **W8** (en cours) + **W1** → **409** | IMM-4c, IMM-9 (+ IMM-9b) |
+| POST scan | Pas de garde CPM / en cours | **W8** (en cours) + **W1** (**policy** only — **IMM-W1-4**) → **409** | IMM-4c, IMM-9 (+ IMM-9b) |
 | CPM persist | Tout `scan_id` | **W7** + **W2** | IMM-10 (CPM) |
 | DELETE scan | **409** si policy (**PR6**) — **déjà conforme W3** | Conserver ; documenter parcours utilisateur | — (doc/UX) |
 | DELETE policy | Ne supprime pas scan | **W4** | — |
@@ -68,7 +69,7 @@
 | **Persistance TLS** | **Une ligne** par `(user_id, url)` — `idx_tls_scan_results_user_url` ; même pattern upsert. | Même règle que wallet (famille TLS). |
 | **`result` terminal** | Écrasé sur re-scan (même adresse / même URL). | **Immutable** après terminal pour **ce** `scan_id`. |
 | **Liste v1** | `GET …/wallets/scans` sans filtre : `ListOwnerWalletScansDiscoveryV1` (OK multi-lignes **si** DB le permet). Filtre `?address=&chain_id=` : **au plus 1** item via `FindByUserIDAndAddress`. | `?address=` → **toutes** exécutions pour l’adresse ; `?address=&chain_id=` → sous-ensemble **mono-chaîne**, **pas** limité à une seule ligne arbitraire. |
-| **POST scan wallet** | Accepté si quota OK. | **W7** : **409** si en cours ; retry si **`failed`** **seulement** si **W1** OK (pas de policy/draft). |
+| **POST scan wallet** | Accepté si quota OK. | **W7** : **409** si en cours ; retry si **`failed`** si **W1** OK (**policy** only — pas de draft). |
 | **CPM explore/persist** | Sans garde lifecycle. | **W7** + **W2** → **400** si dernier ≠ **`completed`** ou mauvais `scan_id`. |
 | **DELETE wallet** | **PR6** : `DELETE …/{scan_id}` + **409** si policy. | **W3** inchangé : action user — d’abord `DELETE` policy, puis scan. |
 | **CPM persist** | Tout `scan_id` owner valide. | **W7** + **`scan_id` = latest `completed`** (**W2**). |
@@ -81,9 +82,11 @@
 
 **`latest=true` (W2) :** dernier scan **`completed`** pour l’adresse — peut coexister avec un **`failed`** plus récent dans l’historique (`total: 1` possible). **`total: 0`** seulement s’il n’existe **aucun** **`completed`**.
 
-**Garde readiness (W7) :** **CPM** — refuser explore/persist tant que la ligne la plus récente n’est pas **`completed`**. **`POST …/scan`** — refuser si en cours (`SCAN_IN_PROGRESS`) ; si dernier **`failed`**, retry seulement si **W1** OK (pas de policy **ni** draft).
+**Garde readiness (W7) :** **CPM** — refuser explore/persist tant que la ligne la plus récente n’est pas **`completed`**. **`POST …/scan`** — refuser si en cours (`SCAN_IN_PROGRESS`) ; si dernier **`failed`**, retry si **W1** OK (**pas de policy persistée** — draft seul autorisé après **IMM-W1-4**).
 
-**W1 (contexte CPM actif) :** au plus **une** policy **ou** draft par adresse — **409** `CPM_EXISTS_FOR_WALLET_TARGET` ; parcours plateforme : finaliser ou supprimer le draft avant rescan. **Parcours client optionnel** (export local → delete draft plateforme → rescan → reload si même adresse + même `wallet_type`) : [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) — hors scope API Discovery.
+**W1 (policy bloque rescan) :** **`409`** lorsque **policy persistée** sur l’adresse — **pas** lorsque **draft** seul (**IMM-W1-4** révision **IMM-9**). Corps de réponse SHOULD distinguer **policy** (ex. `blocking_kind: "policy"`). **`DELETE /api/cpm/v1/drafts?id=…`** = abandon draft — **pas** prérequis rescan.
+
+**W1b (draft orphelin, CPM) :** après rescan, draft sur ancien **`scan_id`** → explore/validate/persist bloqués jusqu’à **rebind manuel** sur **W2** — voir [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md). **Pas** de sauvegarde locale client.
 
 ---
 
@@ -109,7 +112,8 @@
 | **IMM-6b-8** | `discovery/plan-quota-integration-tests` | `cafe-discovery` | [#90](https://github.com/create2-labs/cafe-discovery/pull/90) | **IMM-6b-3…7** | Tests race, monotonic DELETE, CBOM, stub limit. |
 | **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
-| **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 déjà en place + W1 (policy ou draft). |
+| **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 + W1 (**policy ou draft** — voir **IMM-W1-4** révision) |
+| **IMM-W1-4** | `discovery/w1-policy-only-post-guard` | `cafe-discovery` (+ CPM lookup) | — | **IMM-9** ✅ | **W1** révisé : **409** POST scan si **policy persistée** uniquement ; draft seul OK ; body `blocking_kind` |
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
@@ -137,7 +141,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 4. **IMM-4b** — `latest=true` (**W2**) + OpenAPI.
 5. **IMM-4c** — garde **W8** sur `POST …/scan` (`SCAN_IN_PROGRESS`, y compris `requested`).
 6. **IMM-9b** (CPM) — lookup `target_address` normalisée + policy + draft.
-7. **IMM-9** — W1 après W8 ; fail-closed si lookup CPM indisponible.
+7. **IMM-9** — W1 après W8 (**policy ou draft** — livré).
+7b. **IMM-W1-4** — révision W1 : **409** si **policy** seule ; draft seul autorise rescan ; smoke step 5 mis à jour.
 8. **IMM-10** (CPM) — W7 via newest row ; W2 via `latest=true`.
 9. **IMM-12** — CBOM by `scan_id`.
 10. **IMM-11** — cleanup routes / edge / OpenAPI / scripts.
@@ -160,8 +165,8 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 2. **Une exécution** = **une ligne** Postgres (`id` = `scan_id`).
 3. **`result`** **gelé** après état terminal **`completed` success** ; **CBOM** (**W6**) **uniquement** si **`completed` success** — **IMM-6b-7**.
 4. **Historique** : plusieurs lignes par `target_address` ; listage **`GET …/wallets/scans?address=`** (règle **5**).
-5. **W7** : CPM bloquée si dernier scan ≠ **`completed`** ; **`POST …/scan`** bloqué si en cours, ou si **W1** (policy/draft), sinon retry possible si **`failed`**.
-6. **W1** : au plus un contexte CPM actif — pas de scan si policy **ou** draft sur la cible.
+5. **W7** : CPM bloquée si dernier scan ≠ **`completed`** ; **`POST …/scan`** bloqué si en cours, ou si **W1** (**policy persistée**), sinon retry possible si **`failed`**.
+6. **W1** : **policy persistée** bloque rescan — **draft seul** non (**IMM-W1-4**). **W1b** : draft orphelin → rebind **W2** côté CPM (**FE-IMM-4**).
 7. **CPM** : **W7** sur newest row (`limit=1`, tri défaut) ; **W2** sur dernier **`completed`** (`latest=true`).
 8. **Effacement scan** : `DELETE …/wallets/scans/{scan_id}` ; **409** si policy référencée ; parcours **W3** (d’abord supprimer CPM).
 9. **Effacement CPM** : `DELETE …/policies?id=` sans toucher aux scans (**W4**).
@@ -573,10 +578,23 @@ DELETE scan (success row)
 - **Endpoint :** `POST /api/discovery/v1/scan` avec `{ "address": "0x…" }` (wallet only pour **W1**).
 - **Ordre des gardes :**
   1. Newest row `requested` / `started` → **409** `SCAN_IN_PROGRESS` (**IMM-4c**).
-  2. Lookup CPM par **`target_address`** normalisée (**IMM-9b**) — policy **ou** draft → **409** `CPM_EXISTS_FOR_WALLET_TARGET`.
+  2. Lookup CPM par **`target_address`** normalisée (**IMM-9b**) — **409** si **policy persistée** (**IMM-W1-4** révision ; livré **IMM-9** bloquait aussi draft).
   3. Fail-closed si lookup CPM indisponible (pas de scan silencieux).
-- **Retry après `failed` :** accepté **seulement** si **W1** OK (aucune policy, aucun draft). Sinon : finaliser (`POST /api/cpm/v1/policies`) ou supprimer draft (`DELETE /api/cpm/v1/drafts?id=…`) / policy (`DELETE /api/cpm/v1/policies?id=…`).
+- **Retry après `failed` :** accepté si **W1** OK (**pas de policy persistée** — draft seul OK après **IMM-W1-4**).
+- **Révision IMM-W1-4 :** voir section dédiée — smoke step 5 et tests draft-only à mettre à jour.
 - **Dépend de :** IMM-3, **IMM-4c**, **IMM-9b** (CPM, avant cette PR ou en parallèle coordonné).
+
+---
+
+## IMM-W1-4 — W1 révisé : policy-only POST guard (planned)
+
+- **Status:** ⚪ planned — révision produit **2026-06** (voir [`WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) §2.2 **W1** / **W1b**).
+- **Dépôts :** `cafe-discovery` (+ lookup CPM **IMM-9b**).
+- **Changement :** `POST /api/discovery/v1/scan` → **`409`** uniquement si **policy persistée** sur l’adresse — **pas** si **draft** plateforme seul.
+- **Corps d’erreur :** SHOULD exposer **`blocking_kind: "policy"`** (ou code dédié) pour distinguer policy vs legacy combined `CPM_EXISTS_FOR_WALLET_TARGET`.
+- **Tests / smokes :** mettre à jour `test-discovery-imm9-wallet-scan-w1-cpm-block.sh` step 5 (draft seul → POST **accepté**) ; conserver cas **policy** → **409**.
+- **Frontend :** **FE-IMM-3** revision + **FE-IMM-4** (orphan rebind CPM).
+- **Dépend de :** **IMM-9** ✅, **IMM-9b** ✅.
 
 ---
 
@@ -630,13 +648,13 @@ DELETE scan (success row)
 | ✅ | Historique & immutabilité (W5–W6) | Aucune réponse API n’expose `RUNNING`/`running` (lifecycle: `started`). | `internal/contract/wallet_scans_v1_test.go::TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions` |
 | ✅ | CPM & scan (W7, W1, W2) | `POST /api/discovery/v1/scan` : newest `requested` \| `started` → `409 SCAN_IN_PROGRESS`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletPendingRequested409`; `...WalletRunningRow409` |
 | ✅ | CPM & scan (W7, W1, W2) | Newest `failed` + no policy/draft → scan accepté ; CPM explore/persist → `400 LATEST_SCAN_NOT_COMPLETED`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletFailedNewestAccepted`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
-| ⏳ | CPM & scan (W7, W1, W2) | Newest `failed` + draft/policy → `409 CPM_EXISTS_FOR_WALLET_TARGET` jusqu’à `DELETE /api/cpm/v1/drafts?id=…` / finalize policy. | partiel: `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft`; `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` |
+| ⏳ | CPM & scan (W7, W1, W2) | Newest `failed` + **policy** → `409` ; draft seul → POST OK (**IMM-W1-4**). | `internal/handler/discovery_scan_v1_test.go` ; smoke à réviser post **IMM-W1-4** |
 | ⏳ | CPM & scan (W7, W1, W2) | `completed` A + `failed` B (B newer): CPM `400 LATEST_SCAN_NOT_COMPLETED` même pour `scan_id` A ; `POST …/scan` OK seulement si W1 OK. | `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ✅ | CPM & scan (W7, W1, W2) | W7 CPM : newest row via `limit=1` (pas `latest=true`). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W7RejectsWhenNewestIsFailed`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ⏳ | CPM & scan (W7, W1, W2) | W2 CPM : `GET …/wallets/scans?address=&latest=true` (pas `limit=1` seul). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ✅ | CPM & scan (W7, W1, W2) | Historical `scan_id` → `400 SCAN_ID_NOT_LATEST_FOR_TARGET`. | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ⏳ | CPM & scan (W7, W1, W2) | `DELETE /api/cpm/v1/drafts?id=…` contractualisé ; débloque rescan après suppression draft. | `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` |
-| ⏳ | CPM & scan (W7, W1, W2) | UX : export local → delete draft → scan → reload. | N/A backend (validation frontend/manuelle) |
+| ⏳ | CPM & scan (W7, W1, W2, W1b) | UX : rescan with draft OK ; orphan → **Rebind to last scan** ; policy still blocks POST. | **IMM-W1-4** + **FE-IMM-4** |
 | ⏳ | TLS | TLS : historique Discovery + CBOM optionnel ; pas de cible CPM assessment/remediation produit actuel. | `cafe-crypto-policy-mgt/internal/app/assessment_request_test.go::TestPoliciesAssessmentRequest_tlsScanNotFound`; `cafe-crypto-policy-mgt/internal/api/wallet_scan_detail_test.go::TestObservationPayloadFromDiscoveryWalletScanDetail_tlsRejected`; `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_ExploreRejectsTLSScanIDAsNotFound`; `...PersistRejectsTLSScanIDAsNotFound` |
 | ✅ | Suppression (W3–W4) | `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
 | ✅ | Suppression (W3–W4) | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → `409 SCAN_REFERENCED_BY_POLICY`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
@@ -1320,6 +1338,12 @@ Document safe deployment order for scan history schema + persistence writer chan
 ### Title (copy as-is)
 
 ```
+[Discovery][IMM-W1-4] W1 revision — block wallet POST /scan only when persisted policy exists (not draft alone)
+```
+
+*(IMM-9 title below — livré ; draft guard superseded by IMM-W1-4)*
+
+```
 [Discovery][IMM-9] Block wallet POST /scan when CPM policy or draft exists for target address (W1)
 ```
 
@@ -1345,19 +1369,24 @@ Document safe deployment order for scan history schema + persistence writer chan
 Before `POST /api/discovery/v1/scan` with `{ "address": "0x…" }` (wallet only — **W1** does not apply to TLS URL scans):
 
 1. **Scan en cours** (**IMM-4c**) — newest row `requested` / `started` → **409** `SCAN_IN_PROGRESS`.
-2. **W1** — internal CPM lookup (**IMM-9b**) by **normalized `target_address`** (no `scan_id` yet; Discovery must not resolve address via policy → Discovery detail) → **409** `CPM_EXISTS_FOR_WALLET_TARGET` when policy **or** draft exists.
+2. **W1** — internal CPM lookup (**IMM-9b**) → **409** when **persisted policy** exists (**IMM-W1-4**). *(IMM-9 shipped: policy **or** draft — draft portion superseded.)*
 
-Newest **`failed`** → new scan **only** if **W1** OK (no policy, no draft). User may unblock via **`DELETE /api/cpm/v1/drafts?id=…`** or finalize policy.
+Newest **`failed`** → new scan if **W1** OK (**no persisted policy**). Draft alone does **not** block. User unblocks **policy** via finalize or **`DELETE /api/cpm/v1/policies?id=…`**. Orphan draft → CPM **FE-IMM-4** rebind.
 
-### Acceptance criteria
+### Acceptance criteria (IMM-W1-4)
 
-- [ ] In-flight guard **before** **W1** (reuse IMM-4c helper).
-- [ ] **W1**: **409** when policy **or** draft exists (**IMM-9b** lookup by normalized address).
-- [ ] Fail-closed if CPM lookup unavailable (no silent bypass).
-- [ ] Newest **`failed`** + draft present → **409** (must delete/finalize draft first).
-- [ ] Newest **`failed`** + no draft/policy → scan **accepted**.
-- [ ] OpenAPI documents `SCAN_IN_PROGRESS` + `CPM_EXISTS_FOR_WALLET_TARGET`.
-- [ ] Integration tests: in-flight, draft blocks, policy blocks, failed retry when W1 OK.
+- [ ] **409** when **persisted policy** on normalized address — **not** when draft alone.
+- [ ] Response distinguishes **policy** (`blocking_kind` or dedicated code).
+- [ ] Draft-only + newest `failed` → POST scan **accepted**.
+- [ ] Policy present → **409** unchanged.
+
+### Acceptance criteria (IMM-9 — historical, pre IMM-W1-4)
+
+- [x] In-flight guard **before** **W1** (reuse IMM-4c helper).
+- [x] **W1 (legacy)**: **409** when policy **or** draft exists — **superseded for draft** by **IMM-W1-4**.
+- [x] Fail-closed if CPM lookup unavailable (no silent bypass).
+- [x] OpenAPI documents `SCAN_IN_PROGRESS` + `CPM_EXISTS_FOR_WALLET_TARGET`.
+- [ ] Integration tests updated post **IMM-W1-4**: draft-only no longer blocks POST.
 
 ### Dependencies
 
