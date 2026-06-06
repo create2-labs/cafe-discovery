@@ -523,7 +523,7 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 	}
 }
 
-func TestPostDiscoveryScanV1_WalletCPMContext409(t *testing.T) {
+func TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
@@ -534,7 +534,7 @@ func TestPostDiscoveryScanV1_WalletCPMContext409(t *testing.T) {
 		pendingV1:        newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef: policyRefStub{
-			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
+			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
 		},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -561,8 +561,47 @@ func TestPostDiscoveryScanV1_WalletCPMContext409(t *testing.T) {
 	if out["error"] != "CPM_EXISTS_FOR_WALLET_TARGET" {
 		t.Fatalf("error = %v, want CPM_EXISTS_FOR_WALLET_TARGET", out["error"])
 	}
+	if out["blocking_kind"] != "policy" {
+		t.Fatalf("blocking_kind = %v, want policy", out["blocking_kind"])
+	}
 	if n.lastSubject != "" {
 		t.Fatalf("unexpected NATS publish")
+	}
+}
+
+func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
+	t.Parallel()
+	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	n := &mockNATSConn{}
+	h := &DiscoveryHandler{
+		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
+		natsConn:         n,
+		scannerPresence:  alwaysScanners{},
+		pendingV1:        newMemoryPendingV1Repo(),
+		scanResultRepo:   &scanResultRepoStub{},
+		policyRef: policyRefStub{
+			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
+		},
+	}
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+		c.Locals("user_id", userID)
+		return h.PostDiscoveryScanV1(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
+	}
+	if n.lastSubject != nats.SubjectScanRequestedWallet {
+		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, nats.SubjectScanRequestedWallet)
 	}
 }
 
