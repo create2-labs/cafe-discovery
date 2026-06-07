@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"time"
 
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/pkg/scan"
@@ -69,20 +70,35 @@ func (w *TLSWriter) OnCompletedInTx(tx *gorm.DB, scanID uuid.UUID, entity *domai
 	return nil
 }
 
-// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3).
+// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3, IMM-D3).
+// Only lifecycle identity (user_id, url), status, and error are set — no fabricated crypto posture.
 func (w *TLSWriter) OnPlanLimitExceededInTx(tx *gorm.DB, scanID uuid.UUID, userID *uuid.UUID, url string) error {
-	stub := &domain.TLSScanResultEntity{
-		ID: scanID, UserID: userID, URL: url, Host: "", Port: 0,
-		ProtocolVersion: "unknown", NISTLevel: domain.NISTLevel1,
-		RiskScore: 0, PQCRisk: "unknown", Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
-		Certificate: "", CipherSuites: "[]", SupportedPQCs: "[]", Recommendations: "[]", NISTLevels: "{}",
+	updates := map[string]interface{}{
+		"status":           scan.StateFAILED,
+		"error":            scan.ErrPlanLimitExceeded,
+		"host":             "",
+		"port":             0,
+		"protocol_version": "",
+		"nist_level":       0,
+		"risk_score":       0,
+		"pqc_risk":         "",
+		"certificate":      "",
+		"cipher_suites":    "",
+		"supported_pq_cs":  "",
+		"recommendations":  "",
+		"nist_levels":      "",
+		"updated_at":       time.Now(),
 	}
-	res := tx.Model(stub).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(stub)
+	res := tx.Model(&domain.TLSScanResultEntity{}).Where("id = ?", scanID).Updates(updates)
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return tx.Create(stub).Error
+		ent := &domain.TLSScanResultEntity{
+			ID: scanID, UserID: userID, URL: url,
+			Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
+		}
+		return tx.Create(ent).Error
 	}
 	return nil
 }
@@ -93,7 +109,7 @@ func (w *TLSWriter) OnFailed(scanID uuid.UUID, userID *uuid.UUID, url, errMsg st
 		Updates(map[string]interface{}{
 			"status":     scan.StateFAILED,
 			"error":      errMsg,
-			"updated_at": gorm.Expr("NOW()"),
+			"updated_at": time.Now(),
 		})
 	if res.Error != nil {
 		return res.Error
@@ -168,20 +184,36 @@ func (w *WalletWriter) OnCompletedInTx(tx *gorm.DB, scanID uuid.UUID, entity *do
 	return nil
 }
 
-// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3).
+// OnPlanLimitExceededInTx writes a stripped failed row when quota is exceeded at completion (IMM-6b G3, IMM-D3).
+// Only lifecycle identity (user_id, address), status, and error are set — no fabricated crypto posture.
 func (w *WalletWriter) OnPlanLimitExceededInTx(tx *gorm.DB, scanID, userID uuid.UUID, address string) error {
-	stub := &domain.ScanResultEntity{
-		ID: scanID, UserID: userID, Address: address, Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
-		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
-		KeyExposed: false, IsEOA: true, IsERC4337: false, RiskScore: 0,
-		Networks: "[]", Connections: "[]",
+	updates := map[string]interface{}{
+		"status":           scan.StateFAILED,
+		"error":            scan.ErrPlanLimitExceeded,
+		"type":             "",
+		"algorithm":        "",
+		"nist_level":       0,
+		"key_exposed":      false,
+		"public_key":       "",
+		"transaction_hash": "",
+		"exposed_network":  "",
+		"is_eoa":           false,
+		"is_erc4337":       false,
+		"risk_score":       0,
+		"networks":         "",
+		"connections":      "",
+		"updated_at":       time.Now(),
 	}
-	res := tx.Model(stub).Where("id = ?", scanID).Omit("created_at").Select("*").Updates(stub)
+	res := tx.Model(&domain.ScanResultEntity{}).Where("id = ?", scanID).Updates(updates)
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return tx.Create(stub).Error
+		ent := &domain.ScanResultEntity{
+			ID: scanID, UserID: userID, Address: address,
+			Status: scan.StateFAILED, Error: scan.ErrPlanLimitExceeded,
+		}
+		return tx.Create(ent).Error
 	}
 	return nil
 }
@@ -192,7 +224,7 @@ func (w *WalletWriter) OnFailed(scanID, userID uuid.UUID, address, errMsg string
 		Updates(map[string]interface{}{
 			"status":     scan.StateFAILED,
 			"error":      errMsg,
-			"updated_at": gorm.Expr("NOW()"),
+			"updated_at": time.Now(),
 		})
 	if res.Error != nil {
 		return res.Error
