@@ -127,6 +127,86 @@ func TestWalletWriter_OnStartedIdempotentByScanID(t *testing.T) {
 	}
 }
 
+func TestWalletWriter_OnStartedInsertsLifecycleFieldsOnly(t *testing.T) {
+	w := setupWalletWriterTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	address := "0xlifecycle"
+
+	if err := w.OnStarted(scanID, userID, address); err != nil {
+		t.Fatalf("OnStarted: %v", err)
+	}
+
+	var stored domain.ScanResultEntity
+	if err := w.db.Where("id = ?", scanID).First(&stored).Error; err != nil {
+		t.Fatalf("load row: %v", err)
+	}
+	if stored.UserID != userID {
+		t.Fatalf("user_id = %v, want %v", stored.UserID, userID)
+	}
+	if stored.Address != address {
+		t.Fatalf("address = %q, want %q", stored.Address, address)
+	}
+	if stored.Status != scan.StateRUNNING {
+		t.Fatalf("status = %q, want %q", stored.Status, scan.StateRUNNING)
+	}
+	if stored.Type != "" {
+		t.Fatalf("type = %q, want empty before scan.completed", stored.Type)
+	}
+	if stored.Algorithm != "" {
+		t.Fatalf("algorithm = %q, want empty before scan.completed", stored.Algorithm)
+	}
+	if stored.IsEOA {
+		t.Fatal("is_eoa must not be true before scan.completed")
+	}
+	if stored.NISTLevel != 0 {
+		t.Fatalf("nist_level = %v, want zero before scan.completed", stored.NISTLevel)
+	}
+	if stored.RiskScore != 0 {
+		t.Fatalf("risk_score = %v, want zero before scan.completed", stored.RiskScore)
+	}
+	if stored.Networks != "" {
+		t.Fatalf("networks = %q, want empty before scan.completed", stored.Networks)
+	}
+}
+
+func TestTLSWriter_OnStartedInsertsLifecycleFieldsOnly(t *testing.T) {
+	w := setupTLSWriterTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	url := "https://lifecycle.example"
+
+	if err := w.OnStarted(scanID, &userID, url); err != nil {
+		t.Fatalf("OnStarted: %v", err)
+	}
+
+	var stored domain.TLSScanResultEntity
+	if err := w.db.Where("id = ?", scanID).First(&stored).Error; err != nil {
+		t.Fatalf("load row: %v", err)
+	}
+	if stored.UserID == nil || *stored.UserID != userID {
+		t.Fatalf("user_id = %v, want %v", stored.UserID, userID)
+	}
+	if stored.URL != url {
+		t.Fatalf("url = %q, want %q", stored.URL, url)
+	}
+	if stored.Status != scan.StateRUNNING {
+		t.Fatalf("status = %q, want %q", stored.Status, scan.StateRUNNING)
+	}
+	if stored.ProtocolVersion != "" {
+		t.Fatalf("protocol_version = %q, want empty before scan.completed", stored.ProtocolVersion)
+	}
+	if stored.NISTLevel != 0 {
+		t.Fatalf("nist_level = %v, want zero before scan.completed", stored.NISTLevel)
+	}
+	if stored.PQCRisk != "" {
+		t.Fatalf("pqc_risk = %q, want empty before scan.completed", stored.PQCRisk)
+	}
+	if stored.RiskScore != 0 {
+		t.Fatalf("risk_score = %v, want zero before scan.completed", stored.RiskScore)
+	}
+}
+
 func TestTLSWriter_OnCompletedPreservesCreatedAt(t *testing.T) {
 	w := setupTLSWriterTestDB(t)
 	userID := uuid.New()
