@@ -149,7 +149,7 @@ func TestCommitWalletCompletion_AtLimitOneRichOneStub(t *testing.T) {
 		switch row.Status {
 		case scan.StateSUCCESS:
 			rich++
-			if row.PublicKey == "" || row.Networks == "[]" {
+			if row.PublicKey == "" || row.Networks == "" || row.Networks == "[]" {
 				t.Fatalf("success row must keep rich result: %+v", row)
 			}
 		case scan.StateFAILED:
@@ -160,7 +160,7 @@ func TestCommitWalletCompletion_AtLimitOneRichOneStub(t *testing.T) {
 			if row.Address != address {
 				t.Fatalf("stub must keep address, got %q", row.Address)
 			}
-			if row.PublicKey != "" || row.KeyExposed || row.Networks != "[]" {
+			if row.PublicKey != "" || row.KeyExposed || row.Networks != "" || row.Connections != "" {
 				t.Fatalf("stub must strip exploitable fields: %+v", row)
 			}
 		default:

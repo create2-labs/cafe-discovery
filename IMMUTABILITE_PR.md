@@ -119,7 +119,7 @@
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
 | **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | [#93](https://github.com/create2-labs/cafe-discovery/pull/93) | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
 | **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | [#94](https://github.com/create2-labs/cafe-discovery/pull/94) | **IMM-D1** ✅ | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
-| **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | — | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
+| **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | [#95](https://github.com/create2-labs/cafe-discovery/pull/95) | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
 | **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | — | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
 | **IMM-D5** | `discovery/wallet-type-at-completion` | `cafe-discovery` | — | **IMM-D1**, scanner | `wallet_type` dérivé uniquement à **`scan.completed`** ; aligner `type`/`is_eoa`/`wallet_type`. |
 | **IMM-DEP-1** | `deploy/smoke-no-invented-scan-fields` | `cafe-deploy` | — | **IMM-D4** | Smokes : pas de default `wallet_type` ; chains depuis `detail.result.chain_ids`. |
@@ -685,7 +685,7 @@ DELETE scan (success row)
 
 ### IMM-D3 — Quota / limit failed stubs minimal
 
-- **Status:** ⚪ planned
+- **Status:** [#95](https://github.com/create2-labs/cafe-discovery/pull/95)
 - **Repository:** `cafe-discovery`
 - **Objective:** Plan-limit failed rows carry status + error only.
 - **Scope:** `OnPlanLimitExceededInTx` wallet/TLS stubs in `postgres.go`.
