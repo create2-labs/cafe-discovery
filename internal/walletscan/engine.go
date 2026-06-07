@@ -53,6 +53,8 @@ func (e *WalletScanEngine) Execute(ctx context.Context, address string) (*domain
 		}
 	}
 
+	accountType, isEOA, isERC4337, _ = domain.NormalizeWalletAccountKind(accountType, isEOA, isERC4337)
+
 	scanData := scanResultData{
 		accountType:     accountType,
 		algorithm:       algorithm,

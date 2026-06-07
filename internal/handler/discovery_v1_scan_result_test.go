@@ -54,6 +54,26 @@ func TestWalletScanResultV1_UIFields(t *testing.T) {
 	}
 }
 
+func TestWalletScanResultV1_typeEOAWithFalseIsEOA_alignsWalletType(t *testing.T) {
+	t.Parallel()
+	ent := &domain.ScanResultEntity{
+		ID:        uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+		Address:   "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+		Type:      domain.AccountTypeEOA,
+		Algorithm: domain.AlgorithmECDSAsecp256k1,
+		NISTLevel: domain.NISTLevel1,
+		IsEOA:     false,
+		Status:    scan.StateSUCCESS,
+	}
+	body := walletScanResultV1(ent, nil)
+	if body["wallet_type"] != "eoa" {
+		t.Fatalf("wallet_type = %v, want eoa", body["wallet_type"])
+	}
+	if body["type"] != "EOA" {
+		t.Fatalf("type = %v, want EOA", body["type"])
+	}
+}
+
 func TestTlsScanResultBodyV1_UIFields(t *testing.T) {
 	t.Parallel()
 	ent := &domain.TLSScanResultEntity{

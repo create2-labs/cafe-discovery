@@ -105,12 +105,12 @@ func walletSubjectID(normalizedAddress string) string {
 }
 
 func mapAccountKind(scan *domain.ScanResult) v01.AccountKind {
-	switch scan.Type {
-	case domain.AccountTypeEOA:
+	switch domain.DeriveWalletTypeV1(scan.Type, scan.IsEOA, scan.IsERC4337) {
+	case domain.WalletTypeEOA:
 		return v01.AccountKindEOA
-	case domain.AccountTypeAA:
+	case domain.WalletTypeSmartAccount:
 		return v01.AccountKindERC4337SmartAccount
-	case domain.AccountTypeContract:
+	case domain.WalletTypeContract:
 		return v01.AccountKindContractAccount
 	default:
 		return v01.AccountKindUnknown

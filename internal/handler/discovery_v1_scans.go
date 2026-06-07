@@ -323,19 +323,6 @@ func walletScanDetailV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 	return out
 }
 
-func walletAccountTypeV1(t domain.AccountType, isEOA, is4337 bool) string {
-	if is4337 || t == domain.AccountTypeAA {
-		return "smart_account"
-	}
-	if t == domain.AccountTypeContract {
-		return "contract"
-	}
-	if isEOA || t == domain.AccountTypeEOA {
-		return "eoa"
-	}
-	return "unknown"
-}
-
 func nistLevelToPQPosture(l domain.NISTLevel) string {
 	switch {
 	case l >= 4:

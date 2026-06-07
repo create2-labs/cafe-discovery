@@ -231,10 +231,8 @@ func (w *WalletWriter) OnFailed(scanID, userID uuid.UUID, address, errMsg string
 	}
 	if res.RowsAffected == 0 {
 		ent := &domain.ScanResultEntity{
-			ID: scanID, UserID: userID, Address: address, Status: scan.StateFAILED, Error: errMsg,
-			Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
-			KeyExposed: false, IsEOA: true, IsERC4337: false, RiskScore: 0,
-			Networks: "[]", Connections: "[]",
+			ID: scanID, UserID: userID, Address: address,
+			Status: scan.StateFAILED, Error: errMsg,
 		}
 		return w.db.Create(ent).Error
 	}
