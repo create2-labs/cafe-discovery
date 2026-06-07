@@ -181,6 +181,7 @@ func (h *ScanEventHandler) handleWalletCompleted(ctx context.Context, msg *nats.
 		log.Error().Err(err).Str("scan_id", msg.ScanID.String()).Msg("persistence: decode wallet result failed")
 		return err
 	}
+	domain.NormalizeScanResultWalletKind(&result)
 	log.Debug().Str("scan_id", msg.ScanID.String()).Msg("persistence: wallet result decoded OK")
 	entity := domain.FromScanResult(msg.UserID, &result)
 	entity.ID = msg.ScanID

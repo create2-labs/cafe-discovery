@@ -120,8 +120,8 @@
 | **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | [#93](https://github.com/create2-labs/cafe-discovery/pull/93) | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
 | **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | [#94](https://github.com/create2-labs/cafe-discovery/pull/94) | **IMM-D1** ✅ | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
 | **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | [#95](https://github.com/create2-labs/cafe-discovery/pull/95) | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
-| **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | — | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
-| **IMM-D5** | `discovery/wallet-type-at-completion` | `cafe-discovery` | — | **IMM-D1**, scanner | `wallet_type` dérivé uniquement à **`scan.completed`** ; aligner `type`/`is_eoa`/`wallet_type`. |
+| **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | [#96](https://github.com/create2-labs/cafe-discovery/pull/96) | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
+| **IMM-D5** | `discovery/wallet-type-at-completion` | `cafe-discovery` | [#97](https://github.com/create2-labs/cafe-discovery/pull/97) | **IMM-D1**, scanner | `wallet_type` dérivé uniquement à **`scan.completed`** ; aligner `type`/`is_eoa`/`wallet_type`. |
 | **IMM-DEP-1** | `deploy/smoke-no-invented-scan-fields` | `cafe-deploy` | — | **IMM-D4** | Smokes : pas de default `wallet_type` ; chains depuis `detail.result.chain_ids`. |
 
 **Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8**, **IMM-DEP-1** → `cafe-deploy`, les autres → `cafe-discovery`).

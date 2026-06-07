@@ -10,6 +10,7 @@ import (
 )
 
 func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fiber.Map {
+	accountType, _, _, walletType := domain.NormalizeWalletAccountKind(e.Type, e.IsEOA, e.IsERC4337)
 	dto := e.ToScanResult()
 	networks := parseNetworksFromEntity(e.Networks)
 	if networks == nil {
@@ -18,7 +19,7 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 	return fiber.Map{
 		"target_address":     e.Address,
 		"chain_ids":          chainIDsForNetworks(e.Networks, cfg),
-		"wallet_type":        walletAccountTypeV1(e.Type, e.IsEOA, e.IsERC4337),
+		"wallet_type":        walletType,
 		"current_pq_posture": nistLevelToPQPosture(e.NISTLevel),
 		"observations":       []any{},
 		// UI parity (legacy address-keyed hydration; PR13a)
@@ -26,7 +27,7 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 		"nist_level":  int(e.NISTLevel),
 		"risk_score":  e.RiskScore,
 		"key_exposed": e.KeyExposed,
-		"type":        string(e.Type),
+		"type":        string(accountType),
 		"networks":    networks,
 		"first_seen":  formatTimeRFC3339Nano(dto.FirstSeen),
 		"last_seen":   formatTimeRFC3339Nano(dto.LastSeen),
