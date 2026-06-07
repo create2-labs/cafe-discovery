@@ -25,7 +25,7 @@ type ScanResultEntity struct {
 	RiskScore       float64        `gorm:"not null" json:"risk_score"`
 	Networks        string         `gorm:"type:text" json:"-"` // JSON array stored as text
 	Connections     string         `gorm:"type:text" json:"-"` // JSON array stored as text
-	Status          string         `gorm:"type:varchar(20);default:RUNNING;index" json:"status"` // PENDING, RUNNING, SUCCESS, FAILED, TIMEOUT, UNREACHABLE
+	Status          string         `gorm:"type:varchar(20);index" json:"status"` // empty/PENDING until scan.started (RUNNING); then SUCCESS, FAILED, TIMEOUT, UNREACHABLE
 	Error           string         `gorm:"type:text" json:"error,omitempty"`                    // Error message when status is FAILED
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`

@@ -118,7 +118,7 @@
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
 | **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | [#93](https://github.com/create2-labs/cafe-discovery/pull/93) | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
-| **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | — | **IMM-D1** | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
+| **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | [#94](https://github.com/create2-labs/cafe-discovery/pull/94) | **IMM-D1** ✅ | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
 | **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | — | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
 | **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | — | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
 | **IMM-D5** | `discovery/wallet-type-at-completion` | `cafe-discovery` | — | **IMM-D1**, scanner | `wallet_type` dérivé uniquement à **`scan.completed`** ; aligner `type`/`is_eoa`/`wallet_type`. |
@@ -664,7 +664,7 @@ DELETE scan (success row)
 
 ### IMM-D1 — OnStarted lifecycle-only row
 
-- **Status:** 🟡 in progress — branch `discovery/on-started-lifecycle-only`
+- **Status:** merged in [#93](https://github.com/create2-labs/cafe-discovery/pull/93)
 - **Repository:** `cafe-discovery`
 - **Objective:** Stop inventing scan **result** fields at `scan.started`.
 - **Scope:** `internal/persistence/storage/postgres.go` (`WalletWriter.OnStarted`, `TLSWriter.OnStarted`) ; update tests expecting placeholder EOA rows.
@@ -675,11 +675,11 @@ DELETE scan (success row)
 
 ### IMM-D2 — Remove GORM default RUNNING
 
-- **Status:** ⚪ planned
+- **Status:** [#94](https://github.com/create2-labs/cafe-discovery/pull/94)
 - **Repository:** `cafe-discovery`
 - **Objective:** No row implicitly **`RUNNING`** without lifecycle event.
 - **Scope:** `internal/domain/scan_result.go`, `tls_scan_result.go` ; migration if needed for default column.
-- **Dependencies:** **IMM-D1**
+- **Dependencies:** **IMM-D1** ✅
 - **Proposed commit title:** `fix(discovery): default scan status pending not running`
 - **Completion criteria:** Accidental insert without status → not treated as in-flight scan ; W8 guards still pass with explicit `scan.started`.
 

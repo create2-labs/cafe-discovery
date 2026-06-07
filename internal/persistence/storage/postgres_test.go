@@ -207,6 +207,46 @@ func TestTLSWriter_OnStartedInsertsLifecycleFieldsOnly(t *testing.T) {
 	}
 }
 
+func TestWalletWriter_AccidentalInsertWithoutStatusNotRunning(t *testing.T) {
+	w := setupWalletWriterTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	address := "0xaccidental"
+
+	ent := &domain.ScanResultEntity{ID: scanID, UserID: userID, Address: address}
+	if err := w.db.Create(ent).Error; err != nil {
+		t.Fatalf("Create without status: %v", err)
+	}
+
+	status, err := w.GetStatus(scanID)
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if status == scan.StateRUNNING {
+		t.Fatalf("accidental insert must not default to RUNNING, got %q", status)
+	}
+}
+
+func TestTLSWriter_AccidentalInsertWithoutStatusNotRunning(t *testing.T) {
+	w := setupTLSWriterTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	url := "https://accidental.example"
+
+	ent := &domain.TLSScanResultEntity{ID: scanID, UserID: &userID, URL: url}
+	if err := w.db.Create(ent).Error; err != nil {
+		t.Fatalf("Create without status: %v", err)
+	}
+
+	status, err := w.GetStatus(scanID)
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if status == scan.StateRUNNING {
+		t.Fatalf("accidental insert must not default to RUNNING, got %q", status)
+	}
+}
+
 func TestTLSWriter_OnCompletedPreservesCreatedAt(t *testing.T) {
 	w := setupTLSWriterTestDB(t)
 	userID := uuid.New()
