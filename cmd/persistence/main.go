@@ -52,6 +52,9 @@ func main() {
 		`CREATE INDEX IF NOT EXISTS idx_scan_results_user_address_created_at ON scan_results (user_id, address, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_tls_scan_results_user_url_created_at ON tls_scan_results (user_id, url, created_at DESC) NULLS NOT DISTINCT`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_usage_events_user_kind ON scan_usage_events (user_id, scan_kind)`,
+		// IMM-D2: status must not default to RUNNING; OnStarted sets RUNNING on scan.started.
+		`ALTER TABLE scan_results ALTER COLUMN status DROP DEFAULT`,
+		`ALTER TABLE tls_scan_results ALTER COLUMN status DROP DEFAULT`,
 	} {
 		if err := db.GetDB().Exec(q).Error; err != nil {
 			log.Fatal().Err(err).Str("sql", q).Msg("scan history indexes failed")
