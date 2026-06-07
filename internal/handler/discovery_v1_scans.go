@@ -255,6 +255,8 @@ func parseNetworksFromEntity(networksJSON string) []string {
 	return arr
 }
 
+// walletScanListItemV1 maps a row to ScanListItem (WORKPLAN §5.4.2): lifecycle synopsis only.
+// Crypto posture and business fields belong in GET …/wallets/scans/{scan_id} → result (terminal only).
 func walletScanListItemV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fiber.Map {
 	chainIDs := chainIDsForNetworks(e.Networks, cfg)
 	out := fiber.Map{
@@ -308,6 +310,7 @@ func walletScanLifecycleStatusV1(dbStatus string) string {
 	}
 }
 
+// walletScanDetailV1 maps a row to WalletScanDetail. result is attached only at terminal states.
 func walletScanDetailV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fiber.Map {
 	st := walletScanLifecycleStatusV1(e.Status)
 	out := fiber.Map{
