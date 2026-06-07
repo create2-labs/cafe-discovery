@@ -117,7 +117,7 @@
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
-| **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | — | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
+| **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | [#93](https://github.com/create2-labs/cafe-discovery/pull/93) | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
 | **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | — | **IMM-D1** | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
 | **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | — | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
 | **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | — | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
