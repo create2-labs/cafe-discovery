@@ -117,8 +117,14 @@
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
+| **IMM-D1** | `discovery/on-started-lifecycle-only` | `cafe-discovery` | — | **IMM-3** | **OnStarted** : lifecycle fields only — no invented `Type`/`IsEOA`/algorithm/NIST/risk before scanner. |
+| **IMM-D2** | `discovery/scan-status-default-pending` | `cafe-discovery` | — | **IMM-D1** | Retirer GORM `default:RUNNING` ; status **PENDING**/empty until `scan.started` event. |
+| **IMM-D3** | `discovery/quota-stub-minimal-fields` | `cafe-discovery` | — | **IMM-D1** | Stubs `OnPlanLimitExceeded` : status + error code only — no fake crypto posture. |
+| **IMM-D4** | `discovery/list-detail-data-contract` | `cafe-discovery` | — | **IMM-D1** | OpenAPI + tests : liste = synopsis lifecycle ; pas de `wallet_type`/posture inventés ; `result` au terminal only. |
+| **IMM-D5** | `discovery/wallet-type-at-completion` | `cafe-discovery` | — | **IMM-D1**, scanner | `wallet_type` dérivé uniquement à **`scan.completed`** ; aligner `type`/`is_eoa`/`wallet_type`. |
+| **IMM-DEP-1** | `deploy/smoke-no-invented-scan-fields` | `cafe-deploy` | — | **IMM-D4** | Smokes : pas de default `wallet_type` ; chains depuis `detail.result.chain_ids`. |
 
-**Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8** → `cafe-deploy`, les autres → `cafe-discovery`).
+**Colonnes PR Git / Issue :** **—** = pas encore créée. Ouvrir l’issue sur le dépôt indiqué (**IMM-8**, **IMM-DEP-1** → `cafe-deploy`, les autres → `cafe-discovery`).
 
 ---
 
@@ -150,12 +156,13 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 13. ~~**IMM-W1-1…3** (CPM)~~ — **`DELETE /api/cpm/v1/drafts?id=…`** — livré ([#41](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/41)–[#44](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/44)).
 14. Frontend **FE-IMM-0…5** — après **IMM-6b-5** + **IMM-W1-3** minimum.
 15. **IMM-7** — tests contract E2E (peut chevaucher **IMM-11**).
+16. **IMM-D1…D5** — data integrity (scanners only write `result`) ; **IMM-DEP-1** smokes — voir § [Scan data integrity](#scan-data-integrity-principe--scanners-only).
 
 **IMM-8** (runbook deploy) : en parallèle de **IMM-2**, mis à jour pour release atomique **IMM-2+IMM-3**.
 
 **Prérequis livrés :** list/detail v1 (**PR4**), **PR5/PR6/PR7** (référence policy, **DELETE** + **409**, policies). **PR6** = comportement cible **W3** — **à conserver**.
 
-**Documents liés :** [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (CPM), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX).
+**Documents liés :** [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (CPM **IMM-DOC-1**, **IMM-OPS-1…2**), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX **FE-IMM-10…14**, **REQ8**).
 
 ---
 
@@ -174,6 +181,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 11. **Quota plan (P1)** : **`wallet_scans_used`** = succès comptabilisés (ledger) ; **ne diminue jamais** (DELETE scan/policy/draft) ; exposer **`visible`** / **`deleted_by_user`** (**IMM-6b-5**).
 12. **Anti-bypass quota** : slot atomique à la persistance du success ; si quota dépassé → **`failed`** + **`PLAN_LIMIT_EXCEEDED`**, **adresse conservée**, **résultat jeté** (**IMM-6b-4**).
 13. **Garde POST quota** : autoriser démarrage seulement si **`successful + in_flight < limit`** et **`in_flight < min(limit, 3)`** (**IMM-6b-3**).
+14. **Data integrity** : persistence **`OnStarted`** n’écrit pas de champs métier scanner ; **`result`** rempli à **`scan.completed`** uniquement (**IMM-D1…D5**).
 
 ---
 
@@ -636,6 +644,80 @@ DELETE scan (success row)
 - **API :** `GET /api/discovery/v1/wallets/scans/{scan_id}/cbom` (`ToCBOM()` à la demande).
 - **G4 (IMM-6b-7) :** **404** sauf scan **`completed` success** — remplace l’ancien **409** `SCAN_NOT_TERMINAL`.
 - **Dépend de :** IMM-3.
+
+---
+
+## Scan data integrity (principe : scanners only)
+
+**Décision produit (2026-06) :** aucune couche (persistence, API, UI, scripts) n’invente de métadonnées wallet/TLS. Seuls les **scanners** écrivent le **`result`** métier à **`scan.completed`**. Lifecycle events (`scan.started`, etc.) ne portent que identité + statut.
+
+**Ordre suggéré :** **IMM-D1** → **IMM-D2** → **IMM-D4** → **IMM-D3** (parallèle) → **IMM-D5** ; **IMM-DEP-1** après **IMM-D4**. Frontend **FE-IMM-10…14** : voir [`cafe-frontend/IMMUTABILITE_PR.md`](../cafe-frontend/IMMUTABILITE_PR.md).
+
+| PR | Branche | Objectif |
+|----|---------|----------|
+| **IMM-D1** | `discovery/on-started-lifecycle-only` | `WalletWriter.OnStarted` / `TLSWriter.OnStarted` : insert `{ id, user_id, address/url, status }` only — remove pre-filled EOA, algorithm, NIST, networks. |
+| **IMM-D2** | `discovery/scan-status-default-pending` | GORM: drop `default:RUNNING` on `scan_results` / `tls_scan_results` ; empty or `PENDING` until authoritative `scan.started`. |
+| **IMM-D3** | `discovery/quota-stub-minimal-fields` | `OnPlanLimitExceededInTx` stubs: lifecycle + `PLAN_LIMIT_EXCEEDED` only. |
+| **IMM-D4** | `discovery/list-detail-data-contract` | Enforce OpenAPI: `ScanListItem` = lifecycle synopsis ; no fabricated fields in list ; contract tests. |
+| **IMM-D5** | `discovery/wallet-type-at-completion` | Single derivation of `wallet_type` at completion ; fix `type` vs `is_eoa` vs `wallet_type` divergence. |
+| **IMM-DEP-1** | `deploy/smoke-no-invented-scan-fields` | `test-discovery-v1-wallet-scans-to-cpm.sh` and peers: no default `wallet_type`; chains from detail `result`. |
+
+### IMM-D1 — OnStarted lifecycle-only row
+
+- **Status:** 🟡 in progress — branch `discovery/on-started-lifecycle-only`
+- **Repository:** `cafe-discovery`
+- **Objective:** Stop inventing scan **result** fields at `scan.started`.
+- **Scope:** `internal/persistence/storage/postgres.go` (`WalletWriter.OnStarted`, `TLSWriter.OnStarted`) ; update tests expecting placeholder EOA rows.
+- **Out of scope:** Scanner plugin changes (unless required to always send full entity on completed).
+- **Dependencies:** **IMM-3** (multi-row writers) ✅
+- **Proposed commit title:** `fix(discovery): OnStarted inserts lifecycle fields only`
+- **Completion criteria:** Row after `scan.started` has no `Type`/`Algorithm`/`IsEOA` unless scanner later updates on completed ; API list/detail do not expose fake EOA before terminal.
+
+### IMM-D2 — Remove GORM default RUNNING
+
+- **Status:** ⚪ planned
+- **Repository:** `cafe-discovery`
+- **Objective:** No row implicitly **`RUNNING`** without lifecycle event.
+- **Scope:** `internal/domain/scan_result.go`, `tls_scan_result.go` ; migration if needed for default column.
+- **Dependencies:** **IMM-D1**
+- **Proposed commit title:** `fix(discovery): default scan status pending not running`
+- **Completion criteria:** Accidental insert without status → not treated as in-flight scan ; W8 guards still pass with explicit `scan.started`.
+
+### IMM-D3 — Quota / limit failed stubs minimal
+
+- **Status:** ⚪ planned
+- **Repository:** `cafe-discovery`
+- **Objective:** Plan-limit failed rows carry status + error only.
+- **Scope:** `OnPlanLimitExceededInTx` wallet/TLS stubs in `postgres.go`.
+- **Dependencies:** **IMM-D1**
+- **Proposed commit title:** `fix(discovery): minimal fields on plan limit exceeded stub rows`
+
+### IMM-D4 — List vs detail data contract
+
+- **Status:** ⚪ planned
+- **Repository:** `cafe-discovery`
+- **Objective:** Document and test that v1 list items never imply crypto posture.
+- **Scope:** `openapi/discovery-v1.yaml`, `internal/contract/wallet_scans_v1_test.go`, handler comments.
+- **Dependencies:** **IMM-D1**
+- **Proposed commit title:** `docs(discovery): clarify scan list vs detail data contract`
+
+### IMM-D5 — wallet_type at completion only
+
+- **Status:** ⚪ planned
+- **Repository:** `cafe-discovery`
+- **Objective:** One canonical account kind on completed scans.
+- **Scope:** Scanner completion path + `walletAccountTypeV1` ; regression test for `type=EOA` + `wallet_type=unknown` mismatch.
+- **Dependencies:** **IMM-D1**, wallet scanner
+- **Proposed commit title:** `fix(discovery): derive wallet_type only from scanner completion`
+
+### IMM-DEP-1 — Smoke scripts: no invented fields
+
+- **Status:** ⚪ planned
+- **Repository:** `cafe-deploy`
+- **Objective:** Align smokes with data-integrity contract.
+- **Scope:** `scripts/test-discovery-v1-wallet-scans-to-cpm.sh` ; `--help` documents supported catalog chains.
+- **Dependencies:** **IMM-D4**
+- **Proposed commit title:** `fix(deploy): smoke scripts stop inventing wallet_type from list`
 
 ---
 

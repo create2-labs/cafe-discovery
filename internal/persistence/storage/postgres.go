@@ -32,7 +32,8 @@ func (w *TLSWriter) GetStatus(scanID uuid.UUID) (string, error) {
 	return ent.Status, nil
 }
 
-// OnStarted inserts a row for scan_id (internal status RUNNING; API maps to started).
+// OnStarted inserts a lifecycle-only row for scan_id (internal status RUNNING; API maps to started).
+// Crypto posture fields are filled only on scan.completed (IMM-D1).
 // Idempotent for the same scan_id: no downgrade from terminal; duplicate start is a no-op.
 func (w *TLSWriter) OnStarted(scanID uuid.UUID, userID *uuid.UUID, url string) error {
 	current, err := w.GetStatus(scanID)
@@ -43,9 +44,7 @@ func (w *TLSWriter) OnStarted(scanID uuid.UUID, userID *uuid.UUID, url string) e
 		return nil
 	}
 	ent := &domain.TLSScanResultEntity{
-		ID: scanID, UserID: userID, URL: url, Host: "", Port: 0,
-		ProtocolVersion: "unknown", NISTLevel: domain.NISTLevel1,
-		RiskScore: 0, PQCRisk: "unknown", Status: scan.StateRUNNING,
+		ID: scanID, UserID: userID, URL: url, Status: scan.StateRUNNING,
 	}
 	return w.db.Create(ent).Error
 }
@@ -132,7 +131,8 @@ func (w *WalletWriter) GetStatus(scanID uuid.UUID) (string, error) {
 	return ent.Status, nil
 }
 
-// OnStarted inserts a row for scan_id (internal status RUNNING; API maps to started).
+// OnStarted inserts a lifecycle-only row for scan_id (internal status RUNNING; API maps to started).
+// Crypto posture fields are filled only on scan.completed (IMM-D1).
 // A new scan_id for the same address always inserts a new row (no target-level upsert).
 func (w *WalletWriter) OnStarted(scanID, userID uuid.UUID, address string) error {
 	current, err := w.GetStatus(scanID)
@@ -144,9 +144,6 @@ func (w *WalletWriter) OnStarted(scanID, userID uuid.UUID, address string) error
 	}
 	ent := &domain.ScanResultEntity{
 		ID: scanID, UserID: userID, Address: address, Status: scan.StateRUNNING,
-		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
-		KeyExposed: false, IsEOA: true, IsERC4337: false, RiskScore: 0,
-		Networks: "[]", Connections: "[]",
 	}
 	return w.db.Create(ent).Error
 }
