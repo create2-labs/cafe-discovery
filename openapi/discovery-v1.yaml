@@ -159,8 +159,11 @@ paths:
       tags: [wallet-scans]
       summary: List wallet/EVM scans (synopsis)
       description: |
-        Paginated synopsis list. **Default sort:** `created_at` descending, then `scan_id`
-        descending (deterministic tie-breaker). **`status`** is **lifecycle only**, not crypto posture.
+        Paginated **lifecycle synopsis** (`ScanListItem`). **Default sort:** `created_at`
+        descending, then `scan_id` descending (deterministic tie-breaker). **`status`** is
+        **lifecycle only**, not crypto posture. Posture fields (`wallet_type`, `current_pq_posture`,
+        etc.) and full business payload live under **`result`** on
+        `GET …/wallets/scans/{scan_id}` **after terminal state only**.
 
         **`chain_id` without `address` → 400.** Do not use address in path; use query `address`.
         **`latest=true` requires `address` → 400.** It returns at most one item: the newest
@@ -575,7 +578,14 @@ components:
     ScanListItem:
       type: object
       required: [scan_id, created_at, status]
-      description: Wallet scan synopsis (WORKPLAN_API.md §5.4.2).
+      additionalProperties: false
+      description: |
+        Wallet scan **lifecycle synopsis** only (WORKPLAN_API.md §5.4.2). Use
+        `GET …/wallets/scans/{scan_id}` for crypto posture and business fields.
+
+        **Must not appear on list items:** `result`, `wallet_type`, `current_pq_posture`,
+        `algorithm`, `type`, `nist_level`, `risk_score`, `key_exposed`, `observations`, or any
+        other field from `WalletScanResult`. **`status`** is lifecycle metadata, not posture.
       properties:
         scan_id:
           type: string
@@ -598,7 +608,13 @@ components:
     TLSListItem:
       type: object
       required: [scan_id, endpoint, created_at, status]
-      description: TLS scan synopsis (WORKPLAN_API.md §5.4.3).
+      additionalProperties: false
+      description: |
+        TLS scan **lifecycle synopsis** only (WORKPLAN_API.md §5.4.3). Use
+        `GET …/tls/scans/{scan_id}` for TLS business fields under `result`.
+
+        **Must not appear on list items:** `result`, `current_pq_posture`, `tls_version`,
+        `cipher_suite`, or any other field from `TlsScanResult`.
       properties:
         scan_id:
           type: string
@@ -662,7 +678,11 @@ components:
           $ref: "#/components/schemas/ScanLifecycleStatus"
         result:
           $ref: "#/components/schemas/WalletScanResult"
-      description: Detail DTO; `result` per WORKPLAN_API.md §5.4.4.
+      description: |
+        Detail DTO (WORKPLAN_API.md §5.4.4). **`result` is omitted** while `status` is
+        `requested` or `started`. **`result` is present and immutable** after a terminal
+        lifecycle state (`completed` or `failed`). Posture fields (`wallet_type`,
+        `current_pq_posture`, etc.) live **only** under `result`, never on list synopsis items.
 
     WalletScanResult:
       type: object

@@ -644,3 +644,176 @@ func TestDiscoveryV1WalletScans_historicalScanIDDetailIsStable(t *testing.T) {
 		t.Fatalf("target_address = %v, want %s (result must be immutable for historical scan)", result["target_address"], address)
 	}
 }
+
+// IMM-D4: ScanListItem is lifecycle synopsis only — never crypto posture or result payload.
+func TestDiscoveryV1WalletScans_listItemSynopsisExcludesPostureFields(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	scanID := uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0f")
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {
+				walletScanEntityWithNetworks(scanID, owner, address, `["ethereum"]`, scan.StateSUCCESS, time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC)),
+				walletScanEntityWithNetworks(uuid.MustParse("705c9704-9428-45e0-882d-fae4cb9d2a0e"), owner, address, `[]`, scan.StateRUNNING, time.Date(2026, 5, 11, 10, 30, 0, 0, time.UTC)),
+			},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans?address="+address+"&limit=50", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	items := body["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("items len = %d, want 2", len(items))
+	}
+
+	allowed := map[string]bool{
+		"scan_id": true, "target_address": true, "chain_ids": true,
+		"created_at": true, "status": true,
+	}
+	forbidden := []string{
+		"result", "wallet_type", "current_pq_posture", "algorithm", "type",
+		"nist_level", "risk_score", "key_exposed", "observations", "networks",
+		"first_seen", "last_seen", "scanned_at",
+	}
+	for _, item := range items {
+		row := item.(map[string]any)
+		for key := range row {
+			if !allowed[key] {
+				t.Fatalf("list item contains unexpected key %q (synopsis contract)", key)
+			}
+		}
+		for _, key := range forbidden {
+			if _, ok := row[key]; ok {
+				t.Fatalf("list item must not expose posture field %q", key)
+			}
+		}
+	}
+}
+
+// IMM-D4: WalletScanDetail omits result until terminal lifecycle state.
+func TestDiscoveryV1WalletScans_detailOmitsResultUntilTerminal(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	cases := []struct {
+		name   string
+		status string
+		want   string
+	}{
+		{name: "requested", status: scan.StatePENDING, want: "requested"},
+		{name: "started", status: scan.StateRUNNING, want: "started"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scanID := uuid.New()
+			ent := walletScanEntity(scanID, owner, address)
+			ent.Status = tc.status
+			repo := &memoryWalletScanRepo{
+				byOwner: map[uuid.UUID][]*domain.ScanResultEntity{owner: {ent}},
+			}
+			h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+				Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+			})
+			app := fiber.New(fiber.Config{DisableStartupMessage: true})
+			app.Use(func(c *fiber.Ctx) error {
+				c.Locals("user_id", owner)
+				return c.Next()
+			})
+			app.Get("/wallets/scans/:scan_id", h.GetDiscoveryV1WalletScan)
+
+			req := httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanID.String(), nil)
+			resp, err := app.Test(req, -1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != fiber.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			raw, _ := io.ReadAll(resp.Body)
+			var detail map[string]any
+			if err := json.Unmarshal(raw, &detail); err != nil {
+				t.Fatal(err)
+			}
+			if detail["status"] != tc.want {
+				t.Fatalf("status = %v, want %s", detail["status"], tc.want)
+			}
+			if _, ok := detail["result"]; ok {
+				t.Fatalf("non-terminal detail must not include result (status=%s)", tc.want)
+			}
+		})
+	}
+}
+
+// IMM-D4: terminal detail exposes posture under result only.
+func TestDiscoveryV1WalletScans_detailIncludesResultAtTerminal(t *testing.T) {
+	t.Parallel()
+	owner := uuid.MustParse("10101010-1010-1010-1010-101010101010")
+	scanID := uuid.MustParse("20202020-2020-2020-2020-202020202020")
+	address := "0x0802b015613ef6701192811e595e085a9c560caf"
+	repo := &memoryWalletScanRepo{
+		byOwner: map[uuid.UUID][]*domain.ScanResultEntity{
+			owner: {walletScanEntity(scanID, owner, address)},
+		},
+	}
+	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
+	})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("user_id", owner)
+		return c.Next()
+	})
+	app.Get("/wallets/scans/:scan_id", h.GetDiscoveryV1WalletScan)
+
+	req := httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanID.String(), nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	var detail map[string]any
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail["status"] != "completed" {
+		t.Fatalf("status = %v, want completed", detail["status"])
+	}
+	result, ok := detail["result"].(map[string]any)
+	if !ok {
+		t.Fatal("terminal detail must include result object")
+	}
+	for _, key := range []string{"wallet_type", "current_pq_posture", "target_address", "chain_ids"} {
+		if _, ok := result[key]; !ok {
+			t.Fatalf("WalletScanResult missing %q on terminal detail", key)
+		}
+	}
+}
