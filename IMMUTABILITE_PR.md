@@ -162,7 +162,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 **Prérequis livrés :** list/detail v1 (**PR4**), **PR5/PR6/PR7** (référence policy, **DELETE** + **409**, policies). **PR6** = comportement cible **W3** — **à conserver**.
 
-**Documents liés :** [`WORKPLAN_API.md` §5.4.10](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md#5410-intégrité-des-données-scan-scanners-only) (**IMM-DOC-1** ✅), [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (**IMM-OPS-1…2**), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX **FE-IMM-10…14**, **REQ8**).
+**Documents liés :** [`WORKPLAN_API.md` §5.4.10](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md#5410-intégrité-des-données-scan-scanners-only) (**IMM-DOC-1** ✅), [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (**IMM-OPS-1…2** / **REQ9** ; **IMM-OPS-3** deferred), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX **FE-IMM-10…14**, **REQ8** ✅).
 
 ---
 
