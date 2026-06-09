@@ -113,7 +113,7 @@
 | **IMM-7** | `discovery/scan-history-tests-contract` | `cafe-discovery` | [#75](https://github.com/create2-labs/cafe-discovery/pull/75) | **IMM-3**, **IMM-4a–4c** | Tests + contract v1. |
 | **IMM-8** | `deploy/scan-history-migration-runbook` | `cafe-deploy` | [#20](https://github.com/create2-labs/cafe-deploy/pull/20) | **IMM-2** | Runbook déploiement. |
 | **IMM-9** | `discovery/block-scan-when-cpm-exists` | `cafe-discovery` (+ CPM interne) | [#76](https://github.com/create2-labs/cafe-discovery/pull/76) | **IMM-4c**, **IMM-9b** | W8 + W1 (**policy ou draft** — voir **IMM-W1-4** révision) |
-| **IMM-W1-4** | `discovery/w1-policy-only-post-guard` | `cafe-discovery` (+ CPM lookup) | — | **IMM-9** ✅ | **W1** révisé : **409** POST scan si **policy persistée** uniquement ; draft seul OK ; body `blocking_kind` |
+| **IMM-W1-4** | `discovery/w1-policy-only-post-guard` | `cafe-discovery` (+ CPM lookup) | livré in-tree | **IMM-9** ✅ | **W1** révisé : **409** POST scan si **policy persistée** uniquement ; draft seul OK ; body `blocking_kind` |
 | **IMM-10** | `cpm/latest-scan-only-policy` | `cafe-crypto-policy-mgt` | [#40](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/40) | **IMM-4b** | W7 (newest row) + W2 (`latest=true`), wallet-only. |
 | **IMM-12** | `discovery/v1-cbom-by-scan-id` | `cafe-discovery` | [#80](https://github.com/create2-labs/cafe-discovery/pull/80) | **IMM-3** | W6 : `GET /wallets/scans/{scan_id}/cbom` à la demande. |
 | **IMM-11** | `discovery/remove-obsolete-routes` | `cafe-discovery` (+ edge/deploy) | [#78](https://github.com/create2-labs/cafe-discovery/pull/78) | **IMM-4a–4c**, routes cibles | Retrait routes hors contrat §0, OpenAPI, edge, scripts. |
@@ -162,7 +162,7 @@ Travail d’**alignement contrat / persistance** (écart `WORKPLAN_API.md` §2.2
 
 **Prérequis livrés :** list/detail v1 (**PR4**), **PR5/PR6/PR7** (référence policy, **DELETE** + **409**, policies). **PR6** = comportement cible **W3** — **à conserver**.
 
-**Documents liés :** [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (CPM **IMM-DOC-1**, **IMM-OPS-1…2**), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX **FE-IMM-10…14**, **REQ8**).
+**Documents liés :** [`WORKPLAN_API.md` §5.4.10](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md#5410-intégrité-des-données-scan-scanners-only) (**IMM-DOC-1** ✅), [`cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md`](../cafe-crypto-policy-mgt/workplans/IMMUTABILITE_PR.md) (**IMM-OPS-1…2**), [`cafe-frontend/IMMUTABILITE.md`](../cafe-frontend/IMMUTABILITE.md) (UX **FE-IMM-10…14**, **REQ8**).
 
 ---
 
@@ -586,22 +586,22 @@ DELETE scan (success row)
 - **Endpoint :** `POST /api/discovery/v1/scan` avec `{ "address": "0x…" }` (wallet only pour **W1**).
 - **Ordre des gardes :**
   1. Newest row `requested` / `started` → **409** `SCAN_IN_PROGRESS` (**IMM-4c**).
-  2. Lookup CPM par **`target_address`** normalisée (**IMM-9b**) — **409** si **policy persistée** (**IMM-W1-4** révision ; livré **IMM-9** bloquait aussi draft).
+  2. Lookup CPM par **`target_address`** normalisée (**IMM-9b**) — **409** si **policy persistée** (**IMM-W1-4** ✅).
   3. Fail-closed si lookup CPM indisponible (pas de scan silencieux).
-- **Retry après `failed` :** accepté si **W1** OK (**pas de policy persistée** — draft seul OK après **IMM-W1-4**).
-- **Révision IMM-W1-4 :** voir section dédiée — smoke step 5 et tests draft-only à mettre à jour.
+- **Retry après `failed` :** accepté si **W1** OK (**pas de policy persistée** — draft seul OK, **IMM-W1-4** ✅).
+- **Révision IMM-W1-4** ✅ — voir section dédiée ; smoke step 5 et tests draft-only à jour.
 - **Dépend de :** IMM-3, **IMM-4c**, **IMM-9b** (CPM, avant cette PR ou en parallèle coordonné).
 
 ---
 
-## IMM-W1-4 — W1 révisé : policy-only POST guard (planned)
+## IMM-W1-4 — W1 révisé : policy-only POST guard (done)
 
-- **Status:** ⚪ planned — révision produit **2026-06** (voir [`WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) §2.2 **W1** / **W1b**).
+- **Status:** ✅ livré in-tree — révision produit **2026-06** (voir [`WORKPLAN_API.md`](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md) §2.2 **W1** / **W1b**).
 - **Dépôts :** `cafe-discovery` (+ lookup CPM **IMM-9b**).
 - **Changement :** `POST /api/discovery/v1/scan` → **`409`** uniquement si **policy persistée** sur l’adresse — **pas** si **draft** plateforme seul.
-- **Corps d’erreur :** SHOULD exposer **`blocking_kind: "policy"`** (ou code dédié) pour distinguer policy vs legacy combined `CPM_EXISTS_FOR_WALLET_TARGET`.
-- **Tests / smokes :** mettre à jour `test-discovery-imm9-wallet-scan-w1-cpm-block.sh` step 5 (draft seul → POST **accepté**) ; conserver cas **policy** → **409**.
-- **Frontend :** **FE-IMM-3** revision + **FE-IMM-4** (orphan rebind CPM).
+- **Corps d’erreur :** **`blocking_kind: "policy"`** sur `CPM_EXISTS_FOR_WALLET_TARGET`.
+- **Tests / smokes :** `discovery_scan_v1_test.go` (`TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted`) ; `test-discovery-imm9-wallet-scan-w1-cpm-block.sh` step 5 (draft seul → POST **200**).
+- **Frontend :** **FE-IMM-3** ✅ ; **FE-IMM-4** ⚪ (orphan rebind CPM).
 - **Dépend de :** **IMM-9** ✅, **IMM-9b** ✅.
 
 ---
@@ -648,6 +648,8 @@ DELETE scan (success row)
 ---
 
 ## Scan data integrity (principe : scanners only)
+
+**Source normative :** [`cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md` §5.4.10](../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md#5410-intégrité-des-données-scan-scanners-only) (**IMM-DOC-1**).
 
 **Décision produit (2026-06) :** aucune couche (persistence, API, UI, scripts) n’invente de métadonnées wallet/TLS. Seuls les **scanners** écrivent le **`result`** métier à **`scan.completed`**. Lifecycle events (`scan.started`, etc.) ne portent que identité + statut.
 
@@ -730,13 +732,13 @@ DELETE scan (success row)
 | ✅ | Historique & immutabilité (W5–W6) | Aucune réponse API n’expose `RUNNING`/`running` (lifecycle: `started`). | `internal/contract/wallet_scans_v1_test.go::TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions` |
 | ✅ | CPM & scan (W7, W1, W2) | `POST /api/discovery/v1/scan` : newest `requested` \| `started` → `409 SCAN_IN_PROGRESS`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletPendingRequested409`; `...WalletRunningRow409` |
 | ✅ | CPM & scan (W7, W1, W2) | Newest `failed` + no policy/draft → scan accepté ; CPM explore/persist → `400 LATEST_SCAN_NOT_COMPLETED`. | `internal/handler/discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletFailedNewestAccepted`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
-| ⏳ | CPM & scan (W7, W1, W2) | Newest `failed` + **policy** → `409` ; draft seul → POST OK (**IMM-W1-4**). | `internal/handler/discovery_scan_v1_test.go` ; smoke à réviser post **IMM-W1-4** |
+| ✅ | CPM & scan (W7, W1, W2) | Newest `failed` + **policy** → `409` ; draft seul → POST OK (**IMM-W1-4** ✅). | `discovery_scan_v1_test.go::TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly`; `...WalletCPMDraftOnlyAccepted`; smoke step 5 |
 | ⏳ | CPM & scan (W7, W1, W2) | `completed` A + `failed` B (B newer): CPM `400 LATEST_SCAN_NOT_COMPLETED` même pour `scan_id` A ; `POST …/scan` OK seulement si W1 OK. | `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ✅ | CPM & scan (W7, W1, W2) | W7 CPM : newest row via `limit=1` (pas `latest=true`). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W7RejectsWhenNewestIsFailed`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ⏳ | CPM & scan (W7, W1, W2) | W2 CPM : `GET …/wallets/scans?address=&latest=true` (pas `limit=1` seul). | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
 | ✅ | CPM & scan (W7, W1, W2) | Historical `scan_id` → `400 SCAN_ID_NOT_LATEST_FOR_TARGET`. | `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_W2RejectsHistoricalScanID`; `cafe-deploy/scripts/test-cpm-imm10-wallet-scan-w7-w2-guards.sh` |
-| ⏳ | CPM & scan (W7, W1, W2) | `DELETE /api/cpm/v1/drafts?id=…` contractualisé ; débloque rescan après suppression draft. | `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` |
-| ⏳ | CPM & scan (W7, W1, W2, W1b) | UX : rescan with draft OK ; orphan → **Rebind to last scan** ; policy still blocks POST. | **IMM-W1-4** + **FE-IMM-4** |
+| ✅ | CPM & scan (W7, W1, W2) | `DELETE /api/cpm/v1/drafts?id=…` = discard draft ; **not** required to unblock rescan (**IMM-W1-4**). | `cafe-deploy/scripts/test-discovery-imm9-wallet-scan-w1-cpm-block.sh` step 5 |
+| ⏳ | CPM & scan (W7, W1, W2, W1b) | UX : rescan with draft OK ; orphan → **Rebind to last scan** ; policy still blocks POST. | **FE-IMM-4** |
 | ⏳ | TLS | TLS : historique Discovery + CBOM optionnel ; pas de cible CPM assessment/remediation produit actuel. | `cafe-crypto-policy-mgt/internal/app/assessment_request_test.go::TestPoliciesAssessmentRequest_tlsScanNotFound`; `cafe-crypto-policy-mgt/internal/api/wallet_scan_detail_test.go::TestObservationPayloadFromDiscoveryWalletScanDetail_tlsRejected`; `cafe-crypto-policy-mgt/internal/app/authz_scan_test.go::TestWithAuthentication_IMM10_ExploreRejectsTLSScanIDAsNotFound`; `...PersistRejectsTLSScanIDAsNotFound` |
 | ✅ | Suppression (W3–W4) | `DELETE /api/cpm/v1/policies?id=` : scan(s) toujours listables. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
 | ✅ | Suppression (W3–W4) | `DELETE /api/discovery/v1/wallets/scans/{scan_id}` avec policy liée → `409 SCAN_REFERENCED_BY_POLICY`. | `cafe-deploy/scripts/test-discovery-w3-w4-scan-policy-delete.sh` |
@@ -1468,7 +1470,7 @@ Newest **`failed`** → new scan if **W1** OK (**no persisted policy**). Draft a
 - [x] **W1 (legacy)**: **409** when policy **or** draft exists — **superseded for draft** by **IMM-W1-4**.
 - [x] Fail-closed if CPM lookup unavailable (no silent bypass).
 - [x] OpenAPI documents `SCAN_IN_PROGRESS` + `CPM_EXISTS_FOR_WALLET_TARGET`.
-- [ ] Integration tests updated post **IMM-W1-4**: draft-only no longer blocks POST.
+- [x] Integration tests updated post **IMM-W1-4**: draft-only no longer blocks POST.
 
 ### Dependencies
 
