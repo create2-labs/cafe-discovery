@@ -152,22 +152,3 @@ func (m *ScanMetrics) RecordWalletScan(duration time.Duration, success bool) {
 		m.WalletScanErrorTotal.WithLabelValues(scanType, "failure").Inc()
 	}
 }
-
-// RecordTLSScan records metrics for a TLS scan operation
-// This is a convenience method that records all related metrics atomically
-func (m *ScanMetrics) RecordTLSScan(duration time.Duration, success bool) {
-	scanType := "tls"
-
-	// Increment total scans counter
-	m.TLSScansTotal.WithLabelValues(scanType).Inc()
-
-	// Record duration
-	m.TLSScanDuration.WithLabelValues(scanType).Observe(duration.Seconds())
-
-	// Record success or error
-	if success {
-		m.TLSScanSuccessTotal.WithLabelValues(scanType, "success").Inc()
-	} else {
-		m.TLSScanErrorTotal.WithLabelValues(scanType, "failure").Inc()
-	}
-}

@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -37,12 +35,6 @@ type RedisTLSScanRepository interface {
 	ListURLsByUserIDOrDefault(ctx context.Context, userID string) ([]string, error)
 	CountByUserID(ctx context.Context, userID string) (int64, error)
 	DeleteByUserIDAndURL(ctx context.Context, userID string, url string) error
-}
-
-// HashToken creates a SHA256 hash of the JWT token for use as a unique identifier
-func HashToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(hash[:])
 }
 
 type redisTLSScanRepository struct {

@@ -178,35 +178,6 @@ func (c *Client) CallContract(ctx context.Context, address string, data string, 
 	return response, nil
 }
 
-// CheckERC165Support checks if a contract supports an ERC-165 interface
-// interfaceID should be the 4-byte function selector (e.g., "0x01ffc9a7" for supportsInterface)
-func (c *Client) CheckERC165Support(ctx context.Context, address string, interfaceID string) (bool, error) {
-	// ERC-165: supportsInterface(bytes4) -> bool
-	// Function selector: 0x01ffc9a7
-	// We pad the interfaceID to 32 bytes (64 hex chars)
-	data := "0x01ffc9a7" + padHex(interfaceID, 64)
-
-	result, err := c.CallContract(ctx, address, data, "latest")
-	if err != nil {
-		// If call fails, interface is likely not supported
-		return false, nil
-	}
-
-	// Result is a 32-byte bool (0x000...000 for false, 0x000...001 for true)
-	// Check if the last character is 1
-	result = strings.TrimPrefix(result, "0x")
-	result = strings.ToLower(result)
-
-	// Find the first non-zero character
-	for i := len(result) - 1; i >= 0; i-- {
-		if result[i] != '0' {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
 // CheckERC4337Support checks if a contract implements ERC-4337 Account Abstraction
 // by checking if it has the validateUserOp function
 // Function signature: validateUserOp(UserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds) external returns (uint256)
@@ -289,13 +260,4 @@ func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
 	chainID := new(big.Int)
 	chainID.SetString(hexStr, 0)
 	return chainID, nil
-}
-
-// padHex pads a hex string to the specified length (without 0x prefix)
-func padHex(hex string, targetLength int) string {
-	hex = strings.TrimPrefix(hex, "0x")
-	if len(hex) >= targetLength {
-		return hex[:targetLength]
-	}
-	return strings.Repeat("0", targetLength-len(hex)) + hex
 }

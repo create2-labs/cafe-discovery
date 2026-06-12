@@ -35,7 +35,6 @@ type ScannerPresenceChecker interface {
 // Wallet v1 list/get/delete and plan limits use Postgres as source of truth for wallet scans.
 type DiscoveryHandler struct {
 	discoveryService  *service.DiscoveryService
-	tlsService        *service.TLSService
 	cfgChain          *config.ChainConfig
 	natsConn          nats.Connection
 	planService       *service.PlanService
@@ -51,10 +50,9 @@ type DiscoveryHandler struct {
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, tlsService *service.TLSService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService:  discoveryService,
-		tlsService:        tlsService,
 		cfgChain:          cfgChain,
 		natsConn:          natsConn,
 		planService:       planService,

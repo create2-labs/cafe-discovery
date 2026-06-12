@@ -100,23 +100,3 @@ func (s *DiscoveryService) saveScanResult(userID uuid.UUID, result *domain.ScanR
 		log.Printf("Failed to save wallet scan result to database (address=%s): %v", result.Address, err)
 	}
 }
-
-// ListScanResults lists scan results for a user with pagination.
-func (s *DiscoveryService) ListScanResults(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.ScanResult, int64, error) {
-	entities, err := s.scanResultRepo.FindByUserID(userID, limit, offset)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to fetch scan results: %w", err)
-	}
-
-	total, err := s.scanResultRepo.CountByUserID(userID)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count scan results: %w", err)
-	}
-
-	results := make([]*domain.ScanResult, len(entities))
-	for i, entity := range entities {
-		results[i] = entity.ToScanResult()
-	}
-
-	return results, total, nil
-}

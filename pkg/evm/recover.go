@@ -98,13 +98,3 @@ func RecoverPubKeyFromTx(tx *types.Transaction, signer types.Signer, chainID *bi
 
 	return "", "", errors.New("recovery failed: tried both recovery IDs (0 and 1) but neither worked")
 }
-
-// helper to confirm derived address if needed
-func PubKeyToAddressHex(uncompressedPubKey []byte) string {
-	pub, err := crypto.UnmarshalPubkey(uncompressedPubKey)
-	if err != nil {
-		return ""
-	}
-	addr := crypto.PubkeyToAddress(*pub)
-	return addr.Hex()
-}

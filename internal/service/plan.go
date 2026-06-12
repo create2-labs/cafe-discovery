@@ -319,34 +319,3 @@ func scanUsageKindForPlanLimitKey(scanType string) (domain.ScanUsageKind, error)
 		return "", fmt.Errorf("unknown scan type: %s", scanType)
 	}
 }
-
-// CheckEndpointScanLimitWithCount checks if the user can perform an endpoint (TLS) scan when the caller
-// has already computed the endpoint count. Use this when the handler has direct access to the TLS repo
-// to avoid any ambiguity with repo injection order. Returns (canScan, usage, error).
-func (s *PlanService) CheckEndpointScanLimitWithCount(userID uuid.UUID, endpointCount int) (bool, *PlanUsage, error) {
-	if userID == uuid.Nil {
-		return false, nil, errors.New("user not authenticated")
-	}
-	plan, err := s.GetUserPlan(userID)
-	if err != nil {
-		return false, nil, err
-	}
-	limit := plan.EndpointScanLimit
-	unlimited := plan.IsUnlimited(scan.PlanLimitKeyEndpoint)
-	canScan := unlimited || endpointCount < limit
-	usage := &PlanUsage{
-		WalletScansUsed:   0, // not needed for endpoint check
-		EndpointScansUsed: endpointCount,
-		WalletScanLimit:   plan.WalletScanLimit,
-		EndpointScanLimit: limit,
-	}
-	if unlimited {
-		usage.EndpointScansLeft = -1
-	} else {
-		usage.EndpointScansLeft = limit - endpointCount
-		if usage.EndpointScansLeft < 0 {
-			usage.EndpointScansLeft = 0
-		}
-	}
-	return canScan, usage, nil
-}
