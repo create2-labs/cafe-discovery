@@ -43,7 +43,6 @@ type Container struct {
 	ChainConfig              *config.ChainConfig
 	DiscoveryService         *service.DiscoveryService
 	DiscoveryHandler         *handler.DiscoveryHandler
-	TLSService               *service.TLSService
 	TLSHandler               *handler.TLSHandler
 	AuthService              *service.AuthService
 	AuthHandler              *handler.AuthHandler
@@ -113,7 +112,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 
 	// Initialize services
 	discoveryService := service.NewDiscoveryService(clients, moralisClient, scanResultRepo, planService)
-	tlsService := service.NewTLSService(tlsScanResultRepo, planService)
 	authService, err := service.NewAuthService(userRepo, planRepo, jwtSecret, jwtExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize auth service: %w", err)
@@ -149,8 +147,8 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 
 	// Initialize handlers (wallet v1 and plan quotas from Postgres; TLS list uses Redis read-through)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, tlsService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
-	tlsHandler := handler.NewTLSHandler(tlsService, natsConn, redisTLSRepo, planService, userScanCache, tlsScanResultRepo, pendingV1Repo, policyRef)
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
+	tlsHandler := handler.NewTLSHandler(redisTLSRepo, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanUsageLedgerRepo)
@@ -201,7 +199,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		ChainConfig:              cfgChain,
 		DiscoveryService:         discoveryService,
 		DiscoveryHandler:         discoveryHandler,
-		TLSService:               tlsService,
 		TLSHandler:               tlsHandler,
 		AuthService:              authService,
 		AuthHandler:              authHandler,

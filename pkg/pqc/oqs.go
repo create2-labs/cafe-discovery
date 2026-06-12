@@ -79,20 +79,6 @@ func (o *MLDSA) Close() {
 	}
 }
 
-// PublicKey returns the public key
-func (o *MLDSA) PublicKey() []byte {
-	return append([]byte(nil), o.pk...)
-}
-
-// SetPublicKey sets the public key (for verification only)
-func (o *MLDSA) SetPublicKey(pk []byte) error {
-	if len(pk) != o.pkLen {
-		return fmt.Errorf("public key length mismatch: got %d, expected %d", len(pk), o.pkLen)
-	}
-	o.pk = append([]byte(nil), pk...)
-	return nil
-}
-
 // Sign signs a message
 func (o *MLDSA) Sign(msg []byte) ([]byte, error) {
 	if o.sig == nil {

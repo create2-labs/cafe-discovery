@@ -18,7 +18,7 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 	t.Parallel()
 
 	h := handler.NewDiscoveryHandler(
-		nil, nil,
+		nil,
 		&config.ChainConfig{
 			Blockchains: []config.Blockchain{
 				{Name: "ethereum-mainnet", RPC: "https://ethereum-rpc.example"},
