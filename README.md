@@ -658,12 +658,12 @@ The version is extracted from the `APP_VERSION` build argument during Docker ima
 The version displayed to users is consistent from build to frontend:
 
 1. **GitHub Action** (on tag): `docker-release.yml` sets `APP_VERSION` from the Git tag (e.g. `v1.2.3`) and passes it as `--build-arg APP_VERSION=...` to the backend image build.
-2. **Dockerfile**: At build time, writes `{"version": "<APP_VERSION>"}` to `/usr/share/nginx/html/version.json` inside the image.
-3. **Backend container**: NGINX (`nginx-version.conf`) listens on port **8082** and serves `GET /version` by returning that `version.json`. The main API runs on port 8080; only the version endpoint is on 8082 (Docker network only, not exposed by docker-compose).
-4. **Infra** (cafe-deploy): The main NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8082/version`.
+2. **Dockerfile**: At build time, embeds `APP_VERSION` into the Go binary via `-ldflags` (`internal/version`). Runtime override via `APP_VERSION` env is also supported.
+3. **Backend container**: The Go server serves `GET /version` on port **8080** (same port as the main API), returning `{"version": "..."}`.
+4. **Infra** (cafe-deploy): The main NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8080/version`.
 5. **Frontend** (cafe-frontend): `platformService.getBackendVersion()` calls `api.get('/version')` (i.e. `/api/version`), receives `{"version": "vX.Y.Z"}`, and displays the discovery backend version to the user.
 
-The response format **must** remain `{"version": "..."}`; the frontend and infra rely on it. See `nginx-version.conf` for the NGINX config and comments.
+The response format **must** remain `{"version": "..."}`; the frontend and infra rely on it.
 
 ## Configuration
 
@@ -1734,7 +1734,7 @@ Get the backend version information.
 }
 ```
 
-The version is extracted from the `APP_VERSION` build argument during Docker image build, or from Git tags in CI/CD pipelines.
+The version is embedded at Docker build time via `-ldflags` (`internal/version`) from the `APP_VERSION` build argument, with optional runtime override via the `APP_VERSION` environment variable.
 
 ### GET /health
 
