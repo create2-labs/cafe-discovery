@@ -2,24 +2,6 @@
 
 Items deferred; not blocking current IMM work unless noted.
 
-## IMM-6b — Plan quota (success-only ledger + guards + CBOM)
-
-**Context:** **IMM-6** (mergé [#73](https://github.com/create2-labs/cafe-discovery/pull/73)) compte les lignes Postgres — **DELETE** diminue l’usage ; comptage à l’acceptation POST — **incorrect** vs produit.
-
-**Cible (WORKPLAN §2.2.1 P1, G1–G4) :**
-
-- **`used`** = **`completed` success** only (ledger) ; **monotonic** on DELETE
-- POST : **`successful + in_flight < limit`** + cap **`in_flight < min(limit, 3)`**
-- Completion : slot atomique ; si quota dépassé → **`failed`** + **`PLAN_LIMIT_EXCEEDED`**, adresse gardée, **résultat jeté**
-- **`GET /plans/usage`** : **`visible`**, **`deleted_by_user`**
-- CBOM **404** sauf **completed success**
-
-**Plan:** **IMM-6b-1** ([#83](https://github.com/create2-labs/cafe-discovery/pull/83)) … **IMM-6b-8** ([#90](https://github.com/create2-labs/cafe-discovery/pull/90) — tests intégration quota G1–G4) — **série mergée** (smoke `test-discovery-imm6b8-plan-quota-integration.sh`).
-
-**Repos:** `cafe-discovery` only.
-
-**Suite Discovery :** voir sections ci-dessous (refactor `cpmpolicyref`, etc.).
-
 ---
 
 ## IMM-9 follow-up — Deduplicate CPM internal HTTP client (`cpmpolicyref`)

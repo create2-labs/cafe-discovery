@@ -4,6 +4,7 @@
 FROM oleglod/cafe-crypto-backend:build-oqs AS builder
 
 ARG TARGETARCH
+ARG APP_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ---- Install Go (BUILD ONLY) ----
@@ -44,7 +45,19 @@ RUN go mod download
 COPY . .
 
 # ---- Build ----
-RUN go build -o server ./cmd/server/main.go
+RUN RESOLVED_VERSION="${APP_VERSION}" && \
+    if [ -z "$RESOLVED_VERSION" ]; then \
+      if command -v git >/dev/null 2>&1 && [ -d .git ]; then \
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/[^a-zA-Z0-9]/-/g' || echo "dev") && \
+        SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "") && \
+        RESOLVED_VERSION="${BRANCH}-${SHORT_SHA:-unknown}"; \
+      else \
+        RESOLVED_VERSION="dev"; \
+      fi; \
+    fi && \
+    go build \
+      -ldflags "-X cafe-discovery/internal/version.version=${RESOLVED_VERSION}" \
+      -o server ./cmd/server/main.go
 
 
 ##############################
@@ -78,45 +91,9 @@ LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 WORKDIR /app
 
-# Install NGINX (Debian package runs workers as www-data; no custom nginx user)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/log/nginx /var/cache/nginx /usr/share/nginx/html \
-    && chown -R www-data:www-data /var/log/nginx /var/cache/nginx /usr/share/nginx/html
-
 # Copy application binary
 COPY --from=builder /app/server /app/server
 
-# Copy NGINX configuration
-COPY nginx-version.conf /etc/nginx/nginx.conf
-
-# Create version.json at build time
-# If APP_VERSION is not set (dev mode), try to get <branch>-<sha> from git, otherwise use "dev"
-RUN if [ -z "$APP_VERSION" ]; then \
-      if command -v git >/dev/null 2>&1 && [ -d .git ]; then \
-        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/[^a-zA-Z0-9]/-/g' || echo "dev") && \
-        SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "") && \
-        VERSION="${BRANCH}-${SHORT_SHA:-unknown}"; \
-      else \
-        VERSION="dev"; \
-      fi; \
-    else \
-      VERSION="$APP_VERSION"; \
-    fi && \
-    echo "{\"version\": \"$VERSION\"}" > /usr/share/nginx/html/version.json && \
-    chmod 644 /usr/share/nginx/html/version.json && \
-    chown www-data:www-data /usr/share/nginx/html/version.json
-
-# Copy entrypoint script
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Expose only the application port (8080)
-# NGINX port 8082 is NOT exposed via EXPOSE or docker-compose ports
-# It listens on 0.0.0.0:8082 for Docker network access (other containers)
-# But is blocked publicly by cafe-infra/nginx (no proxy rule)
 EXPOSE 8080
 
-# Use entrypoint script to start both services
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/server"]

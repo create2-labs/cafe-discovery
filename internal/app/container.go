@@ -19,6 +19,7 @@ import (
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
+	"cafe-discovery/internal/version"
 	"cafe-discovery/pkg/evm"
 	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
@@ -255,6 +256,11 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 		})
 	}
 	app.Get("/health", healthHandler)
+
+	// Version endpoint (public) — DISC-OPS-1: same contract as CPM GET /version.
+	app.Get("/version", func(c *fiber.Ctx) error {
+		return c.JSON(version.Payload())
+	})
 
 	// Prometheus metrics endpoint (public)
 	// This endpoint exposes metrics in Prometheus format for scraping
