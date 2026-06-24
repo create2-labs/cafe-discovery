@@ -88,7 +88,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to initialize Redis: %w", err)
 	}
 
-	// Run database migrations
+	// Run identity migrations; scan DDL is owned by cafe-persistence (PERS-D2b).
 	if err := runMigrations(db); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
@@ -215,10 +215,10 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		ScannerPresenceTracker:   scannerPresence,
 	}
 
-	// Wait for persistence and scanners, then initialize default endpoints via NATS and wait until they are in Redis
+	// PERS-D2b: persistence must be ready (scan migrations + NATS) before scan API traffic.
 	ctx := context.Background()
 	if err := service.WaitForPersistence(ctx, natsConn, 15*time.Second); err != nil {
-		log.Printf("Warning: persistence not ready in time: %v (default endpoints may be empty)", err)
+		return nil, fmt.Errorf("persistence not ready: %w (scan tables are owned by cafe-persistence; start persistence first)", err)
 	}
 	if err := service.WaitForScanners(ctx, scannerPresence, 30*time.Second); err != nil {
 		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
@@ -295,55 +295,6 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 		ExpectedToken: scanAuthzServiceToken,
 	}))
 	internalAuthz.Post("/scans/:scanId/can-read", scanAuthzHandler.CanReadScan)
-}
-
-// runMigrations runs database migrations
-func runMigrations(db postgresdb.PostgreSQLConnection) error {
-	// Auto-migrate all models
-	if err := db.GetDB().AutoMigrate(
-		&domain.Plan{},
-		&domain.User{},
-		&domain.ScanResultEntity{},
-		&domain.TLSScanResultEntity{},
-		&domain.ScanUsageEventEntity{},
-		&domain.CafeWallet{},
-	); err != nil {
-		return err
-	}
-
-	planRepo := repository.NewPlanRepository(db.GetDB())
-
-	// Create default plans if they don't exist
-	freePlan, err := ensurePlanExists(planRepo, domain.PlanTypeFree, &domain.Plan{
-		Name:              "Free Plan",
-		Type:              domain.PlanTypeFree,
-		WalletScanLimit:   5,
-		EndpointScanLimit: 5,
-		Price:             0,
-		IsActive:          true,
-	})
-	if err != nil {
-		return err
-	}
-
-	_, err = ensurePlanExists(planRepo, domain.PlanTypePremium, &domain.Plan{
-		Name:              "CAFEIN Premium Plan",
-		Type:              domain.PlanTypePremium,
-		WalletScanLimit:   0, // Unlimited
-		EndpointScanLimit: 0, // Unlimited
-		Price:             29.99,
-		IsActive:          false, // Coming soon
-	})
-	if err != nil {
-		return err
-	}
-
-	// Assign FREE plan to existing users without a plan
-	if err := assignPlanToUsersWithoutPlan(db, freePlan); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // ensurePlanExists ensures a plan exists, creating it if it doesn't
