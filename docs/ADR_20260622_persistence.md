@@ -170,9 +170,9 @@ flowchart TB
   end
 
   subgraph data [cafe-persistence - data plane]
-    SCAN_MOD[module scan]
-    CP_MOD[module CP - schema metier CPM]
     INT_API[internal HTTP API]
+    CP_MOD[module CP - schema metier CPM]
+    SCAN_MOD[module scan]
     NATS_C[NATS consumer scan.*]
     PG[(Postgres)]
     RD[(Redis données)]
