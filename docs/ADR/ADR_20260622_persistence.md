@@ -1,13 +1,13 @@
 # ADR — Plateforme de persistance CAFE (cafe-persistence)
 
 
-| Champ                | Valeur                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Statut**           | Proposition v1.4.4 — **architecture** signable ; §14 index aligné sur [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md)                                                                                                                                                                                                                                                                                                                                                |
-| **Date**             | 2026-06-22                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Décideurs**        | Architecture CAFE (Discovery, CPM, deploy)                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Remplace / étend** | Vérification single-writer du 2026-02-22 (§2 ci-dessous conservé comme baseline factuelle)                                                                                                                                                                                                                                                                                                                                                                |
-| **Documents liés**   | `[SCAN_IMMUTABILITY_MIGRATION.md](./SCAN_IMMUTABILITY_MIGRATION.md)`, `[cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md](../../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md)` §2.2 (W1–W8), `[cafe-crypto-policy-mgt/docs/CP_PERSIST.md](../../cafe-crypto-policy-mgt/docs/CP_PERSIST.md)` §42 |
+| Champ                | Valeur                                                                                                                                                                                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Statut**           | Validé ; §14 index aligné sur [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md)                                                                                                                                                                                                                  |
+| **Date**             | 2026-06-22                                                                                                                                                                                                                                                                                          |
+| **Décideurs**        | Architecture CAFE (Discovery, CPM, deploy)                                                                                                                                                                                                                                                          |
+| **Remplace / étend** | Vérification single-writer du 2026-02-22 (§2 ci-dessous conservé comme baseline factuelle)                                                                                                                                                                                                          |
+| **Documents liés**   | `[SCAN_IMMUTABILITY_MIGRATION.md](../SCAN_IMMUTABILITY_MIGRATION.md)`, `[cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md](../../cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md)` §2.2 (W1–W8), `[cafe-crypto-policy-mgt/docs/CP_PERSIST.md](../../cafe-crypto-policy-mgt/docs/CP_PERSIST.md)` §42 |
 
 
 ---
@@ -192,14 +192,18 @@ flowchart TB
   scanners[Scanners] -->|NATS| NATS_C
 ```
 
+
+
 ### 4.4 Stabilité des API publiques (objectif non négociable)
 
 L’extraction cafe-persistence et le module CP sont des changements **internes** (data plane). Ils **ne doivent pas** imposer de migration côté clients.
 
-| Surface publique | Préfixe canonique (edge) | Référence normative | Inchangé |
-|------------------|--------------------------|---------------------|----------|
-| **Discovery** | `/api/discovery/v1` | `cafe-discovery/openapi/discovery-v1.yaml` | Oui — auth, scans wallet/TLS, plans |
-| **CPM** | `/api/cpm/v1` | `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` | Oui — explore, drafts, wallet-challenges, persist, policies |
+
+| Surface publique | Préfixe canonique (edge) | Référence normative                          | Inchangé                                                    |
+| ---------------- | ------------------------ | -------------------------------------------- | ----------------------------------------------------------- |
+| **Discovery**    | `/api/discovery/v1`      | `cafe-discovery/openapi/discovery-v1.yaml`   | Oui — auth, scans wallet/TLS, plans                         |
+| **CPM**          | `/api/cpm/v1`            | `cafe-crypto-policy-mgt/openapi/cpm-v1.yaml` | Oui — explore, drafts, wallet-challenges, persist, policies |
+
 
 **Clients concernés sans modification attendue :**
 
@@ -231,8 +235,8 @@ L’extraction cafe-persistence et le module CP sont des changements **internes*
 3. **Centraliser** l’**init DB / migrations** données dans cafe-persistence uniquement (fin du double `AutoMigrate`).
 4. **Ajouter** un **module CP** : schéma et sémantique métier **définis par CPM** ; exécution, DDL et stockage **opérés par cafe-persistence** ; **aucune dépendance métier Discovery** dans ce module (voir §8.2).
 5. **Exposer** deux familles de **contrats internes synchrones** (HTTP ou gRPC), livrables incrémentalement (voir §7, §9) :
-   - **contrat scan** : pending, read, delete, ledger (complément NATS) ;
-   - **contrat CP** : CRUD drafts/policies, persist, références d’existence W1/W3.
+  - **contrat scan** : pending, read, delete, ledger (complément NATS) ;
+  - **contrat CP** : CRUD drafts/policies, persist, références d’existence W1/W3.
 6. **CPM** délègue les **écritures et lectures durables CP** à cafe-persistence ; garde authz wallet, explore, et le contrat HTTP public ; respecte le profil résilience §5.5–§5.6 sur tout le chemin critique durable CP.
 7. **Discovery** ne contient **aucun code CP** ; à terme W1/W3 appellent cafe-persistence pour des **vérifications d’existence** uniquement — pas de logique policy dans Discovery (voir §9.3, critères §11).
 8. **Auth** reste dans Discovery pour l’instant ; migration vers un service identity / module séparé **plus tard**.
@@ -271,28 +275,32 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 
 **Opérations concernées :** `UpsertDraft`, `GetDraft`, `DeleteDraft`, `PersistDraft`, `GetPolicy`, `DeletePolicy`, `ListPoliciesByScan`.
 
-| Sujet | Règle |
-|-------|--------|
-| **Timeout client CPM → persistence** | Configurable (`CPM_PERSISTENCE_TIMEOUT` indicatif) ; borne supérieure alignée UX wallet (ex. 10–15 s hors signature utilisateur). |
-| **Retries** | **Uniquement** sur opérations **idempotentes** : `PersistDraft` (`draft_id`) ; `Get*` / `List*` / `Count*` (refs W1/W3). **Pas** de retry aveugle sur effets non idempotents sans clé. |
-| **Clé d’idempotence** | `draft_id` (+ `user_id` / `tenant_id` scope) ; cafe-persistence garantit `DRAFT_ALREADY_PERSISTED` / même `policy_id` au retry (équivalent `PersistDraftOnce` actuel). |
-| **Indisponibilité persistence (écriture)** | cafe-persistence → **503** `PERSISTENCE_UNAVAILABLE` ; CPM mappe en **503** public — **pas** de faux succès, **pas** de persist partiel en mémoire. |
-| **Indisponibilité persistence (lecture)** | `GET` draft/policy/list → **503** public ; **pas** de cache stale côté CPM ; **pas** de repli sur `OwnerScopedStore` lorsque `CPM_STORE=persistence` (rollback memory possible en **D5b** tant que D5c n’a pas retiré le code). |
-| **Timeout / erreur réseau** | CPM → **503** ; le client peut réessayer les lectures ; pour persist, retry **uniquement** si idempotence sûre (`draft_id`) ou après `GET` de vérification. |
-| **Santé deploy** | cafe-persistence **ready** (migrations appliquées + sonde HTTP interne) avant trafic CPM en mode `persistence` ; smokes D5 (`cafe-deploy`). |
+
+| Sujet                                      | Règle                                                                                                                                                                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Timeout client CPM → persistence**       | Configurable (`CPM_PERSISTENCE_TIMEOUT` indicatif) ; borne supérieure alignée UX wallet (ex. 10–15 s hors signature utilisateur).                                                                                               |
+| **Retries**                                | **Uniquement** sur opérations **idempotentes** : `PersistDraft` (`draft_id`) ; `Get*` / `List*` / `Count*` (refs W1/W3). **Pas** de retry aveugle sur effets non idempotents sans clé.                                          |
+| **Clé d’idempotence**                      | `draft_id` (+ `user_id` / `tenant_id` scope) ; cafe-persistence garantit `DRAFT_ALREADY_PERSISTED` / même `policy_id` au retry (équivalent `PersistDraftOnce` actuel).                                                          |
+| **Indisponibilité persistence (écriture)** | cafe-persistence → **503** `PERSISTENCE_UNAVAILABLE` ; CPM mappe en **503** public — **pas** de faux succès, **pas** de persist partiel en mémoire.                                                                             |
+| **Indisponibilité persistence (lecture)**  | `GET` draft/policy/list → **503** public ; **pas** de cache stale côté CPM ; **pas** de repli sur `OwnerScopedStore` lorsque `CPM_STORE=persistence` (rollback memory possible en **D5b** tant que D5c n’a pas retiré le code). |
+| **Timeout / erreur réseau**                | CPM → **503** ; le client peut réessayer les lectures ; pour persist, retry **uniquement** si idempotence sûre (`draft_id`) ou après `GET` de vérification.                                                                     |
+| **Santé deploy**                           | cafe-persistence **ready** (migrations appliquées + sonde HTTP interne) avant trafic CPM en mode `persistence` ; smokes D5 (`cafe-deploy`).                                                                                     |
+
 
 ### 5.6 Bascule CPM — rollout progressif (PERS-D5)
 
 Éviter une bascule atomique « tout memory → tout persistence » en une seule PR.
 
-| Mécanisme | Règle |
-|-----------|--------|
-| **`CPM_STORE`** | `memory` (défaut) \| `persistence` — sélecteur explicite jusqu’à fin de fenêtre D5b ; `memory` reste disponible en dev/tests. |
-| **PERS-D5a** | Client HTTP + mapping §5.5 ; **`CPM_STORE=memory` par défaut** ; intégration testable contre `internal/cp/v1` (post-D4b). |
-| **PERS-D5b** | Activer `CPM_STORE=persistence` staging → prod ; smokes restart ; **`OwnerScopedStore` encore présent** (rollback = repasser `CPM_STORE=memory`). |
-| **PERS-D5c** | Après fenêtre de stabilité documentée : retirer le chemin prod `OwnerScopedStore` (code supprimé ou réservé tests uniquement). |
-| **Canary (recommandé)** | Staging d’abord ; prod D5b avec rollback env ; **D5c** seulement après N jours / smokes verts sans incident. |
-| **Post-D5c** | Plus de repli memory en prod ; indisponibilité persistence = **503** (§5.5). |
+
+| Mécanisme               | Règle                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`CPM_STORE`**         | `memory` (défaut) \| `persistence` — sélecteur explicite jusqu’à fin de fenêtre D5b ; `memory` reste disponible en dev/tests.                      |
+| **PERS-D5a**            | Client HTTP + mapping §5.5 ; **`CPM_STORE=memory` par défaut** ; intégration testable contre `internal/cp/v1` (post-D4b).                          |
+| **PERS-D5b**            | Activer `CPM_STORE=persistence` staging → prod ; smokes restart ; **`OwnerScopedStore` encore présent** (rollback = repasser `CPM_STORE=memory`).  |
+| **PERS-D5c**            | Après fenêtre de stabilité documentée : retirer le chemin prod `OwnerScopedStore` (code supprimé ou réservé tests uniquement).                    |
+| **Canary (recommandé)** | Staging d’abord ; prod D5b avec rollback env ; **D5c** seulement après N jours / smokes verts sans incident.                                      |
+| **Post-D5c**            | Plus de repli memory en prod ; indisponibilité persistence = **503** (§5.5).                                                                      |
+
 
 ---
 
@@ -323,35 +331,35 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 ### 6.3 Développeur Discovery
 
 
-| ID            | En tant que…  | Je veux…                                                     | Afin de…                                          | Phase   |
-| ------------- | ------------- | ------------------------------------------------------------ | ------------------------------------------------- | ------- |
-| **US-DISC-1** | dev Discovery | zéro import / table / handler CP dans `cafe-discovery`       | respecter la frontière domaine                    | D0+     |
-| **US-DISC-2** | dev Discovery | appeler `cafe-persistence` pour GET/DELETE scan (état final) | ne plus maintenir de read path Postgres scan      | D6      |
-| **US-DISC-3** | dev Discovery | garder auth et session validate sur Discovery                | ne pas déplacer JWT/Turnstile avant le bon moment | continu |
-| **US-DISC-4** | dev Discovery | appeler cafe-persistence pour une **existence** policy par adresse (W1) | appliquer le guard sans logique CP locale | D4–D6 |
+| ID            | En tant que…  | Je veux…                                                                | Afin de…                                          | Phase   |
+| ------------- | ------------- | ----------------------------------------------------------------------- | ------------------------------------------------- | ------- |
+| **US-DISC-1** | dev Discovery | zéro import / table / handler CP dans `cafe-discovery`                  | respecter la frontière domaine                    | D0+     |
+| **US-DISC-2** | dev Discovery | appeler `cafe-persistence` pour GET/DELETE scan (état final)            | ne plus maintenir de read path Postgres scan      | D6      |
+| **US-DISC-3** | dev Discovery | garder auth et session validate sur Discovery                           | ne pas déplacer JWT/Turnstile avant le bon moment | continu |
+| **US-DISC-4** | dev Discovery | appeler cafe-persistence pour une **existence** policy par adresse (W1) | appliquer le guard sans logique CP locale         | D4–D6   |
 
 
 ### 6.4 Développeur CPM
 
 
-| ID           | En tant que… | Je veux…                                                        | Afin de…                             | Phase |
-| ------------ | ------------ | --------------------------------------------------------------- | ------------------------------------ | ----- |
-| **US-CPM-1** | dev CPM      | déléguer `PersistDraftOnce` au data plane                       | supprimer `OwnerScopedStore` en prod | D5c   |
-| **US-CPM-2** | dev CPM      | un module CP dans cafe-persistence sans import Discovery scan ; schéma métier validé par CPM | découplage + ownership §8.2          | D3b–D4 |
-| **US-CPM-3** | dev CPM      | colonne `wallet_address` indexée côté data plane                | W1 fiable sans scan JSON             | D4    |
-| **US-CPM-4** | dev CPM      | ne jamais ouvrir `CPM_DATABASE_URL` dans le binaire CPM         | frontière stricte                    | D5    |
-| **US-CPM-5** | dev CPM      | timeouts, retries idempotents et 503 mappés sur indisponibilité persistence | chemin critique durable CP fiable (lectures incluses) | D5    |
+| ID           | En tant que… | Je veux…                                                                                     | Afin de…                                              | Phase  |
+| ------------ | ------------ | -------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------ |
+| **US-CPM-1** | dev CPM      | déléguer `PersistDraftOnce` au data plane                                                    | supprimer `OwnerScopedStore` en prod                  | D5c    |
+| **US-CPM-2** | dev CPM      | un module CP dans cafe-persistence sans import Discovery scan ; schéma métier validé par CPM | découplage + ownership §8.2                           | D3b–D4 |
+| **US-CPM-3** | dev CPM      | colonne `wallet_address` indexée côté data plane                                             | W1 fiable sans scan JSON                              | D4     |
+| **US-CPM-4** | dev CPM      | ne jamais ouvrir `CPM_DATABASE_URL` dans le binaire CPM                                      | frontière stricte                                     | D5     |
+| **US-CPM-5** | dev CPM      | timeouts, retries idempotents et 503 mappés sur indisponibilité persistence                  | chemin critique durable CP fiable (lectures incluses) | D5     |
 
 
 ### 6.5 Développeur plateforme (`cafe-persistence`)
 
 
-| ID            | En tant que…    | Je veux…                                          | Afin de…                              | Phase  |
-| ------------- | --------------- | ------------------------------------------------- | ------------------------------------- | ------ |
-| **US-PERS-1** | dev persistence | modules `scan` et `cp` isolés dans le repo        | évolution indépendante                | D1, D4 |
-| **US-PERS-2** | dev persistence | contrats internes **scan** et **CP** versionnés séparément | livraison incrémentale D3a / D3b | D3a, D3b |
+| ID            | En tant que…    | Je veux…                                                          | Afin de…                             | Phase    |
+| ------------- | --------------- | ----------------------------------------------------------------- | ------------------------------------ | -------- |
+| **US-PERS-1** | dev persistence | modules `scan` et `cp` isolés dans le repo                        | évolution indépendante               | D1, D4   |
+| **US-PERS-2** | dev persistence | contrats internes **scan** et **CP** versionnés séparément        | livraison incrémentale D3a / D3b     | D3a, D3b |
 | **US-PERS-3** | dev persistence | NATS scan inchangé + serveur HTTP interne (contrats D3a puis D3b) | async + sync dans un même data plane | D3a, D3b |
-| **US-PERS-4** | dev persistence | Redis clés préfixées `cpm:v1:` / `discovery:v1:`  | partage cluster Redis sans collision  | D1+    |
+| **US-PERS-4** | dev persistence | Redis clés préfixées `cpm:v1:` / `discovery:v1:`                  | partage cluster Redis sans collision | D1+      |
 
 
 ---
@@ -359,18 +367,18 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 ## 7. Proposition de réarchitecture — phasage
 
 
-| Phase   | Objectif                | Discovery et PG/Redis                                         | Livrable                                                                                    |
-| ------- | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **D0**  | Acter les frontières    | Inchangé                                                      | ADR acceptée ; règle « zero CP in Discovery »                                               |
-| **D1**  | Extraction mécanique    | Inchangé (exception temporaire scan)                          | Repo cafe-persistence ; binaire scan = comportement identique ; critère DDL §14.5 ; **rollback** Discovery conservé jusqu’à D2 (§14.3) |
-| **D2**  | Prouver stack           | Inchangé côté API                                             | Compose / images cafe-persistence ; smokes scan v1 verts ; **puis** D1b cleanup Discovery |
-| **D2b** | DDL scan unique         | Discovery ne migre plus tables scan                           | Boot order persistence ready avant trafic scan API (§14.4)                                  |
-| **D3a** | Contrat interne **scan** | Inchangé                                                     | OpenAPI interne scan : pending, read, delete, ledger (parallèle D3b)                      |
-| **D3b** | Contrat interne **CP**  | Inchangé                                                     | OpenAPI interne CP : CRUD drafts/policies, persist, refs existence — **indépendant de D3a-impl** |
-| **D4**  | Module CP (stockage)    | Inchangé                                                      | Tables `crypto_policy_*` ; writers/repos ; **Postgres only P0** (Redis CP P1+, §8.2)         |
-| **D4b** | HTTP interne CP         | Inchangé                                                      | Handlers `internal/cp/v1` + tests contract (miroir D3a-impl)                                |
-| **D5**  | CPM délègue             | Inchangé                                                      | D5a client → D5b bascule → D5c retrait memory ; §5.5–§5.6 ; HTTP public inchangé            |
-| **D6**  | Identity-only Discovery | **Cible** : Discovery ne lit plus Postgres/Redis pour scan/CP | D6a-read → D6a-delete → D6a-pending ; W1/W3 via contrat CP (existence only)               |
+| Phase   | Objectif                 | Discovery et PG/Redis                                         | Livrable                                                                                                                               |
+| ------- | ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **D0**  | Acter les frontières     | Inchangé                                                      | ADR acceptée ; règle « zero CP in Discovery »                                                                                          |
+| **D1**  | Extraction mécanique     | Inchangé (exception temporaire scan)                          | Repo cafe-persistence ; binaire scan = comportement identique ; critère DDL §14.5 ; **rollback** Discovery conservé jusqu’à D2 (§14.3) |
+| **D2**  | Prouver stack            | Inchangé côté API                                             | Compose / images cafe-persistence ; smokes scan v1 verts ; **puis** D1b cleanup Discovery                                              |
+| **D2b** | DDL scan unique          | Discovery ne migre plus tables scan                           | Boot order persistence ready avant trafic scan API (§14.4)                                                                             |
+| **D3a** | Contrat interne **scan** | Inchangé                                                      | OpenAPI interne scan : pending, read, delete, ledger (parallèle D3b)                                                                   |
+| **D3b** | Contrat interne **CP**   | Inchangé                                                      | OpenAPI interne CP : CRUD drafts/policies, persist, refs existence — **indépendant de D3a-impl**                                       |
+| **D4**  | Module CP (stockage)     | Inchangé                                                      | Tables `crypto_policy_*` ; writers/repos ; **Postgres only P0** (Redis CP P1+, §8.2)                                                   |
+| **D4b** | HTTP interne CP          | Inchangé                                                      | Handlers `internal/cp/v1` + tests contract (miroir D3a-impl)                                                                           |
+| **D5**  | CPM délègue              | Inchangé                                                      | D5a client → D5b bascule → D5c retrait memory ; §5.5–§5.6 ; HTTP public inchangé                                                       |
+| **D6**  | Identity-only Discovery  | **Cible** : Discovery ne lit plus Postgres/Redis pour scan/CP | D6a-read → D6a-delete → D6a-pending ; W1/W3 via contrat CP (existence only)                                                            |
 
 
 > La règle « Discovery = identity plane seulement pour PG/Redis » est l’**invariant D6**, pas une contrainte dès D1.
@@ -389,14 +397,16 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 
 ### 8.2 Module CP — ownership métier vs opérationnel
 
-| Dimension | Owner | Responsabilité |
-|-----------|-------|----------------|
-| **Schéma & sémantique données CP** | **CPM** (métier) | Colonnes, statuts (`persisted` / `superseded`), payload JSON, invariants persist-once, évolution via PR CPM + revue contrat |
-| **DDL, migrations, writers** | **cafe-persistence** (opérationnel) | `AutoMigrate`, transactions, repositories, SLO, backups |
-| **Handlers HTTP `internal/cp/v1`** | **cafe-persistence** (D4b) | Implémentation contrat D3b ; tests contract ; non exposé edge |
-| **Cache Redis CP** | **cafe-persistence** (P1+, optionnel) | Hors chemin de vérité ; accélérateur pending/existence uniquement |
-| **Règles produit CP** (explore, ranking, wallet-auth) | **CPM** | Hors module CP persistence |
-| **Guards scan** (W1/W3 côté Discovery) | **Discovery** | Interprète le code HTTP / `exists` ; **ne** implémente **pas** la logique policy |
+
+| Dimension                                             | Owner                                 | Responsabilité                                                                                                              |
+| ----------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Schéma & sémantique données CP**                    | **CPM** (métier)                      | Colonnes, statuts (`persisted` / `superseded`), payload JSON, invariants persist-once, évolution via PR CPM + revue contrat |
+| **DDL, migrations, writers**                          | **cafe-persistence** (opérationnel)   | `AutoMigrate`, transactions, repositories, SLO, backups                                                                     |
+| **Handlers HTTP `internal/cp/v1`**                    | **cafe-persistence** (D4b)            | Implémentation contrat D3b ; tests contract ; non exposé edge                                                               |
+| **Cache Redis CP**                                    | **cafe-persistence** (P1+, optionnel) | Hors chemin de vérité ; accélérateur pending/existence uniquement                                                           |
+| **Règles produit CP** (explore, ranking, wallet-auth) | **CPM**                               | Hors module CP persistence                                                                                                  |
+| **Guards scan** (W1/W3 côté Discovery)                | **Discovery**                         | Interprète le code HTTP / `exists` ; **ne** implémente **pas** la logique policy                                            |
+
 
 **Règle anti-frontière :** CPM définit le contrat et les types ; cafe-persistence implémente le stockage. Les changements de schéma CP passent par un **contrat versionné** (D3b), pas par des imports Go cross-repo ad hoc.
 
@@ -416,17 +426,19 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 
 #### 8.4.1 `crypto_policy_drafts`
 
-| Colonne | Type | Rôle |
-|---------|------|------|
-| `id` | UUID PK | `draft_id` client (upsert key) |
-| `user_id` | TEXT NOT NULL | Owner |
-| `tenant_id` | TEXT | Optionnel |
-| `scan_id` | UUID | Référence logique scan Discovery |
-| `payload` | JSONB NOT NULL | Sélection, paramètres, contexte |
-| `status` | TEXT NOT NULL | `server_draft` |
-| `created_at` | TIMESTAMPTZ | |
-| `updated_at` | TIMESTAMPTZ | |
-| `deleted_at` | TIMESTAMPTZ | Soft delete |
+
+| Colonne      | Type           | Rôle                             |
+| ------------ | -------------- | -------------------------------- |
+| `id`         | UUID PK        | `draft_id` client (upsert key)   |
+| `user_id`    | TEXT NOT NULL  | Owner                            |
+| `tenant_id`  | TEXT           | Optionnel                        |
+| `scan_id`    | UUID           | Référence logique scan Discovery |
+| `payload`    | JSONB NOT NULL | Sélection, paramètres, contexte  |
+| `status`     | TEXT NOT NULL  | `server_draft`                   |
+| `created_at` | TIMESTAMPTZ    |                                  |
+| `updated_at` | TIMESTAMPTZ    |                                  |
+| `deleted_at` | TIMESTAMPTZ    | Soft delete                      |
+
 
 **Index suggérés :**
 
@@ -435,23 +447,25 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 
 #### 8.4.2 `crypto_policies`
 
-| Colonne | Type | Rôle |
-|---------|------|------|
-| `id` | UUID PK | `policy_id` |
-| `user_id` | TEXT NOT NULL | Owner |
-| `tenant_id` | TEXT | Optionnel |
-| `scan_id` | UUID NOT NULL | Référence scan |
-| `draft_id` | UUID NOT NULL | Provenance persist |
-| `wallet_address` | TEXT NOT NULL | Normalisé checksum ; **W1** |
-| `chain_id` | BIGINT NOT NULL | Audit `CP_PERSIST.md` §13.2 |
-| `payload` | JSONB NOT NULL | Policy normalisée (sans signature) |
-| `ownership_status` | TEXT | ex. `verified` |
-| `wallet_control_method` | TEXT | ex. `eoa_signature` |
-| `wallet_control_verified_at` | TIMESTAMPTZ | |
-| `status` | TEXT NOT NULL | `persisted` \| `superseded` |
-| `persisted_at` | TIMESTAMPTZ NOT NULL | |
-| `created_at` | TIMESTAMPTZ | |
-| `deleted_at` | TIMESTAMPTZ | Soft delete utilisateur |
+
+| Colonne                      | Type                 | Rôle                               |
+| ---------------------------- | -------------------- | ---------------------------------- |
+| `id`                         | UUID PK              | `policy_id`                        |
+| `user_id`                    | TEXT NOT NULL        | Owner                              |
+| `tenant_id`                  | TEXT                 | Optionnel                          |
+| `scan_id`                    | UUID NOT NULL        | Référence scan                     |
+| `draft_id`                   | UUID NOT NULL        | Provenance persist                 |
+| `wallet_address`             | TEXT NOT NULL        | Normalisé checksum ; **W1**        |
+| `chain_id`                   | BIGINT NOT NULL      | Audit `CP_PERSIST.md` §13.2        |
+| `payload`                    | JSONB NOT NULL       | Policy normalisée (sans signature) |
+| `ownership_status`           | TEXT                 | ex. `verified`                     |
+| `wallet_control_method`      | TEXT                 | ex. `eoa_signature`                |
+| `wallet_control_verified_at` | TIMESTAMPTZ          |                                    |
+| `status`                     | TEXT NOT NULL        | `persisted`                        |
+| `persisted_at`               | TIMESTAMPTZ NOT NULL |                                    |
+| `created_at`                 | TIMESTAMPTZ          |                                    |
+| `deleted_at`                 | TIMESTAMPTZ          | Soft delete utilisateur            |
+
 
 **Index suggérés :**
 
@@ -465,25 +479,29 @@ La règle « CPM sans accès direct Postgres/Redis » place cafe-persistence sur
 
 Alternative : colonnes sur `crypto_policy_drafts`. Table dédiée si séparation claire :
 
-| Colonne | Rôle |
-|---------|------|
-| `draft_id` PK | |
-| `policy_id` | ID alloué au premier essai |
-| `completed` | BOOL |
-| `persisted_at` | |
-| `user_id`, `tenant_id` | Scope |
+
+| Colonne                | Rôle                       |
+| ---------------------- | -------------------------- |
+| `draft_id` PK          |                            |
+| `policy_id`            | ID alloué au premier essai |
+| `completed`            | BOOL                       |
+| `persisted_at`         |                            |
+| `user_id`, `tenant_id` | Scope                      |
+
 
 Reproduit `draftPersisted` actuel (`OwnerScopedStore`) pour `DRAFT_ALREADY_PERSISTED` et retry mid-flight.
 
 #### 8.4.4 `crypto_policy_events` (ledger — optionnel P2+)
 
-| Colonne | Rôle |
-|---------|------|
-| `id` UUID PK | |
-| `user_id` | |
+
+| Colonne            | Rôle                          |
+| ------------------ | ----------------------------- |
+| `id` UUID PK       |                               |
+| `user_id`          |                               |
 | `policy_id` UNIQUE | Une entrée par persist réussi |
-| `event_type` | ex. `policy_persisted` |
-| `consumed_at` | |
+| `event_type`       | ex. `policy_persisted`        |
+| `consumed_at`      |                               |
+
 
 Parallèle `scan_usage_events` : quotas ou audit réglementaire ; **non bloquant** pour P0 (D4).
 
@@ -497,11 +515,13 @@ Les contrats **scan** et **CP** sont **deux livrables distincts** (OpenAPI ou pr
 
 **Consommateur principal :** Discovery API (D6 pour read/delete ; plus tôt pour pending si migré).
 
+
 | Opération                             | Appelant typique                                   |
 | ------------------------------------- | -------------------------------------------------- |
 | Reserve pending / release             | Discovery POST scan                                |
 | Get / list / delete scan by `scan_id` | Discovery GET/DELETE v1 (D6)                       |
 | Count usage / ledger                  | Discovery guards quota (ou identity + persistence) |
+
 
 **Peut être livré** dès D2–D3a sans module CP.
 
@@ -509,12 +529,14 @@ Les contrats **scan** et **CP** sont **deux livrables distincts** (OpenAPI ou pr
 
 **Consommateurs principaux :** CPM (read/write) ; Discovery (refs existence uniquement, §9.3).
 
-| Opération                                           | Appelant typique             |
-| --------------------------------------------------- | ---------------------------- |
-| `UpsertDraft` / `GetDraft` / `DeleteDraft`          | CPM                          |
-| `PersistDraft` (transactionnel, idempotent)         | CPM après wallet-auth        |
-| `GetPolicy` / `DeletePolicy` / `ListPoliciesByScan` | CPM HTTP public              |
-| `CountPoliciesByWallet` / `CountPoliciesByScan`     | Discovery W1 / W3 (D6)       |
+
+| Opération                                           | Appelant typique       |
+| --------------------------------------------------- | ---------------------- |
+| `UpsertDraft` / `GetDraft` / `DeleteDraft`          | CPM                    |
+| `PersistDraft` (transactionnel, idempotent)         | CPM après wallet-auth  |
+| `GetPolicy` / `DeletePolicy` / `ListPoliciesByScan` | CPM HTTP public        |
+| `CountPoliciesByWallet` / `CountPoliciesByScan`     | Discovery W1 / W3 (D6) |
+
 
 **Prérequis :** D4 (tables CP) puis **D4b** (HTTP `internal/cp/v1`). D5a consomme D4b.
 
@@ -524,25 +546,29 @@ Authentification inter-services : Bearer token plateforme + propagation `user_id
 
 Discovery **ne doit pas** interpréter le contenu d’une policy, choisir un template, ni appliquer de règle CPM. Pour les guards d’immutabilité :
 
-| Guard | Appel cafe-persistence (indicatif) | Réponse attendue | Discovery fait |
-|-------|-----------------------------------|------------------|----------------|
+
+| Guard  | Appel cafe-persistence (indicatif)                 | Réponse attendue                  | Discovery fait                                                                       |
+| ------ | -------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------ |
 | **W1** | `CountPoliciesByWallet` ou `ExistsPolicyForWallet` | `exists: bool`, `count` optionnel | Si `exists` → **409** `CPM_EXISTS_FOR_WALLET_TARGET` ; **aucune** lecture payload CP |
-| **W3** | `CountPoliciesByScan` ou `ExistsPolicyForScan` | `referenced: bool`, `count` | Si `referenced` → **409** `SCAN_REFERENCED_BY_POLICY` sur DELETE scan |
+| **W3** | `CountPoliciesByScan` ou `ExistsPolicyForScan`     | `referenced: bool`, `count`       | Si `referenced` → **409** `SCAN_REFERENCED_BY_POLICY` sur DELETE scan                |
+
 
 - Les **codes HTTP produit** et les **messages** restent définis par Discovery (WORKPLAN §2.2).
 - cafe-persistence expose des **faits** (existence, comptage owner-scoped) ; CPM reste l’**autorité métier** sur ce qu’est une policy valide côté produit public.
-- Pendant la transition, les endpoints internes CPM (`/internal/policies/references/*`) peuvent subsister ; la cible D6 les remplace ou les réduit à de simples proxies vers le contrat CP.
+- Pendant la transition, les endpoints internes CPM (`/internal/policies/references/`*) peuvent subsister ; la cible D6 les remplace ou les réduit à de simples proxies vers le contrat CP.
 
 ---
 
 ## 10. Auth et identity — report explicite
 
-| Sujet                                                           | Décision                                                                                    |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Handlers `/auth/*`, JWT, `POST /internal/auth/session/validate` | Restent **Discovery API** jusqu’à décision ultérieure                                       |
+
+| Sujet                                                           | Décision                                                                                                                                               |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Handlers `/auth/`*, JWT, `POST /internal/auth/session/validate` | Restent **Discovery API** jusqu’à décision ultérieure                                                                                                  |
 | Tables `users`, `plans`                                         | **Identity plane** — Postgres ; lues/écrites par Discovery (auth, signup) ; cafe-persistence peut **lire** pour quotas scan à la complétion uniquement |
-| Migration auth vers `cafe-persistence` ou `cafe-identity`       | **Hors scope** de cette ADR ; processus HTTP distinct du consumer NATS recommandé           |
-| DDL `users` / `plans` / `cafe_wallets`                          | **Hors scope D1–D6** — reste migré par Discovery (`runMigrations` identity) sauf ADR identity ultérieure |
+| Migration auth vers `cafe-persistence` ou `cafe-identity`       | **Hors scope** de cette ADR ; processus HTTP distinct du consumer NATS recommandé                                                                      |
+| DDL `users` / `plans` / `cafe_wallets`                          | **Hors scope D1–D6** — reste migré par Discovery (`runMigrations` identity) sauf ADR identity ultérieure                                               |
+
 
 > **Prudence identity :** centraliser le DDL `users`/`plans` dans cafe-persistence *sans* déplacer les handlers auth serait techniquement possible, mais **déconseillé dans ce programme** : ces tables relèvent de l’**identity plane**, pas du data plane scan/CP. Les y faire migrer par cafe-persistence risquerait une dérive (« cafe-persistence avale identity »). Si un jour le DDL identity est centralisé, ce sera via une **ADR identity dédiée** (ou module `cafe-identity` explicite), pas par effet de bord de PERS-D1/D2.
 
@@ -607,7 +633,7 @@ cafe-discovery/
 ├── internal/handler/discovery_v1_scans.go → lectures/delete PG direct (dette D6)
 ├── internal/repository/pending_v1_scan_repository.go
 ├── docs/SCAN_IMMUTABILITY_MIGRATION.md
-└── docs/ADR_20260622.md                 → ce document
+└── docs/ADR/ADR_20260622_persistence.md  → ce document
 
 cafe-crypto-policy-mgt/
 └── internal/persistence/owner_scoped_store.go  → retiré prod en D5c (bascule D5b)
@@ -634,26 +660,28 @@ Trois durcissements recommandés avant exécution :
 
 > **Règle :** une PR = un jalon vérifiable ; **API publiques inchangées** (§4.4). Dépôt **lead** indiqué par PR. Détail merge → [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md).
 
-| PR | Phase | Prérequis | Dépôt(s) lead | Objectif | Livrables / critères de merge |
-|----|-------|-----------|---------------|----------|------------------------------|
-| **PERS-D0** | D0 | — | `cafe-discovery` | Acter l’ADR | Merge `ADR_20260622.md` + `ADR_20260622_PR_PLAN.md` ; liens README ; règle « zero CP in Discovery » |
-| **PERS-D1** | D1 | D0 | `cafe-persistence` *(nouveau)* | Extraction mécanique scan | Repo + binaire ; CI ; **même** NATS/DDL/comportement ; critère DDL §14.5 ; image publishable |
-| **PERS-D2** | D2 | D1 | `cafe-deploy` | **Prouver** stack cafe-persistence | Compose pointe image `cafe-persistence` ; smokes scan v1 **verts** ; rollback doc §14.3 |
-| **PERS-D1b** | D1 | **D2** | `cafe-discovery` | Déprécier persistence in-repo | Retirer `cmd/persistence` extrait ; doc tag/image legacy + rétention (PR) |
-| **PERS-D2b** | D2 | D2 | `cafe-discovery` (+ readiness persistence) | DDL scan unique + boot guard | Backend ne migre plus tables scan ; readiness §14.4 |
-| **PERS-D3a-spec** | D3a | D2b | `cafe-persistence` | Contrat interne scan (spec) | OpenAPI `internal/scan/v1` |
-| **PERS-D3a-impl** | D3a | D3a-spec | `cafe-persistence` | HTTP interne scan | Impl D3a-spec ; non exposé edge |
-| **PERS-D3b-spec** | D3b | D2b | `cafe-persistence` + `cafe-crypto-policy-mgt` | Contrat interne CP (spec) | OpenAPI `internal/cp/v1` ; revue CPM §8.2 ; parallèle D3a |
-| **PERS-D4** | D4 | D3b-spec | `cafe-persistence` | Module CP Postgres | Migrations `crypto_policy_*` ; writers/repos ; tests Postgres ; **sans** HTTP |
-| **PERS-D4b** | D4 | D4 | `cafe-persistence` | HTTP interne CP | Handlers `internal/cp/v1` ; tests contract ; non exposé edge |
-| **PERS-D5a** | D5 | **D4b** | `cafe-crypto-policy-mgt` | Client persistence | HTTP client §5.5 ; `CPM_PERSISTENCE_URL` ; **`CPM_STORE=memory` défaut** |
-| **PERS-D5b** | D5 | D5a | `cafe-crypto-policy-mgt` + `cafe-deploy` | Bascule `CPM_STORE=persistence` | Staging → prod ; smokes restart ; **`OwnerScopedStore` conservé** (rollback env) |
-| **PERS-D5c** | D5 | D5b stable | `cafe-crypto-policy-mgt` | Retrait memory prod | Supprimer chemin prod `OwnerScopedStore` après fenêtre §5.6 |
-| **PERS-D6a-read** | D6 | D3a-impl | `cafe-discovery` | Scan read/list interne | GET/list v1 via D3a |
-| **PERS-D6a-delete** | D6 | D6a-read | `cafe-discovery` | Scan delete interne | DELETE v1 via D3a |
-| **PERS-D6a-pending** | D6 | D6a-delete | `cafe-discovery` | Scan pending interne | POST accept / réservation via D3a ; **dernier** (W8) |
-| **PERS-D6b** | D6 | **D4b**, **D5c** | `cafe-discovery` + `cafe-crypto-policy-mgt` | W1/W3 via persistence | Existence only §9.3 ; API `internal/cp/v1` ; retrait refs internes CPM |
-| **PERS-D6c** | D6 | D6a-pending, D6b, D5c | `cafe-deploy` | E2E stack | Smokes scan + CP + restart ; checklist §11 |
+
+| PR                   | Phase | Prérequis             | Dépôt(s) lead                                 | Objectif                           | Livrables / critères de merge                                                                       |
+| -------------------- | ----- | --------------------- | --------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **PERS-D0**          | D0    | —                     | `cafe-discovery`                              | Acter l’ADR                        | Merge ADR + PR plan sous `docs/ADR/` ; liens README + TODO ; lien workplan/TODO CPM ; règle « zero CP in Discovery » |
+| **PERS-D1**          | D1    | D0                    | `cafe-persistence` *(nouveau)*                | Extraction mécanique scan          | Repo + binaire ; CI ; **même** NATS/DDL/comportement ; critère DDL §14.5 ; image publishable        |
+| **PERS-D2**          | D2    | D1                    | `cafe-deploy`                                 | **Prouver** stack cafe-persistence | Compose pointe image `cafe-persistence` ; smokes scan v1 **verts** ; rollback doc §14.3             |
+| **PERS-D1b**         | D1    | **D2**                | `cafe-discovery`                              | Déprécier persistence in-repo      | Retirer `cmd/persistence` extrait ; doc tag/image legacy + rétention (PR)                           |
+| **PERS-D2b**         | D2    | D2                    | `cafe-discovery` (+ readiness persistence)    | DDL scan unique + boot guard       | Backend ne migre plus tables scan ; readiness §14.4                                                 |
+| **PERS-D3a-spec**    | D3a   | D2b                   | `cafe-persistence`                            | Contrat interne scan (spec)        | OpenAPI `internal/scan/v1`                                                                          |
+| **PERS-D3a-impl**    | D3a   | D3a-spec              | `cafe-persistence`                            | HTTP interne scan                  | Impl D3a-spec ; non exposé edge                                                                     |
+| **PERS-D3b-spec**    | D3b   | D2b                   | `cafe-persistence` + `cafe-crypto-policy-mgt` | Contrat interne CP (spec)          | OpenAPI `internal/cp/v1` ; revue CPM §8.2 ; parallèle D3a                                           |
+| **PERS-D4**          | D4    | D3b-spec              | `cafe-persistence`                            | Module CP Postgres                 | Migrations `crypto_policy_*` ; writers/repos ; tests Postgres ; **sans** HTTP                        |
+| **PERS-D4b**         | D4    | D4                    | `cafe-persistence`                            | HTTP interne CP                    | Handlers `internal/cp/v1` ; tests contract ; non exposé edge                                        |
+| **PERS-D5a**         | D5    | **D4b**               | `cafe-crypto-policy-mgt`                      | Client persistence                 | HTTP client §5.5 ; `CPM_PERSISTENCE_URL` ; **`CPM_STORE=memory` défaut**                             |
+| **PERS-D5b**         | D5    | D5a                   | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Bascule `CPM_STORE=persistence`    | Staging → prod ; smokes restart ; **`OwnerScopedStore` conservé** (rollback env)                     |
+| **PERS-D5c**         | D5    | D5b stable            | `cafe-crypto-policy-mgt`                      | Retrait memory prod                | Supprimer chemin prod `OwnerScopedStore` après fenêtre §5.6                                         |
+| **PERS-D6a-read**    | D6    | D3a-impl              | `cafe-discovery`                              | Scan read/list interne             | GET/list v1 via D3a                                                                                 |
+| **PERS-D6a-delete**  | D6    | D6a-read              | `cafe-discovery`                              | Scan delete interne                | DELETE v1 via D3a                                                                                   |
+| **PERS-D6a-pending** | D6    | D6a-delete            | `cafe-discovery`                              | Scan pending interne               | POST accept / réservation via D3a ; **dernier** (W8)                                                |
+| **PERS-D6b**         | D6    | **D4b**, **D5c**      | `cafe-discovery` + `cafe-crypto-policy-mgt`   | W1/W3 via persistence              | Existence only §9.3 ; API `internal/cp/v1` ; retrait refs internes CPM                              |
+| **PERS-D6c**         | D6    | D6a-pending, D6b, D5c | `cafe-deploy`                                 | E2E stack                          | Smokes scan + CP + restart ; checklist §11                                                          |
+
 
 ### 14.2 Ordre de merge recommandé (révisé)
 
@@ -679,34 +707,42 @@ flowchart LR
   D6b --> D6c
 ```
 
+
+
 **Parallèle après D2b :** chaînes **scan** et **CP** indépendantes :
 
-| Chaîne | Ordre |
-|--------|--------|
-| Scan | `D3a-spec → D3a-impl → D6a-read → D6a-delete → D6a-pending` |
-| CP / CPM | `D3b-spec → D4 → D4b → D5a → D5b → D5c` |
+
+| Chaîne      | Ordre                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| Scan        | `D3a-spec → D3a-impl → D6a-read → D6a-delete → D6a-pending`                              |
+| CP / CPM    | `D3b-spec → D4 → D4b → D5a → D5b → D5c`                                                  |
 | Convergence | `D6b` après **D4b** (existence API) et **D5c** ; `D6c` après `D6a-pending`, `D6b`, `D5c` |
+
 
 **D6a-*** et la chaîne CP peuvent avancer **en parallèle** après leurs prérequis respectifs (pas de dépendance croisée scan/CP avant D6c).
 
 ### 14.3 Rollback D1 / D2 (entre-deux)
 
-| Étape | Règle |
-|-------|--------|
-| **Avant D2 vert** | `cafe-discovery` **conserve** `cmd/persistence` et image `cafe-discovery-persistence` buildable. |
-| **D2** | Stack bascule consommateur NATS vers image **cafe-persistence** ; smokes obligatoires. |
-| **D1b** | **Uniquement après** D2 vert : suppression code in-repo ; la **PR PERS-D1b** documente emplacement du tag/image Discovery legacy et durée de conservation (rollback compose / registry). |
-| **Rollback** | Re-pointer compose vers `cafe-discovery-persistence` + réactiver binaire in-repo si D1b pas encore mergé. |
+
+| Étape             | Règle                                                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Avant D2 vert** | `cafe-discovery` **conserve** `cmd/persistence` et image `cafe-discovery-persistence` buildable.                                                                                         |
+| **D2**            | Stack bascule consommateur NATS vers image **cafe-persistence** ; smokes obligatoires.                                                                                                   |
+| **D1b**           | **Uniquement après** D2 vert : suppression code in-repo ; la **PR PERS-D1b** documente emplacement du tag/image Discovery legacy et durée de conservation (rollback compose / registry). |
+| **Rollback**      | Re-pointer compose vers `cafe-discovery-persistence` + réactiver binaire in-repo si D1b pas encore mergé.                                                                                |
+
 
 ### 14.4 Boot order et migrations scan (D2b)
 
-| Garde | Règle |
-|-------|--------|
-| **Migrations scan** | Appliquées au **démarrage cafe-persistence** (seul owner DDL scan post-D2b). |
-| **Readiness** | Endpoint readiness persistence = migrations scan OK + NATS connecté (+ HTTP interne si D3a déployé). |
-| **Compose (dev/staging)** | `depends_on` persistence **healthy** — utile en `cafe-deploy`, pas suffisant seul en prod. |
-| **Orchestrateur (prod)** | **Rollout gate** explicite : pas de trafic Discovery scan tant que readiness persistence OK (sonde HTTP/K8s `readinessProbe`, job pre-traffic, ou équivalent) — indépendant du mécanisme `depends_on` Docker. |
-| **Backend identity DDL** | Toujours migré par Discovery au boot (hors scope scan). |
+
+| Garde                     | Règle                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Migrations scan**       | Appliquées au **démarrage cafe-persistence** (seul owner DDL scan post-D2b).                                                                                                                                  |
+| **Readiness**             | Endpoint readiness persistence = migrations scan OK + NATS connecté (+ HTTP interne si D3a déployé).                                                                                                          |
+| **Compose (dev/staging)** | `depends_on` persistence **healthy** — utile en `cafe-deploy`, pas suffisant seul en prod.                                                                                                                    |
+| **Orchestrateur (prod)**  | **Rollout gate** explicite : pas de trafic Discovery scan tant que readiness persistence OK (sonde HTTP/K8s `readinessProbe`, job pre-traffic, ou équivalent) — indépendant du mécanisme `depends_on` Docker. |
+| **Backend identity DDL**  | Toujours migré par Discovery au boot (hors scope scan).                                                                                                                                                       |
+
 
 ### 14.5 Critère DDL scan identique (PERS-D1)
 
@@ -718,9 +754,9 @@ flowchart LR
 ### 14.6 Non-objectifs par PR
 
 - **PERS-D1–D2** : pas de module CP, pas de changement API publique, pas de migration DDL identity.
-- **PERS-D3a–D3b** : pas de routes publiques `/api/persistence/*`.
+- **PERS-D3a–D3b** : pas de routes publiques `/api/persistence/`*.
 - **PERS-D4** : pas de Redis CP ; pas de handlers HTTP edge ; stockage + writers uniquement.
-- **PERS-D4b** : pas de routes publiques `/api/persistence/*` ni `/api/cpm/v1`.
+- **PERS-D4b** : pas de routes publiques `/api/persistence/`* ni `/api/cpm/v1`.
 - **PERS-D5** : pas de changement OpenAPI `cpm-v1.yaml` paths publics ; pas de bascule prod `CPM_STORE=persistence` dans D5a ; pas de suppression `OwnerScopedStore` dans D5b.
 - **PERS-D6** : pas de logique explore/ranking CP dans Discovery (§9.3, §11.2).
 
@@ -735,18 +771,19 @@ Copier la section jalon correspondante dans la description GitHub à l’ouvertu
 ## 15. Historique
 
 
-| Date       | Version | Changement                                                                                                     |
-| ---------- | ------- | -------------------------------------------------------------------------------------------------------------- |
-| 2026-02-22 | 0.1     | Vérification factuelle single-writer / read path (backend vs scanners)                                         |
-| 2026-06-22 | 1.0     | Reformat ADR ; état actuel + Option D cafe-persistence ; user stories ; phasage D0–D6 ; règle identity plane |
+| Date       | Version | Changement                                                                                                                |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-22 | 0.1     | Vérification factuelle single-writer / read path (backend vs scanners)                                                    |
+| 2026-06-22 | 1.0     | Reformat ADR ; état actuel + Option D cafe-persistence ; user stories ; phasage D0–D6 ; règle identity plane              |
 | 2026-06-22 | 1.1     | Pré-sign-off : fix Markdown ; ownership métier/opérationnel CP ; D3a/D3b ; résilience persist §5.5 ; W1/W3 existence only |
-| 2026-06-22 | 1.2     | Objectif explicite : API publiques Discovery et CPM inchangées (§4.4, §12) ; critères §11.4 |
-| 2026-06-22 | 1.3     | §10 prudence identity plane ; critère D2 §11.1 ; découpage PR §14 |
-| 2026-06-22 | 1.4     | Durcissement §14 : rollback D1/D2, boot D2b, découplage D3b, rollout D5 §5.6, lectures CP §5.5, D6a découpé, DDL §14.5 |
-| 2026-06-22 | 1.4.1   | §14.4 rollout gate orchestrateur (hors compose-only) ; critère merge D1b tag/rétention renvoyé à la PR |
-| 2026-06-22 | 1.4.2   | §14.7 renvoi [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md) — mini-plans par jalon (détail D1/D2/D1b/D2b) |
-| 2026-06-22 | 1.4.3   | PERS-D4b HTTP CP (symétrie D3a) ; PERS-D5b/D5c séparation bascule vs retrait memory |
-| 2026-06-22 | 1.4.4   | §14.1 colonne Prérequis ; alignement explicite ADR ↔ ADR_20260622_PR_PLAN (D4b, D5c, D6b, D6c) |
+| 2026-06-22 | 1.2     | Objectif explicite : API publiques Discovery et CPM inchangées (§4.4, §12) ; critères §11.4                               |
+| 2026-06-22 | 1.3     | §10 prudence identity plane ; critère D2 §11.1 ; découpage PR §14                                                         |
+| 2026-06-22 | 1.4     | Durcissement §14 : rollback D1/D2, boot D2b, découplage D3b, rollout D5 §5.6, lectures CP §5.5, D6a découpé, DDL §14.5    |
+| 2026-06-22 | 1.4.1   | §14.4 rollout gate orchestrateur (hors compose-only) ; critère merge D1b tag/rétention renvoyé à la PR                    |
+| 2026-06-22 | 1.4.2   | §14.7 renvoi [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md) — mini-plans par jalon (détail D1/D2/D1b/D2b)           |
+| 2026-06-22 | 1.4.3   | PERS-D4b HTTP CP (symétrie D3a) ; PERS-D5b/D5c séparation bascule vs retrait memory                                       |
+| 2026-06-22 | 1.4.4   | §14.1 colonne Prérequis ; alignement explicite ADR ↔ ADR_20260622_PR_PLAN (D4b, D5c, D6b, D6c)                            |
+| 2026-06-24 | 1.4.5   | PERS-D0 : liens README/TODO Discovery, workplan/TODO CPM ; corrections Markdown §5.6 / §14                            |
 
 
 ---

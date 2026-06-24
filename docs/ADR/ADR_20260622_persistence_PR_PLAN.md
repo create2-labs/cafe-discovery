@@ -1,6 +1,6 @@
 # Mini-plans PR — persistance CAFE (PERS-D*)
 
-> **Parent / index normatif :** [ADR_20260622.md](./ADR_20260622.md) §14 (ordre + table **Prérequis**)  
+> **Parent / index normatif :** [ADR_20260622_persistence.md](./ADR_20260622_persistence.md) §14 (ordre + table **Prérequis**)  
 > **Rôle :** **source d’exécution** — checklists détaillées par jalon. Les deux documents doivent rester alignés.
 
 ---
@@ -25,9 +25,10 @@
 
 **Livrables**
 
-- Merge `docs/ADR_20260622.md` (+ ce fichier `ADR_20260622_PR_PLAN.md` si inclus)
-- Lien depuis `cafe-discovery/README.md` et workplan CPM
-- Règle explicite « zero CP in Discovery » (issue ou TODO si besoin)
+- Merge `docs/ADR/ADR_20260622_persistence.md` + ce fichier `ADR_20260622_persistence_PR_PLAN.md`
+- Lien depuis `cafe-discovery/README.md` (section Architecture Decisions)
+- Règle explicite « zero CP in Discovery » dans `cafe-discovery/TODO.md`
+- Lien depuis `cafe-crypto-policy-mgt/workplans/WORKPLAN_API.md` et `cafe-crypto-policy-mgt/TODO.md` (jalons CPM D3b–D5c)
 
 **Non-objectifs** : aucun code, aucun changement compose.
 

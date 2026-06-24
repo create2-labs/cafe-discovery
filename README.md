@@ -238,6 +238,8 @@ The application is designed to be scalable with a focus on performance.
 
 **Verification:** A code-based verification of Postgres usage (backend vs scanners) and documentation alignment is recorded in [docs/CHECKARCH.md](docs/CHECKARCH.md).
 
+- **Persistence platform (target — PERS-D0–D6):** Extract scan lifecycle writing and durable Crypto Policy storage to **`cafe-persistence`** (data plane). Discovery keeps the **identity plane** (auth, plans, `cafe_wallets`) and scan **control plane** (HTTP + NATS publish). **No CP domain code** in this repository — guards W1/W3 call CPM or cafe-persistence for existence checks only (see ADR §9.3). Normative ADR: [docs/ADR/ADR_20260622_persistence.md](docs/ADR/ADR_20260622_persistence.md) ; PR checklists: [docs/ADR/ADR_20260622_persistence_PR_PLAN.md](docs/ADR/ADR_20260622_persistence_PR_PLAN.md).
+
 ### Plugin-based scan architecture
 
 Scans are implemented as **plugins** registered in a central registry:
