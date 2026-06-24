@@ -1,7 +1,8 @@
 # RC workflow: build once per trigger (label on PR or workflow_dispatch).
-# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend and persistence.
+# Pushes only sha-<short_sha> (source of truth) and optionally vX.Y.Z-rc<run_id> for backend.
 # Release workflow promotes from sha-<short_sha> without rebuilding.
 # Fork PRs are refused (guard below).
+# PERS-D1b: persistence image is published from cafe-persistence (not this repo).
 
 name: Docker RC
 
@@ -107,15 +108,6 @@ jobs:
             -t oleglod/cafe-discovery-backend:scan-local \
             .
 
-      - name: Build for scan (persistence, amd64)
-        run: |
-          docker buildx build \
-            --load \
-            --platform linux/amd64 \
-            -f Dockerfile-discovery-persistence \
-            -t oleglod/cafe-discovery-persistence:scan-local \
-            .
-
       # ------------------------------------------------------------
       # Docker Scout (blocking or not per preference)
       # ------------------------------------------------------------
@@ -130,12 +122,6 @@ jobs:
         continue-on-error: true
         run: |
           docker scout cves oleglod/cafe-discovery-backend:scan-local \
-            --only-severity critical,high
-
-      - name: Scan discovery-persistence with Docker Scout
-        continue-on-error: true
-        run: |
-          docker scout cves oleglod/cafe-discovery-persistence:scan-local \
             --only-severity critical,high
 
       # ------------------------------------------------------------
@@ -154,19 +140,5 @@ jobs:
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             -f Dockerfile-discovery-backend \
-            $TAGS \
-            --push .
-
-      - name: Build & push discovery-persistence (multi-arch)
-        run: |
-          TAGS="-t oleglod/cafe-discovery-persistence:sha-${{ steps.version.outputs.short_sha }}"
-          if [[ -n "${{ steps.version.outputs.rc_tag }}" ]]; then
-            TAGS="$TAGS -t oleglod/cafe-discovery-persistence:${{ steps.version.outputs.rc_tag }}"
-          fi
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-persistence \
             $TAGS \
             --push .

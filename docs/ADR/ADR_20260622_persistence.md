@@ -709,6 +709,31 @@ flowchart LR
 
 
 
+**Suivi des PR** *(mettre à jour à chaque ouverture / merge ; détail exécution → [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md))* :
+
+
+| PR                   | Dépôt lead                                    | Statut    | GitHub                                                                                    | Merge      |
+| -------------------- | --------------------------------------------- | --------- | ----------------------------------------------------------------------------------------- | ---------- |
+| **PERS-D0**          | `cafe-discovery`                              | Mergé     | [create2-labs/cafe-discovery#102](https://github.com/create2-labs/cafe-discovery/pull/102) | 2026-06-24 |
+| **PERS-D1**          | `cafe-persistence`                            | Mergé     | [create2-labs/cafe-persistence#1](https://github.com/create2-labs/cafe-persistence/pull/1)   | 2026-06-24 |
+| **PERS-D2**          | `cafe-deploy`                                 | Mergé     | [create2-labs/cafe-deploy#33](https://github.com/create2-labs/cafe-deploy/pull/33)           | 2026-06-24 |
+| **PERS-D1b**         | `cafe-discovery`                              | À ouvrir  | —                                                                                         | —          |
+| **PERS-D2b**         | `cafe-discovery` (+ `cafe-persistence`)     | Planifié  | —                                                                                         | —          |
+| **PERS-D3a-spec**    | `cafe-persistence`                            | Planifié  | —                                                                                         | —          |
+| **PERS-D3a-impl**    | `cafe-persistence`                            | Planifié  | —                                                                                         | —          |
+| **PERS-D3b-spec**    | `cafe-persistence` + `cafe-crypto-policy-mgt` | Planifié  | —                                                                                         | —          |
+| **PERS-D4**          | `cafe-persistence`                            | Planifié  | —                                                                                         | —          |
+| **PERS-D4b**         | `cafe-persistence`                            | Planifié  | —                                                                                         | —          |
+| **PERS-D5a**         | `cafe-crypto-policy-mgt`                      | Planifié  | —                                                                                         | —          |
+| **PERS-D5b**         | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Planifié  | —                                                                                         | —          |
+| **PERS-D5c**         | `cafe-crypto-policy-mgt`                      | Planifié  | —                                                                                         | —          |
+| **PERS-D6a-read**    | `cafe-discovery`                              | Planifié  | —                                                                                         | —          |
+| **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | —                                                                                         | —          |
+| **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | —                                                                                         | —          |
+| **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | —                                                                                         | —          |
+| **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | —                                                                                         | —          |
+
+
 **Parallèle après D2b :** chaînes **scan** et **CP** indépendantes :
 
 
@@ -784,6 +809,7 @@ Copier la section jalon correspondante dans la description GitHub à l’ouvertu
 | 2026-06-22 | 1.4.3   | PERS-D4b HTTP CP (symétrie D3a) ; PERS-D5b/D5c séparation bascule vs retrait memory                                       |
 | 2026-06-22 | 1.4.4   | §14.1 colonne Prérequis ; alignement explicite ADR ↔ ADR_20260622_PR_PLAN (D4b, D5c, D6b, D6c)                            |
 | 2026-06-24 | 1.4.5   | PERS-D0 : liens README/TODO Discovery, workplan/TODO CPM ; corrections Markdown §5.6 / §14                            |
+| 2026-06-24 | 1.4.6   | §14.2 tableau de suivi des PR (liens GitHub D0–D2 mergés)                                                             |
 
 
 ---
