@@ -4,6 +4,12 @@ Items deferred; not blocking current IMM work unless noted.
 
 ---
 
+## PERS-D1b — Persistence extracted (done)
+
+Scan persistence code removed from this repo after **PERS-D2** validated `oleglod/cafe-persistence` in stack. Rollback and legacy image retention: [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md).
+
+---
+
 ## PERS-D0 — Zero CP in Discovery (ADR boundary)
 
 **Rule (normative):** `cafe-discovery` must **not** own Crypto Policy (CP) domain logic — no CP tables, no draft/policy payloads, no explore/ranking/persist implementation.

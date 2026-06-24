@@ -7,7 +7,7 @@
       2. [System Components](#system-components)
          1. [1. API Server (`cmd/server`)](#1-api-server-cmdserver)
          2. [2. Scanners (`cmd/scanner`)](#2-scanners-cmdscanner)
-         3. [3. Persistence Service (`cmd/persistence`)](#3-persistence-service-cmdpersistence)
+         3. [3. Persistence Service (cafe-persistence)](#3-persistence-service-cafe-persistence)
          4. [4. NATS](#4-nats)
          5. [5. PostgreSQL](#5-postgresql)
          6. [6. Redis](#6-redis)
@@ -174,19 +174,18 @@ The application is designed to be scalable with a focus on performance.
   - Publishing scan lifecycle events to NATS (`scan.started`, `scan.completed`, `scan.failed`) for the **persistence service** to write to storage
 - **Deployment**: For production you can run one process per type (`DISCOVERY_SCANNER_TYPE=tls` or `wallet`), each with its own Docker image (TLS image uses OQS; Wallet image is Alpine without OQS).
 
-#### 3. Persistence Service (`cmd/persistence`)
+#### 3. Persistence Service (cafe-persistence)
 
-- Role: Single writer to PostgreSQL and Redis for scan lifecycle events. Scanners do not write to Postgres; they publish events that the persistence service consumes.
-- Responsibilities:
+- Role: Single writer to PostgreSQL and Redis for scan lifecycle events. **Extracted to [cafe-persistence](https://github.com/create2-labs/cafe-persistence)** (PERS-D1/D2); no longer built from this repository (PERS-D1b).
+- Responsibilities (data plane — see cafe-persistence README):
   - Subscribing to NATS subjects `scan.started`, `scan.completed`, `scan.failed` (queue `cafe.persistence`)
   - Writing scan results idempotently to PostgreSQL (TLS and wallet scan tables) and to Redis (write-through cache for performance)
   - When a scan result has been written to Redis (and PostgreSQL), publishing a NATS message (`scan.ready`); the **backend consumes this message** so GET requests can return the result
   - After a **successful wallet** `scan.completed` write, publishing a **normative observation** JSON on `cafe.discovery.events.wallet.observed.v0_1` (see [Data structure (CPM export contract)](#data-structure-cpm-export-contract)); best-effort, does not roll back the scan if publish fails
   - Enforcing valid scan state transitions
   - Publishing `persistence.ready` on startup so the backend can wait for persistence before initializing default endpoints
-  - Loading `config.yaml` at startup for **`blockchains[].chain_id`** (required for the observation export mapping; see configuration notes in that section)
-- **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run the persistence service before or with the backend for full functionality.
-- **Deployment**: Built with `Dockerfile-discovery-persistence`; can be run as a separate process or container (e.g. in cafe-deploy).
+- **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run cafe-persistence before or with the backend for full functionality.
+- **Deployment**: Image `oleglod/cafe-persistence:${PERSISTENCE_VERSION}` via [cafe-deploy](https://github.com/create2-labs/cafe-deploy) (compose service `cafe-discovery-persistence`). Legacy rollback: [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md).
 
 #### 4. NATS
 
@@ -238,7 +237,7 @@ The application is designed to be scalable with a focus on performance.
 
 **Verification:** A code-based verification of Postgres usage (backend vs scanners) and documentation alignment is recorded in [docs/CHECKARCH.md](docs/CHECKARCH.md).
 
-- **Persistence platform (target — PERS-D0–D6):** Extract scan lifecycle writing and durable Crypto Policy storage to **`cafe-persistence`** (data plane). Discovery keeps the **identity plane** (auth, plans, `cafe_wallets`) and scan **control plane** (HTTP + NATS publish). **No CP domain code** in this repository — guards W1/W3 call CPM or cafe-persistence for existence checks only (see ADR §9.3). Normative ADR: [docs/ADR/ADR_20260622_persistence.md](docs/ADR/ADR_20260622_persistence.md) ; PR checklists: [docs/ADR/ADR_20260622_persistence_PR_PLAN.md](docs/ADR/ADR_20260622_persistence_PR_PLAN.md).
+- **Persistence platform (PERS-D0–D6):** Scan lifecycle writing lives in **`cafe-persistence`** (data plane; **PERS-D1b** removed in-repo `cmd/persistence`). Discovery keeps the **identity plane** (auth, plans, `cafe_wallets`) and scan **control plane** (HTTP + NATS publish). **No CP domain code** in this repository — guards W1/W3 call CPM or cafe-persistence for existence checks only (see ADR §9.3). Normative ADR: [docs/ADR/ADR_20260622_persistence.md](docs/ADR/ADR_20260622_persistence.md) ; extraction + rollback: [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md) ; PR checklists: [docs/ADR/ADR_20260622_persistence_PR_PLAN.md](docs/ADR/ADR_20260622_persistence_PR_PLAN.md).
 
 ### Plugin-based scan architecture
 
@@ -257,7 +256,6 @@ cafe-discovery/
 ├── cmd/
 │   ├── server/            # API server entrypoint
 │   ├── scanner/            # Scanner entrypoint (runs TLS and/or Wallet via core + runners)
-│   ├── persistence/       # Persistence service entrypoint (single writer to Postgres + Redis for scan lifecycle)
 │   └── cli/
 │      └── publickey/      # Utility for testing public key recovery
 ├── internal/
@@ -265,10 +263,6 @@ cafe-discovery/
 │   ├── domain/            # Domain models and types
 │   ├── handler/           # HTTP handlers (Fiber)
 │   ├── metrics/           # Prometheus metrics registration
-│   ├── persistence/       # Persistence service: NATS subscribers, handlers, Postgres/Redis writers
-│   │   ├── handlers/      # scan.started / scan.completed / scan.failed handlers
-│   │   ├── nats/          # NATS subscription (queue cafe.persistence)
-│   │   └── storage/       # TLS/wallet writers, Redis cache write-through
 │   ├── scan/              # Scan plugins (implement pkg/scan.Plugin)
 │   │   ├── tls/           # TLS plugin + result adapter
 │   │   └── wallet/        # Wallet plugin + result adapter
@@ -295,7 +289,6 @@ cafe-discovery/
 │   └── SCAN_PLUGIN_ARCHITECTURE.md
 ├── scripts/
 ├── Dockerfile-discovery-backend        # API server (OQS)
-├── Dockerfile-discovery-persistence   # Persistence service (single writer for scan lifecycle)
 ├── docker-compose.yml
 └── config.yaml
 ```
@@ -313,10 +306,9 @@ The project uses a multi-stage Docker build approach:
    - Uses `oleglod/cafe-crypto-backend:build-oqs` as base
    - Output: `cafe-discovery-backend` service
 
-3. **`Dockerfile-discovery-persistence`** (Persistence service):
-   - Builds the persistence binary; single writer for scan lifecycle events
-   - Subscribes to `scan.started`, `scan.completed`, `scan.failed`; writes to PostgreSQL and Redis; publishes `scan.ready` and `persistence.ready`
-   - Uses `oleglod/cafe-crypto-backend:build-oqs` and `runtime-oqs` (same as backend)
+3. **Persistence image** (separate repo [cafe-persistence](https://github.com/create2-labs/cafe-persistence)):
+   - `Dockerfile-persistence` builds the persistence binary; deployed as `oleglod/cafe-persistence`
+   - Not built from this repository after PERS-D1b — see [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md)
    - Run this service so the backend can receive `persistence.ready` and seed default endpoints; API GET results depend on persistence writing after scanner completion.
 
 4. **Scanner images** are produced by dedicated repositories:
@@ -422,9 +414,10 @@ This project implements a strict, security-focused CI/CD pipeline that enforces 
 
 ### Overview
 
-The project produces **backend and persistence images**:
+The project produces the **backend image**:
 - `oleglod/cafe-discovery-backend`: API server image (`Dockerfile-discovery-backend`)
-- `oleglod/cafe-discovery-persistence`: persistence image (`Dockerfile-discovery-persistence`)
+
+Persistence is published from **[cafe-persistence](https://github.com/create2-labs/cafe-persistence)** as `oleglod/cafe-persistence` (see [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md)).
 
 Scanner images are published from dedicated repositories:
 - `oleglod/cafe-scanner-tls` (from `cafe-scanner-tls`)
@@ -557,16 +550,16 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 2. **Build images** (linux/amd64 only):
    - `oleglod/cafe-discovery-backend`
-   - `oleglod/cafe-discovery-persistence`
    - scanner images are built in their dedicated repositories
+   - persistence: `oleglod/cafe-persistence` (cafe-persistence repo)
 
 3. **Security scanning** (Docker Scout):
-   - Scan both images for critical and high-severity vulnerabilities
-   - If **either** image fails the scan, the entire job fails
+   - Scan backend image for critical and high-severity vulnerabilities
+   - If the scan fails, the job fails
    - **No images are published** if scanning fails
 
-4. **Publish images** (only if both scans pass):
-   - Both images are published to GHCR with identical tags:
+4. **Publish images** (only if scan passes):
+   - Backend image is published with tags:
      - `vX.Y.Z` (full version from tag)
      - `vX.Y` (minor version)
      - `sha-<short-sha>` (commit SHA for traceability)
@@ -576,7 +569,6 @@ The CI images are based on the `builder` stage, which includes the full build en
 
 **Security Gates**:
 - Docker Scout vulnerability scanning blocks publication
-- Both images must pass scanning; if one fails, nothing is published
 - All published images are traceable to a Git tag and commit SHA
 
 ### Release Procedure
@@ -636,7 +628,7 @@ All three images receive identical tags:
 - `sha-abc1234`: Commit SHA (for traceability)
 - `latest`: Latest release (points to most recent release)
 
-All tags are built for `linux/amd64` (and `linux/arm64` in RC/release). Images from this repository: `cafe-discovery-backend`, `cafe-discovery-persistence`.
+All tags are built for `linux/amd64` (and `linux/arm64` in RC/release). Image from this repository: `cafe-discovery-backend`. Persistence: `oleglod/cafe-persistence` ([cafe-persistence](https://github.com/create2-labs/cafe-persistence)).
 
 ### Version Endpoint
 
@@ -881,9 +873,9 @@ The project uses a two-file Docker Compose setup for local development:
    - Exposes `/version` endpoint for version information
    - At startup waits for `persistence.ready` (and scanner heartbeats) before seeding default endpoints
 
-2. **Persistence service** (optional in local compose; may be defined in cafe-deploy):
+2. **Persistence service** (cafe-persistence; deployed via cafe-deploy):
    - Single writer for scan lifecycle: subscribes to `scan.started`, `scan.completed`, `scan.failed`; writes to PostgreSQL and Redis; publishes `scan.ready` and `persistence.ready`
-   - Built with `Dockerfile-discovery-persistence`. Run it so the backend can complete startup and so GET requests return results after scans complete.
+   - Image `oleglod/cafe-persistence`. Run it so the backend can complete startup and so GET requests return results after scans complete.
 
 3. **Scanners**: externalized to dedicated repositories and deployed from `cafe-deploy`:
    - TLS scanner: `cafe-scanner-tls`
@@ -1635,7 +1627,7 @@ Product invariants (**`scan_id`** stable per row, immutable terminal **`result`*
 
 Implementation is split across PRs **IMM-1…IMM-12** in **[`IMMUTABILITE_PR.md`](IMMUTABILITE_PR.md)**. Gap analysis, **no-backfill** data policy, Redis vs Postgres roles, and deployment ordering: **[`docs/SCAN_IMMUTABILITY_MIGRATION.md`](docs/SCAN_IMMUTABILITY_MIGRATION.md)** (IMM-1). Start **IMM-2** only after that document is reviewed.
 
-**IMM-6b smoke scripts** (plan quota ledger, guards, usage API, integration tests) live in sibling repo **`cafe-deploy/scripts/`** — not run by default; pass explicit modes: `--software` (go test + vet + vuln + lint), `--postgres`, `--api`, or `--all`. Suite: `test-discovery-imm6b-all.sh` (includes **IMM-6b-8** `test-discovery-imm6b8-plan-quota-integration.sh`). IMM-6b-6 ledger backfill was cancelled (no prod data; DB reset). Go integration tests: `internal/planquota/` (**IMM-6b-8**). See **`cafe-deploy/README.md`** § *Discovery/CPM smoke scripts*.
+**IMM-6b smoke scripts** (plan quota ledger, guards, usage API, integration tests) live in sibling repo **`cafe-deploy/scripts/`** — not run by default; pass explicit modes: `--software` (go test + vet + vuln + lint), `--postgres`, `--api`, or `--all`. Suite: `test-discovery-imm6b-all.sh` (includes **IMM-6b-8** `test-discovery-imm6b8-plan-quota-integration.sh`). IMM-6b-6 ledger backfill was cancelled (no prod data; DB reset). Persistence quota integration tests: **cafe-persistence** (`internal/persistence/*`); Discovery handler/service/repository tests remain in-repo. See **`cafe-deploy/README.md`** § *Discovery/CPM smoke scripts*.
 
 ### Policy assessment (CPM-owned)
 

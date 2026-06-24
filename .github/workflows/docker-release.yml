@@ -1,7 +1,8 @@
 # Release workflow: promote RC images only (no build).
-# Expects RC images sha-<SHORT_SHA> for backend and persistence to exist.
+# Expects RC image sha-<SHORT_SHA> for backend to exist.
 # SHORT_SHA is derived from the commit pointed to by the tag (robust for annotated tags).
 # Promotion uses docker buildx imagetools create so digests stay identical.
+# PERS-D1b: persistence image is released from cafe-persistence (not this repo).
 
 name: Docker Release
 
@@ -58,28 +59,11 @@ jobs:
           echo "Commit SHA (for promotion): $SHORT_SHA"
 
       # ------------------------------------------------------------
-      # Checks: existence and multi-arch for each RC image (fail before promoting)
+      # Checks: existence and multi-arch for RC image (fail before promoting)
       # ------------------------------------------------------------
       - name: Check RC images exist and are multi-arch (backend)
         run: |
           IMG="oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}"
-          if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
-            echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
-            exit 1
-          fi
-          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/amd64; then
-            echo "::error::RC image $IMG is not multi-arch (missing linux/amd64)."
-            exit 1
-          fi
-          if ! docker buildx imagetools inspect "$IMG" | grep -q linux/arm64; then
-            echo "::error::RC image $IMG is not multi-arch (missing linux/arm64)."
-            exit 1
-          fi
-          echo "RC image $IMG exists and is multi-arch."
-
-      - name: Check RC images exist and are multi-arch (persistence)
-        run: |
-          IMG="oleglod/cafe-discovery-persistence:sha-${{ steps.version.outputs.short_sha }}"
           if ! docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
             echo "::error::RC image $IMG not found. Run the RC workflow for this commit first."
             exit 1
@@ -103,10 +87,3 @@ jobs:
             -t oleglod/cafe-discovery-backend:${{ steps.version.outputs.full_version }} \
             -t oleglod/cafe-discovery-backend:latest \
             oleglod/cafe-discovery-backend:sha-${{ steps.version.outputs.short_sha }}
-
-      - name: Promote discovery-persistence to version and latest
-        run: |
-          docker buildx imagetools create \
-            -t oleglod/cafe-discovery-persistence:${{ steps.version.outputs.full_version }} \
-            -t oleglod/cafe-discovery-persistence:latest \
-            oleglod/cafe-discovery-persistence:sha-${{ steps.version.outputs.short_sha }}

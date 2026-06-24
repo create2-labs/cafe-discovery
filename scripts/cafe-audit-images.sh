@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# cafe-discovery: golangci-lint, govulncheck, build Dockerfile-discovery-backend + persistence, Docker Scout, rapport.
+# cafe-discovery: golangci-lint, govulncheck, build Dockerfile-discovery-backend, Docker Scout, rapport.
+# PERS-D1b: persistence image is built from cafe-persistence (not this repo).
 # Compatible bash 3.2+ (macOS).
 #
 # Le backend nécessite l'image locale oleglod/cafe-crypto-backend:build-oqs (construire dans cafe-crypto-backend avant).
@@ -54,11 +55,8 @@ scout_line() {
 }
 
 IM_BACK=""
-IM_PERSIST=""
 SC_BACK=""
-SC_PERSIST=""
 OK_BACK=0
-OK_PERSIST=0
 
 main() {
   mkdir -p "$REPORT_DIR"
@@ -80,21 +78,9 @@ main() {
     warn "build backend échoué"
   fi
 
-  IM_PERSIST="$(tag cafe-discovery-persistence)"
-  if ( cd "$REPO_ROOT" && docker build -f Dockerfile-discovery-persistence -t "$IM_PERSIST" . ); then
-    OK_PERSIST=1
-  else
-    OK_PERSIST=0
-    warn "build persistence échoué"
-  fi
-
   if [ "$OK_BACK" = 1 ]; then
     SC_BACK=$(scout_line "$IM_BACK" || true)
   else SC_BACK=KO; fi
-
-  if [ "$OK_PERSIST" = 1 ]; then
-    SC_PERSIST=$(scout_line "$IM_PERSIST" || true)
-  else SC_PERSIST=KO; fi
 
   {
     echo "# cafe-discovery — audit"
@@ -108,18 +94,13 @@ main() {
     echo "| id | image | build | C/H/M/L |"
     echo "|---|----|----|----|"
     bb="✗"; [ "$OK_BACK" = 1 ] && bb="✓"
-    bp="✗"; [ "$OK_PERSIST" = 1 ] && bp="✓"
     echo "| backend | \`$IM_BACK\` | $bb | $SC_BACK |"
-    echo "| persistence | \`$IM_PERSIST\` | $bp | $SC_PERSIST |"
+    echo ""
+    echo "Persistence: voir \`cafe-persistence/scripts/cafe-audit-images.sh\` (PERS-D1b)."
     echo ""
     if [ "$OK_BACK" = 1 ] && [ "$SKIP_SCOUT" != 1 ] && docker scout version >/dev/null 2>&1; then
       echo "## CVE — backend"
       docker scout cves "local://$IM_BACK" --format markdown 2>&1 || true
-      echo ""
-    fi
-    if [ "$OK_PERSIST" = 1 ] && [ "$SKIP_SCOUT" != 1 ] && docker scout version >/dev/null 2>&1; then
-      echo "## CVE — persistence"
-      docker scout cves "local://$IM_PERSIST" --format markdown 2>&1 || true
       echo ""
     fi
   } > "$REPORT_FILE"

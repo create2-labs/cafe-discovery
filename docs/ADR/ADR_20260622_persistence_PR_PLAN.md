@@ -15,6 +15,12 @@
 
 ---
 
+## Suivi
+
+Table normative : [ADR §14.2](./ADR_20260622_persistence.md#142-ordre-de-merge-recommandé-révisé) *(liens GitHub, statut, date de merge)*.
+
+---
+
 ## PERS-D0 — Acter l’ADR
 
 | Champ | Valeur |
