@@ -25,7 +25,7 @@ type Config struct {
 	HTTPClient *http.Client
 }
 
-// Client implements scanread.Store over HTTP.
+// Client implements scanread.Store and scanpending.Store over HTTP.
 type Client struct {
 	baseURL    string
 	token      string
@@ -34,7 +34,7 @@ type Client struct {
 
 var _ scanread.Store = (*Client)(nil)
 
-// NewClient returns a scanread.Store backed by cafe-persistence internal/scan/v1.
+// NewClient returns a persistence HTTP client backed by cafe-persistence internal/scan/v1.
 func NewClient(cfg Config) *Client {
 	hc := cfg.HTTPClient
 	if hc == nil {
@@ -53,7 +53,7 @@ func (c *Client) ListWalletScans(ctx context.Context, userID uuid.UUID, tenantID
 		u += "?" + query.Encode()
 	}
 	var wire scanread.ListWalletScansWire
-	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, &wire); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, nil, &wire); err != nil {
 		return nil, 0, 0, 0, err
 	}
 	out := make([]*domain.ScanResultEntity, 0, len(wire.Items))
@@ -71,7 +71,7 @@ func (c *Client) GetWalletScan(ctx context.Context, userID uuid.UUID, tenantID s
 	rel := strings.ReplaceAll(WalletScanByID, "{scan_id}", scanID.String())
 	u := c.baseURL + V1Base + rel
 	var wire scanread.WalletScanRowWire
-	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, &wire); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, nil, &wire); err != nil {
 		if errors.Is(err, errNotFound) {
 			return nil, nil
 		}
@@ -93,7 +93,7 @@ func (c *Client) ListTLSScans(ctx context.Context, userID uuid.UUID, tenantID st
 		u += "?" + enc
 	}
 	var wire scanread.ListTLSScansWire
-	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, &wire); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, nil, &wire); err != nil {
 		return nil, 0, err
 	}
 	out := make([]*domain.TLSScanResultEntity, 0, len(wire.Items))
@@ -110,7 +110,7 @@ func (c *Client) ListTLSScans(ctx context.Context, userID uuid.UUID, tenantID st
 func (c *Client) ListTLSDefaultScans(ctx context.Context, userID uuid.UUID, tenantID string) ([]*domain.TLSScanResultEntity, error) {
 	u := c.baseURL + V1Base + TLSScansDefaults
 	var wire scanread.ListTLSDefaultsWire
-	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, &wire); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, nil, &wire); err != nil {
 		return nil, err
 	}
 	out := make([]*domain.TLSScanResultEntity, 0, len(wire.Items))
@@ -128,7 +128,7 @@ func (c *Client) GetTLSScan(ctx context.Context, userID uuid.UUID, tenantID stri
 	rel := strings.ReplaceAll(TLSScanByID, "{scan_id}", scanID.String())
 	u := c.baseURL + V1Base + rel
 	var wire scanread.TLSScanRowWire
-	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, &wire); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, u, userID, tenantID, true, nil, &wire); err != nil {
 		if errors.Is(err, errNotFound) {
 			return nil, nil
 		}
@@ -140,7 +140,7 @@ func (c *Client) GetTLSScan(ctx context.Context, userID uuid.UUID, tenantID stri
 func (c *Client) DeleteWalletScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (bool, error) {
 	rel := strings.ReplaceAll(WalletScanByID, "{scan_id}", scanID.String())
 	u := c.baseURL + V1Base + rel
-	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil); err != nil {
+	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil, nil); err != nil {
 		if errors.Is(err, errNotFound) {
 			return false, nil
 		}
@@ -152,7 +152,7 @@ func (c *Client) DeleteWalletScan(ctx context.Context, userID uuid.UUID, tenantI
 func (c *Client) DeleteTLSScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (bool, error) {
 	rel := strings.ReplaceAll(TLSScanByID, "{scan_id}", scanID.String())
 	u := c.baseURL + V1Base + rel
-	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil); err != nil {
+	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil, nil); err != nil {
 		if errors.Is(err, errNotFound) {
 			return false, nil
 		}
@@ -163,7 +163,7 @@ func (c *Client) DeleteTLSScan(ctx context.Context, userID uuid.UUID, tenantID s
 
 var errNotFound = errors.New("scan not found")
 
-func (c *Client) doJSON(ctx context.Context, method, requestURL string, userID uuid.UUID, tenantID string, idempotent bool, dst any) error {
+func (c *Client) doJSON(ctx context.Context, method, requestURL string, userID uuid.UUID, tenantID string, idempotent bool, body []byte, dst any) error {
 	var lastErr error
 	attempts := 1
 	if idempotent {
@@ -173,7 +173,7 @@ func (c *Client) doJSON(ctx context.Context, method, requestURL string, userID u
 		if attempt > 0 {
 			time.Sleep(50 * time.Millisecond)
 		}
-		lastErr = c.doJSONOnce(ctx, method, requestURL, userID, tenantID, dst)
+		lastErr = c.doJSONOnce(ctx, method, requestURL, userID, tenantID, body, dst)
 		if lastErr == nil {
 			return nil
 		}
@@ -184,8 +184,12 @@ func (c *Client) doJSON(ctx context.Context, method, requestURL string, userID u
 	return lastErr
 }
 
-func (c *Client) doJSONOnce(ctx context.Context, method, requestURL string, userID uuid.UUID, tenantID string, dst any) error {
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, nil)
+func (c *Client) doJSONOnce(ctx context.Context, method, requestURL string, userID uuid.UUID, tenantID string, body []byte, dst any) error {
+	var bodyReader io.Reader
+	if len(body) > 0 {
+		bodyReader = strings.NewReader(string(body))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, bodyReader)
 	if err != nil {
 		return err
 	}
@@ -193,6 +197,9 @@ func (c *Client) doJSONOnce(ctx context.Context, method, requestURL string, user
 	req.Header.Set(headerUserID, userID.String())
 	if tenant := strings.TrimSpace(tenantID); tenant != "" {
 		req.Header.Set(headerTenantID, tenant)
+	}
+	if len(body) > 0 {
+		req.Header.Set("Content-Type", "application/json")
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -222,6 +229,9 @@ func mapHTTPError(status int, raw []byte) error {
 	_ = raw
 	if status == http.StatusNotFound {
 		return errNotFound
+	}
+	if status == http.StatusConflict {
+		return errConflict
 	}
 	if status == http.StatusServiceUnavailable || status >= 500 {
 		return scanread.ErrUnavailable

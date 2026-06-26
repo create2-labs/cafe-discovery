@@ -14,8 +14,8 @@ import (
 
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/policyref"
-	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
@@ -67,18 +67,18 @@ func (walletScannerAbsent) ListScanners() []service.ScannerInfo { return nil }
 
 type memoryPendingV1Repo struct {
 	mu       sync.Mutex
-	byID     map[uuid.UUID]*repository.PendingV1ScanRecord
+	byID     map[uuid.UUID]*scanpending.Record
 	byWallet map[string]uuid.UUID
 }
 
 func newMemoryPendingV1Repo() *memoryPendingV1Repo {
 	return &memoryPendingV1Repo{
-		byID:     map[uuid.UUID]*repository.PendingV1ScanRecord{},
+		byID:     map[uuid.UUID]*scanpending.Record{},
 		byWallet: map[string]uuid.UUID{},
 	}
 }
 
-func (r *memoryPendingV1Repo) Put(_ context.Context, rec *repository.PendingV1ScanRecord) error {
+func (r *memoryPendingV1Repo) PutTLS(_ context.Context, _ uuid.UUID, _ string, rec *scanpending.Record) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cp := *rec
@@ -86,7 +86,7 @@ func (r *memoryPendingV1Repo) Put(_ context.Context, rec *repository.PendingV1Sc
 	return nil
 }
 
-func (r *memoryPendingV1Repo) PutWallet(_ context.Context, rec *repository.PendingV1ScanRecord) (bool, error) {
+func (r *memoryPendingV1Repo) ReserveWallet(_ context.Context, _ uuid.UUID, _ string, rec *scanpending.Record) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := pendingWalletTestKey(rec.UserID, rec.Address)
@@ -100,7 +100,7 @@ func (r *memoryPendingV1Repo) PutWallet(_ context.Context, rec *repository.Pendi
 	return true, nil
 }
 
-func (r *memoryPendingV1Repo) Get(_ context.Context, scanID uuid.UUID) (*repository.PendingV1ScanRecord, error) {
+func (r *memoryPendingV1Repo) Get(_ context.Context, _ uuid.UUID, _ string, scanID uuid.UUID) (*scanpending.Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	rec := r.byID[scanID]
@@ -111,7 +111,7 @@ func (r *memoryPendingV1Repo) Get(_ context.Context, scanID uuid.UUID) (*reposit
 	return &cp, nil
 }
 
-func (r *memoryPendingV1Repo) GetWalletByOwnerAddress(_ context.Context, userID uuid.UUID, address string) (*repository.PendingV1ScanRecord, error) {
+func (r *memoryPendingV1Repo) GetWalletByOwnerAddress(_ context.Context, userID uuid.UUID, _ string, address string) (*scanpending.Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	scanID, ok := r.byWallet[pendingWalletTestKey(userID, address)]
@@ -120,13 +120,13 @@ func (r *memoryPendingV1Repo) GetWalletByOwnerAddress(_ context.Context, userID 
 	}
 	rec := r.byID[scanID]
 	if rec == nil {
-		return &repository.PendingV1ScanRecord{ScanID: scanID, UserID: userID, Family: "wallet", Address: address}, nil
+		return &scanpending.Record{ScanID: scanID, UserID: userID, Family: "wallet", Address: address}, nil
 	}
 	cp := *rec
 	return &cp, nil
 }
 
-func (r *memoryPendingV1Repo) Delete(_ context.Context, scanID uuid.UUID) error {
+func (r *memoryPendingV1Repo) Delete(_ context.Context, _ uuid.UUID, _ string, scanID uuid.UUID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if rec := r.byID[scanID]; rec != nil && rec.Family == "wallet" {
@@ -136,7 +136,7 @@ func (r *memoryPendingV1Repo) Delete(_ context.Context, scanID uuid.UUID) error 
 	return nil
 }
 
-func (r *memoryPendingV1Repo) DeleteWalletReservation(_ context.Context, userID uuid.UUID, address string, scanID uuid.UUID) error {
+func (r *memoryPendingV1Repo) DeleteWalletReservation(_ context.Context, userID uuid.UUID, _ string, address string, scanID uuid.UUID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := pendingWalletTestKey(userID, address)
@@ -221,6 +221,7 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
+		scanPending:      newMemoryPendingV1Repo(),
 		policyRef:        policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -292,14 +293,14 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		},
 	}
 	pending := newMemoryPendingV1Repo()
-	if err := pending.Put(context.Background(), &repository.PendingV1ScanRecord{
+	if err := pending.PutTLS(context.Background(), userID, "", &scanpending.Record{
 		ScanID: scanID, UserID: userID, Family: "wallet", Address: address,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	h := &DiscoveryHandler{
 		scanRead:  NewRepoScanReadStub(repo, nil),
-		pendingV1: pending,
+		scanPending: pending,
 		policyRef: policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -321,7 +322,7 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		b, _ := io.ReadAll(delResp.Body)
 		t.Fatalf("DELETE status = %d, body = %s", delResp.StatusCode, b)
 	}
-	if rec, _ := pending.Get(context.Background(), scanID); rec != nil {
+	if rec, _ := pending.Get(context.Background(), userID, "", scanID); rec != nil {
 		t.Fatalf("pending still present after DELETE: %+v", rec)
 	}
 
@@ -341,7 +342,7 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	address := "0x742d35cc6634c0532925a3b844bc454e4438f44e"
 	pending := newMemoryPendingV1Repo()
-	_, err := pending.PutWallet(context.Background(), &repository.PendingV1ScanRecord{
+	_, err := pending.ReserveWallet(context.Background(), userID, "", &scanpending.Record{
 		ScanID:    uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 		UserID:    userID,
 		Family:    "wallet",
@@ -356,7 +357,7 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        pending,
+		scanPending:        pending,
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef:        policyRefStub{},
 	}
@@ -397,7 +398,7 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
 			UserID:  userID,
@@ -436,7 +437,7 @@ func TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
@@ -482,7 +483,7 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
@@ -518,7 +519,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -555,7 +556,7 @@ func TestPostDiscoveryScanV1_WalletCPMContextCheckUnavailable(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         &mockNATSConn{},
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef:        nil,
 	}
@@ -593,7 +594,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		pendingV1:        newMemoryPendingV1Repo(),
+		scanPending:        newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -631,6 +632,7 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
+		scanPending:      newMemoryPendingV1Repo(),
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {

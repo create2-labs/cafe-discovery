@@ -8,12 +8,11 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/persistence/scanhttp"
-	"cafe-discovery/internal/persistence/scanread"
 
 	"github.com/spf13/viper"
 )
 
-func newScanReadStore() (scanread.Store, error) {
+func newScanPersistenceClient() (*scanhttp.Client, error) {
 	persistenceURL := strings.TrimSpace(viper.GetString(config.DiscoveryPersistenceURL))
 	token := strings.TrimSpace(viper.GetString(config.CafePersistenceServiceToken))
 	if persistenceURL == "" {

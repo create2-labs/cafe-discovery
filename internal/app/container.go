@@ -130,11 +130,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// User scan cache: TLS read-through and warm on sign-in (wallet history is Postgres-only).
 	userScanCache := service.NewUserScanCacheService(tlsScanResultRepo, redisTLSRepo)
 
-	pendingV1Repo, err := repository.NewRedisPendingV1ScanRepository(redisConn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create pending v1 scan repository: %w", err)
-	}
-
 	cpmInternalBase := strings.TrimSpace(viper.GetString(config.CafeCPMInternalBaseURL))
 	policyRefToken := strings.TrimSpace(viper.GetString(config.CafePolicyReferenceInternalServiceToken))
 	var policyRef policyref.Checker
@@ -146,14 +141,14 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
 	}
 
-	scanRead, err := newScanReadStore()
+	scanClient, err := newScanPersistenceClient()
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize handlers (v1 GET/list/delete via persistence; pending/W8 still use Postgres until D6a-pending).
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, userScanCache, scanRead, scanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
-	tlsHandler := handler.NewTLSHandler(scanRead, pendingV1Repo, policyRef)
+	// Initialize handlers (v1 GET/list/delete/pending via cafe-persistence internal/scan/v1).
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, userScanCache, scanClient, scanResultRepo, scanUsageLedgerRepo, scanClient, policyRef)
+	tlsHandler := handler.NewTLSHandler(scanClient, scanClient, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanUsageLedgerRepo)

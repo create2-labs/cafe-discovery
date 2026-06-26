@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"cafe-discovery/internal/domain"
-	"cafe-discovery/internal/repository"
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/pkg/scan"
 
 	"github.com/gofiber/fiber/v2"
@@ -134,12 +134,12 @@ func TestGetDiscoveryV1WalletScanCBOM_Pending404(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	scanID := uuid.New()
 	pending := newMemoryPendingV1Repo()
-	_, _ = pending.PutWallet(context.TODO(), &repository.PendingV1ScanRecord{
+	_, _ = pending.ReserveWallet(context.TODO(), userID, "", &scanpending.Record{
 		ScanID: scanID, UserID: userID, Family: "wallet", Address: "0xabc",
 	})
 	h := &DiscoveryHandler{
-		scanRead:  NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}, nil),
-		pendingV1: pending,
+		scanRead:    NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}, nil),
+		scanPending: pending,
 	}
 	app := fiber.New()
 	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {

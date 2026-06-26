@@ -38,13 +38,10 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 		}
 	}
 
-	if h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-				"error":   "service_unavailable",
-				"message": "scan CBOM is temporarily unavailable",
-			}))
+			return respondScanPendingError(c, perr, "scan CBOM is temporarily unavailable")
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "wallet" {
 			return scanCBOMNotFound(c)
@@ -99,13 +96,10 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 		}
 	}
 
-	if h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-				"error":   "service_unavailable",
-				"message": "scan CBOM is temporarily unavailable",
-			}))
+			return respondScanPendingError(c, perr, "scan CBOM is temporarily unavailable")
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "tls" {
 			return scanCBOMNotFound(c)

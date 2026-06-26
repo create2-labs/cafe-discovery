@@ -1,23 +1,23 @@
 package handler
 
 import (
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/persistence/scanread"
 	"cafe-discovery/internal/policyref"
-	"cafe-discovery/internal/repository"
 )
 
 // TLSHandler handles TLS-related HTTP requests.
 type TLSHandler struct {
-	scanRead  scanread.Store
-	pendingV1 repository.PendingV1ScanRepository
-	policyRef policyref.Checker
+	scanRead    scanread.Store
+	scanPending scanpending.Store
+	policyRef   policyref.Checker
 }
 
 // NewTLSHandler creates a new TLS handler.
-func NewTLSHandler(scanRead scanread.Store, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *TLSHandler {
+func NewTLSHandler(scanRead scanread.Store, scanPending scanpending.Store, policyRef policyref.Checker) *TLSHandler {
 	return &TLSHandler{
-		scanRead:  scanRead,
-		pendingV1: pendingV1,
-		policyRef: policyRef,
+		scanRead:    scanRead,
+		scanPending: scanPending,
+		policyRef:   policyRef,
 	}
 }
