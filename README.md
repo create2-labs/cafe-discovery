@@ -288,7 +288,7 @@ cafe-discovery/
 │   ├── SCAN_REFACTORING_PLAN.md
 │   └── SCAN_PLUGIN_ARCHITECTURE.md
 ├── scripts/
-├── Dockerfile-discovery-backend        # API server (OQS)
+├── Dockerfile        # API server (OQS)
 ├── docker-compose.yml
 └── config.yaml
 ```
@@ -301,7 +301,7 @@ The project uses a multi-stage Docker build approach:
    - Build: run `scripts/build.sh` in cafe-crypto-backend (see [cafe-crypto-backend/README.md](https://github.com/create2-labs/cafe-crypto-backend))
    - Images: `oleglod/cafe-crypto-backend:build-oqs` and `oleglod/cafe-crypto-backend:runtime-oqs`
 
-2. **`Dockerfile-discovery-backend`**:
+2. **`Dockerfile`**:
    - Builds the API server binary
    - Uses `oleglod/cafe-crypto-backend:build-oqs` as base
    - Output: `cafe-discovery-backend` service
@@ -415,7 +415,7 @@ This project implements a strict, security-focused CI/CD pipeline that enforces 
 ### Overview
 
 The project produces the **backend image**:
-- `oleglod/cafe-discovery-backend`: API server image (`Dockerfile-discovery-backend`)
+- `oleglod/cafe-discovery-backend`: API server image (`Dockerfile`)
 
 Persistence is published from **[cafe-persistence](https://github.com/create2-labs/cafe-persistence)** as `oleglod/cafe-persistence` (see [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md)).
 
@@ -470,12 +470,12 @@ docker compose run --rm cafe-discovery-backend-ci
 
 **Method 2: Using Docker Directly**
 
-You can also build and run the CI images directly with Docker (build context = this repo root, where `Dockerfile-discovery-backend` lives):
+You can also build and run the CI images directly with Docker (build context = this repo root, where `Dockerfile` lives):
 
 ```bash
 docker build \
   --target ci \
-  -f Dockerfile-discovery-backend \
+  -f Dockerfile \
   -t cafe-discovery-backend:ci .
 
 docker run --rm cafe-discovery-backend:ci
@@ -861,13 +861,13 @@ The project uses a two-file Docker Compose setup for local development:
 - **`docker-compose.dev.yml`**: Local development overrides
   - Adds build contexts for local development
   - Exposes port `8080` for backend API access
-  - Builds images locally using `Dockerfile-discovery-backend`
+  - Builds images locally using `Dockerfile`
 
 **Services:**
 
 1. **`cafe-discovery-backend`**:
    - API server (default port `8080` internally)
-   - Uses `runtime` target from `Dockerfile-discovery-backend`
+   - Uses `runtime` target from `Dockerfile`
    - Health check: `curl http://localhost:8080/health` (every 30s)
    - Restart policy: `unless-stopped`
    - Exposes `/version` endpoint for version information
@@ -898,7 +898,7 @@ The services are configured with:
 
 **Dockerfile Structure:**
 - **OQS Base Image**: Managed in [cafe-infra/oqs](../cafe-infra/oqs/) - builds `cafe-oqs:build` and `cafe-oqs:runtime`, tagged as `oqs:dev` for compatibility
-- `Dockerfile-discovery-backend`: Builds the API server using `oqs:dev` as base
+- `Dockerfile`: Builds the API server using `oqs:dev` as base
   - `runtime` target: Server image (used by cafe-deploy for staging/prod)
   - `ci` target: CI/CD image with linting and testing tools
 - Scanner images are built in dedicated repositories:

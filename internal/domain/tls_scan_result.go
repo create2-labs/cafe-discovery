@@ -103,37 +103,3 @@ func (t *TLSScanResultEntity) ToTLSScanResult() *TLSScanResult {
 		Default:         t.Default,
 	}
 }
-
-// FromTLSScanResult creates an entity from a domain TLSScanResult DTO
-// userID can be nil for default endpoints (isDefault=true)
-func FromTLSScanResult(userID *uuid.UUID, result *TLSScanResult, isDefault bool) *TLSScanResultEntity {
-	certJSON, _ := json.Marshal(result.Certificate)
-	cipherSuitesJSON, _ := json.Marshal(result.CipherSuites)
-	supportedPQCsJSON, _ := json.Marshal(result.SupportedPQCs)
-	recommendationsJSON, _ := json.Marshal(result.Recommendations)
-	nistLevelsJSON, _ := json.Marshal(result.NISTLevels)
-
-	return &TLSScanResultEntity{
-		UserID:          userID, // nil for default endpoints
-		URL:             result.URL,
-		Host:            result.Host,
-		Port:            result.Port,
-		ProtocolVersion: result.ProtocolVersion,
-		NISTLevel:       result.NISTLevel,
-		RiskScore:       result.RiskScore,
-		PQCRisk:         result.PQCRisk,
-		Certificate:     string(certJSON),
-		CipherSuites:    string(cipherSuitesJSON),
-		SupportedPQCs:   string(supportedPQCsJSON),
-		Recommendations: string(recommendationsJSON),
-		KexAlgorithm:    result.KexAlgorithm,
-		KexPQCReady:     result.KexPQCReady,
-		PQCMode:         result.PQCMode,
-		PFS:             result.PFS,
-		ALPN:            result.ALPN,
-		OCSPStapled:     result.OCSPStapled,
-		Curve:           result.Curve,
-		NISTLevels:      string(nistLevelsJSON),
-		Default:         isDefault,
-	}
-}

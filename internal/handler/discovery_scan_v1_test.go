@@ -393,6 +393,7 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		t.Fatal(err)
 	}
 	h := &DiscoveryHandler{
+		scanRead:       NewRepoScanReadStub(repo, nil),
 		scanResultRepo: repo,
 		pendingV1:      pending,
 		policyRef:      policyRefStub{},

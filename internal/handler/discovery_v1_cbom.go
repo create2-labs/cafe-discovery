@@ -25,13 +25,10 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 		}))
 	}
 
-	if h.scanResultRepo != nil {
-		ent, qerr := h.scanResultRepo.FindOwnedWalletScanByID(userID, scanID)
+	if h.scanRead != nil {
+		ent, qerr := h.scanRead.GetWalletScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
+			return respondScanReadError(c, qerr, "scan CBOM is temporarily unavailable")
 		}
 		if ent != nil {
 			if !scan.IsSuccess(ent.Status) {
@@ -89,22 +86,10 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 		}))
 	}
 
-	if h.tlsScanResultRepo != nil {
-		ent, qerr := h.tlsScanResultRepo.FindOwnedUserTLSScanByID(userID, scanID)
+	if h.scanRead != nil {
+		ent, qerr := h.scanRead.GetTLSScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
-		if ent == nil {
-			ent, qerr = h.tlsScanResultRepo.FindDefaultTLSScanByID(scanID)
-			if qerr != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-					"error":   "internal_error",
-					"message": qerr.Error(),
-				}))
-			}
+			return respondScanReadError(c, qerr, "scan CBOM is temporarily unavailable")
 		}
 		if ent != nil {
 			if !scan.IsSuccess(ent.Status) {

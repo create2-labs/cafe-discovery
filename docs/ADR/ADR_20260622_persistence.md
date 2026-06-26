@@ -676,7 +676,7 @@ Trois durcissements recommandés avant exécution :
 | **PERS-D5a**         | D5    | **D4b**               | `cafe-crypto-policy-mgt`                      | Client persistence                 | HTTP client §5.5 ; `CPM_PERSISTENCE_URL` ; **`CPM_STORE=memory` défaut**                             |
 | **PERS-D5b**         | D5    | D5a                   | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Bascule `CPM_STORE=persistence`    | Staging → prod ; smokes restart ; **`OwnerScopedStore` conservé** (rollback env)                     |
 | **PERS-D5c**         | D5    | D5b stable            | `cafe-crypto-policy-mgt`                      | Retrait memory prod                | Supprimer chemin prod `OwnerScopedStore` après fenêtre §5.6                                         |
-| **PERS-D6a-read**    | D6    | D3a-impl              | `cafe-discovery`                              | Scan read/list interne             | GET/list v1 via D3a                                                                                 |
+| **PERS-D6a-read**    | D6    | D3a-impl              | `cafe-discovery` + `cafe-deploy`              | Scan read/list interne             | GET/list v1 via D3a ; `DISCOVERY_PERSISTENCE_URL` + `CAFE_PERSISTENCE_SERVICE_TOKEN` sur backend |
 | **PERS-D6a-delete**  | D6    | D6a-read              | `cafe-discovery`                              | Scan delete interne                | DELETE v1 via D3a                                                                                   |
 | **PERS-D6a-pending** | D6    | D6a-delete            | `cafe-discovery`                              | Scan pending interne               | POST accept / réservation via D3a ; **dernier** (W8)                                                |
 | **PERS-D6b**         | D6    | **D4b**, **D5c**      | `cafe-discovery` + `cafe-crypto-policy-mgt`   | W1/W3 via persistence              | Existence only §9.3 ; API `internal/cp/v1` ; retrait refs internes CPM                              |
@@ -686,7 +686,7 @@ Trois durcissements recommandés avant exécution :
 ### 14.2 Ordre de merge recommandé (révisé)
 
 ```mermaid
-flowchart LR
+flowchart TD
   D0[PERS-D0 ADR] --> D1[PERS-D1 extraction]
   D1 --> D2[PERS-D2 deploy prove]
   D2 --> D1b[PERS-D1b cleanup discovery]
@@ -714,24 +714,24 @@ flowchart LR
 
 | PR                   | Dépôt lead                                    | Statut    | GitHub                                                                                    |
 | -------------------- | --------------------------------------------- | --------- | ----------------------------------------------------------------------------------------- | 
-| **PERS-D0**          | `cafe-discovery`                              | Mergé     | [create2-labs/cafe-discovery#102](https://github.com/create2-labs/cafe-discovery/pull/102) |
-| **PERS-D1**          | `cafe-persistence`                            | Mergé     | [create2-labs/cafe-persistence#1](https://github.com/create2-labs/cafe-persistence/pull/1)   |
-| **PERS-D2**          | `cafe-deploy`                                 | Mergé     | [create2-labs/cafe-deploy#33](https://github.com/create2-labs/cafe-deploy/pull/33)           |
-| **PERS-D1b**         | `cafe-discovery`                              | Mergé     | [create2-labs/cafe-discovery#103](https://github.com/create2-labs/cafe-discovery/pull/1023) |                        |
-| **PERS-D2b**         | `cafe-discovery` (+ `cafe-persistence`)     | Planifié  | —                                                                                         |
-| **PERS-D3a-spec**    | `cafe-persistence`                            | Planifié  | —                                                                                         |
-| **PERS-D3a-impl**    | `cafe-persistence`                            | Planifié  | —                                                                                         |
-| **PERS-D3b-spec**    | `cafe-persistence` + `cafe-crypto-policy-mgt` | Planifié  | —                                                                                         |
-| **PERS-D4**          | `cafe-persistence`                            | Planifié  | —                                                                                         |
-| **PERS-D4b**         | `cafe-persistence`                            | Planifié  | —                                                                                         |
-| **PERS-D5a**         | `cafe-crypto-policy-mgt`                      | Planifié  | —                                                                                         |
-| **PERS-D5b**         | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Planifié  | —                                                                                         |
-| **PERS-D5c**         | `cafe-crypto-policy-mgt`                      | Planifié  | —                                                                                         |
-| **PERS-D6a-read**    | `cafe-discovery`                              | Planifié  | —                                                                                         |
-| **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | —                                                                                         |
-| **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | —                                                                                         |
-| **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | —                                                                                         |
-| **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | —                                                                                         |
+| **PERS-D0**          | `cafe-discovery`                              | Mergé     | [discovery#102](https://github.com/create2-labs/cafe-discovery/pull/102) |
+| **PERS-D1**          | `cafe-persistence`                            | Mergé     | [persistence#1](https://github.com/create2-labs/cafe-persistence/pull/1)   |
+| **PERS-D2**          | `cafe-deploy`                                 | Mergé     | [deploy#33](https://github.com/create2-labs/cafe-deploy/pull/33)           |
+| **PERS-D1b**         | `cafe-discovery`                              | Mergé     | [discovery#103](https://github.com/create2-labs/cafe-discovery/pull/103) |                        |
+| **PERS-D2b**         | `cafe-discovery` (+ `cafe-persistence`)     | Mergé | [persistence#2](https://github.com/create2-labs/cafe-persistence/pull/2);[discovery#104](https://github.com/create2-labs/cafe-persistence/pull/104); [deploy#34](https://github.com/create2-labs/cafe-deploy/pull/34)|
+| **PERS-D3a-spec**    | `cafe-persistence`                            | Mergé  | [cafe-persistence#3](https://github.com/create2-labs/cafe-persistence/pull/3) |
+| **PERS-D3a-impl**    | `cafe-persistence`                            | Mergé | [persistence#4](https://github.com/create2-labs/cafe-persistence/pull/4) |
+| **PERS-D3b-spec**    | `cafe-persistence` + `cafe-crypto-policy-mgt` | En cours | [persistence#5](https://github.com/create2-labs/cafe-persistence/pull/5); [cpm#56](https://github.com/create2-labs/cafe-crypt-policy-mgt/pull/56)|
+| **PERS-D4**          | `cafe-persistence`                            | Mergé  | [persistence#6](https://github.com/create2-labs/cafe-persistence/pull/6) |
+| **PERS-D4b**         | `cafe-persistence`                            | Mergé  | [persistence#8](https://github.com/create2-labs/cafe-persistence/pull/8) |
+| **PERS-D5a**         | `cafe-crypto-policy-mgt`                      | Mergé  | [cpm#57](https://github.com/create2-labs/cafe-persistence/pull/57) |
+| **PERS-D5b**         | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Mergé  | [cpm#58](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/58); [deploy#36](https://github.com/create2-labs/cafe-deploy/pull/36) |
+| **PERS-D5c**         | `cafe-crypto-policy-mgt`                      | Mergé  | [cpm#59](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/59) |
+| **PERS-D6a-read**    | `cafe-discovery` + `cafe-deploy`              | En cours  | [discovery#105](https://github.com/create2-labs/cafe-discovery/pull/105) ; [deploy ](https://github.com/create2-labs/cafe-deploy/commit/5c022a084b5338237eca8d64006360559f820cb2)  |
+| **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
+| **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
+| **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/) ; [discovery#](https://github.com/create2-labs/cafe-discovery/pull/)|
+| **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) |
 
 
 **Parallèle après D2b :** chaînes **scan** et **CP** indépendantes :
@@ -810,6 +810,7 @@ Copier la section jalon correspondante dans la description GitHub à l’ouvertu
 | 2026-06-22 | 1.4.4   | §14.1 colonne Prérequis ; alignement explicite ADR ↔ ADR_20260622_PR_PLAN (D4b, D5c, D6b, D6c)                            |
 | 1.4.5   | PERS-D0 : liens README/TODO Discovery, workplan/TODO CPM ; corrections Markdown §5.6 / §14                            |
 | 1.4.6   | §14.2 tableau de suivi des PR (liens GitHub D0–D2 mergés)                                                             |
+| 2026-06-26 | 1.4.7   | **PERS-D6a-read** en cours : client `scanread`/`scanhttp` Discovery ; wiring `DISCOVERY_PERSISTENCE_URL` + token sur `cafe-discovery-backend` (`cafe-deploy`) ; lectures v1 hors Postgres ; DELETE/pending/W8 inchangés |
 
 
 ---

@@ -53,7 +53,7 @@ func TestIntegration_IMM6b8_CBOM404OnNonSuccess(t *testing.T) {
 				t.Fatalf("seed: %v", err)
 			}
 
-			h := &DiscoveryHandler{scanResultRepo: repo}
+			h := &DiscoveryHandler{scanRead: NewRepoScanReadStub(repo, nil)}
 			app := fiber.New()
 			app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
 				c.Locals("user_id", userID)

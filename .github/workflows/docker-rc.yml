@@ -104,7 +104,7 @@ jobs:
             --load \
             --platform linux/amd64 \
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
-            -f Dockerfile-discovery-backend \
+            -f Dockerfile \
             -t oleglod/cafe-discovery-backend:scan-local \
             .
 
@@ -139,6 +139,6 @@ jobs:
             --build-arg APP_VERSION="${{ steps.version.outputs.app_version }}" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            -f Dockerfile-discovery-backend \
+            -f Dockerfile \
             $TAGS \
             --push .
