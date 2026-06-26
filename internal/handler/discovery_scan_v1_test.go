@@ -198,19 +198,6 @@ func (r *scanResultRepoStub) ListOwnerWalletScansByAddress(uuid.UUID, string) ([
 
 func (r *scanResultRepoStub) CountByUserID(uuid.UUID) (int64, error) { return 0, nil }
 
-type redisWalletRepoStub struct {
-	deleted []string
-}
-
-func (r *redisWalletRepoStub) CountByUserID(context.Context, string) (int64, error) {
-	return 0, nil
-}
-
-func (r *redisWalletRepoStub) DeleteByUserIDAndAddress(_ context.Context, userID string, address string) error {
-	r.deleted = append(r.deleted, userID+":"+address)
-	return nil
-}
-
 type policyRefStub struct {
 	walletTarget policyref.WalletTargetContext
 	walletErr    error
@@ -291,88 +278,6 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	}
 }
 
-func TestDeleteDiscoveryV1WalletScan_KeepsRedisWhenAddressHasRemainingRows(t *testing.T) {
-	t.Parallel()
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	address := "0x742d35cc6634c0532925a3b844bc454e4438f44e"
-	deleteID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	remainingID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-	repo := &scanResultRepoStub{
-		byID: map[uuid.UUID]*domain.ScanResultEntity{
-			deleteID:    {ID: deleteID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-			remainingID: {ID: remainingID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-		},
-		byAddress: []*domain.ScanResultEntity{
-			{ID: deleteID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-			{ID: remainingID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-		},
-	}
-	redisRepo := &redisWalletRepoStub{}
-	h := &DiscoveryHandler{
-		scanResultRepo:  repo,
-		redisWalletRepo: redisRepo,
-		policyRef:       policyRefStub{},
-	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Delete("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
-		c.Locals("user_id", userID)
-		return h.DeleteDiscoveryV1WalletScan(c)
-	})
-
-	resp, err := app.Test(httptest.NewRequest(http.MethodDelete, "/wallets/scans/"+deleteID.String(), nil), -1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != fiber.StatusNoContent {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
-	}
-	if len(redisRepo.deleted) != 0 {
-		t.Fatalf("redis deletes = %v, want none", redisRepo.deleted)
-	}
-}
-
-func TestDeleteDiscoveryV1WalletScan_DeletesRedisWhenLastAddressRowRemoved(t *testing.T) {
-	t.Parallel()
-	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	address := "0x742d35cc6634c0532925a3b844bc454e4438f44e"
-	scanID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	repo := &scanResultRepoStub{
-		byID: map[uuid.UUID]*domain.ScanResultEntity{
-			scanID: {ID: scanID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-		},
-		byAddress: []*domain.ScanResultEntity{
-			{ID: scanID, UserID: userID, Address: address, Status: scan.StateSUCCESS},
-		},
-	}
-	redisRepo := &redisWalletRepoStub{}
-	h := &DiscoveryHandler{
-		scanResultRepo:  repo,
-		redisWalletRepo: redisRepo,
-		policyRef:       policyRefStub{},
-	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Delete("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
-		c.Locals("user_id", userID)
-		return h.DeleteDiscoveryV1WalletScan(c)
-	})
-
-	resp, err := app.Test(httptest.NewRequest(http.MethodDelete, "/wallets/scans/"+scanID.String(), nil), -1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != fiber.StatusNoContent {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
-	}
-	want := userID.String() + ":" + address
-	if len(redisRepo.deleted) != 1 || redisRepo.deleted[0] != want {
-		t.Fatalf("redis deletes = %v, want [%s]", redisRepo.deleted, want)
-	}
-}
-
 func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
@@ -393,10 +298,9 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		t.Fatal(err)
 	}
 	h := &DiscoveryHandler{
-		scanRead:       NewRepoScanReadStub(repo, nil),
-		scanResultRepo: repo,
-		pendingV1:      pending,
-		policyRef:      policyRefStub{},
+		scanRead:  NewRepoScanReadStub(repo, nil),
+		pendingV1: pending,
+		policyRef: policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Delete("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {

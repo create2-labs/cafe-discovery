@@ -124,9 +124,8 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, fmt.Errorf("failed to create scanner presence tracker: %w", err)
 	}
 
-	// Redis: TLS read-through cache; wallet keys for plan counts and DELETE cleanup only.
+	// Redis: TLS read-through cache.
 	redisTLSRepo := repository.NewRedisTLSScanRepository(redisConn)
-	redisWalletRepo := repository.NewRedisWalletScanRepository(redisConn)
 
 	// User scan cache: TLS read-through and warm on sign-in (wallet history is Postgres-only).
 	userScanCache := service.NewUserScanCacheService(tlsScanResultRepo, redisTLSRepo)
@@ -152,9 +151,9 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		return nil, err
 	}
 
-	// Initialize handlers (v1 GET/list via persistence; delete and W8 still use Postgres until D6a-delete).
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanRead, scanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
-	tlsHandler := handler.NewTLSHandler(redisTLSRepo, scanRead, tlsScanResultRepo, pendingV1Repo, policyRef)
+	// Initialize handlers (v1 GET/list/delete via persistence; pending/W8 still use Postgres until D6a-pending).
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, userScanCache, scanRead, scanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
+	tlsHandler := handler.NewTLSHandler(scanRead, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanUsageLedgerRepo)

@@ -728,7 +728,7 @@ flowchart TD
 | **PERS-D5b**         | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Mergé  | [cpm#58](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/58); [deploy#36](https://github.com/create2-labs/cafe-deploy/pull/36) |
 | **PERS-D5c**         | `cafe-crypto-policy-mgt`                      | Mergé  | [cpm#59](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/59) |
 | **PERS-D6a-read**    | `cafe-discovery` + `cafe-deploy`              | En cours  | [discovery#105](https://github.com/create2-labs/cafe-discovery/pull/105) ; [deploy ](https://github.com/create2-labs/cafe-deploy/commit/5c022a084b5338237eca8d64006360559f820cb2)  |
-| **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
+| **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | [discovery#106](https://github.com/create2-labs/cafe-discovery/pull/106) |
 | **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
 | **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/) ; [discovery#](https://github.com/create2-labs/cafe-discovery/pull/)|
 | **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) |

@@ -137,6 +137,30 @@ func (c *Client) GetTLSScan(ctx context.Context, userID uuid.UUID, tenantID stri
 	return scanread.TLSRowToEntity(wire)
 }
 
+func (c *Client) DeleteWalletScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (bool, error) {
+	rel := strings.ReplaceAll(WalletScanByID, "{scan_id}", scanID.String())
+	u := c.baseURL + V1Base + rel
+	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil); err != nil {
+		if errors.Is(err, errNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (c *Client) DeleteTLSScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (bool, error) {
+	rel := strings.ReplaceAll(TLSScanByID, "{scan_id}", scanID.String())
+	u := c.baseURL + V1Base + rel
+	if err := c.doJSON(ctx, http.MethodDelete, u, userID, tenantID, true, nil); err != nil {
+		if errors.Is(err, errNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 var errNotFound = errors.New("scan not found")
 
 func (c *Client) doJSON(ctx context.Context, method, requestURL string, userID uuid.UUID, tenantID string, idempotent bool, dst any) error {

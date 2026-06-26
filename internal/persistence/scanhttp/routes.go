@@ -1,4 +1,4 @@
-// Package scanhttp implements the Discovery HTTP client for cafe-persistence internal/scan/v1 (PERS-D6a-read).
+// Package scanhttp implements the Discovery HTTP client for cafe-persistence internal/scan/v1 (PERS-D6a-read / D6a-delete).
 package scanhttp
 
 // Route constants mirror cafe-persistence/internal/scanroutes (openapi/internal/scan/v1.yaml).

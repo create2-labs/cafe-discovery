@@ -33,15 +33,13 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Wallet v1 GET/list and CBOM read via cafe-persistence (PERS-D6a-read); delete and W8 still use Postgres until D6a-delete.
+// Wallet v1 GET/list/delete and CBOM read via cafe-persistence (PERS-D6a-read / D6a-delete); W8 still uses Postgres until D6a-pending.
 type DiscoveryHandler struct {
 	discoveryService *service.DiscoveryService
 	cfgChain         *config.ChainConfig
 	natsConn         nats.Connection
 	planService      *service.PlanService
 	scannerPresence  ScannerPresenceChecker
-	redisWalletRepo  repository.RedisWalletScanRepository
-	redisTLSRepo     repository.RedisTLSScanRepository
 	userScanCache    *service.UserScanCacheService
 	scanRead         scanread.Store
 	scanResultRepo   repository.ScanResultRepository
@@ -51,15 +49,13 @@ type DiscoveryHandler struct {
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		cfgChain:         cfgChain,
 		natsConn:         natsConn,
 		planService:      planService,
 		scannerPresence:  scannerPresence,
-		redisWalletRepo:  redisWalletRepo,
-		redisTLSRepo:     redisTLSRepo,
 		userScanCache:    userScanCache,
 		scanRead:         scanRead,
 		scanResultRepo:   scanResultRepo,
