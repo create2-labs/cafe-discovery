@@ -62,17 +62,12 @@ const (
 	// #nosec G101 -- This is a configuration key name, not a hardcoded credential
 	DiscoveryInternalAuthzServiceToken = "DISCOVERY_INTERNAL_AUTHZ_SERVICE_TOKEN"
 
-	// CafeCPMInternalBaseURL is the CPM HTTP root on the service network (e.g. http://cafe-cpm:8080), not the browser /api edge.
-	// Used with CafePolicyReferenceInternalServiceToken for POST /internal/policies/references/scan before DELETE v1 scans (PR6).
-	CafeCPMInternalBaseURL = "CAFE_CPM_INTERNAL_BASE_URL"
-	// #nosec G101 -- configuration key name
-	CafePolicyReferenceInternalServiceToken = "CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN"
-
-	// DiscoveryPersistenceURL is the cafe-persistence origin for internal/scan/v1 reads (PERS-D6a-read).
+	// DiscoveryPersistenceURL is the cafe-persistence origin for internal scan/cp HTTP APIs.
 	DiscoveryPersistenceURL = "DISCOVERY_PERSISTENCE_URL"
 	// DiscoveryPersistenceTimeoutSec is the HTTP client timeout for persistence scan reads (default 15).
 	DiscoveryPersistenceTimeoutSec = "DISCOVERY_PERSISTENCE_TIMEOUT_SEC"
-	// CafePersistenceServiceToken is the bearer for internal scan/cp APIs on cafe-persistence.
+	// CafePersistenceServiceToken is the bearer for internal scan/cp APIs on cafe-persistence
+	// (internal/scan/v1 reads and internal/cp/v1 W1/W3 existence checks).
 	// #nosec G101 -- configuration key name
 	CafePersistenceServiceToken = "CAFE_PERSISTENCE_SERVICE_TOKEN"
 

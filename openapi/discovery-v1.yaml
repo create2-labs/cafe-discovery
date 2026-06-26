@@ -216,8 +216,8 @@ paths:
         **`scan_id`**. Idempotent second delete → **404**.
 
         **503 fail-closed** when the authoritative policy reference check is unavailable (**Discovery**
-        returns **`POLICY_REFERENCE_CHECK_UNAVAILABLE`**); requires **`CAFE_CPM_INTERNAL_BASE_URL`**
-        and **`CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN`** on Discovery (see WORKPLAN_API_PR PR6 / PR9).
+        returns **`POLICY_REFERENCE_CHECK_UNAVAILABLE`**); requires **`DISCOVERY_PERSISTENCE_URL`**
+        and **`CAFE_PERSISTENCE_SERVICE_TOKEN`** on Discovery (PERS-D6b, `internal/cp/v1`).
       operationId: deleteWalletScan
       responses:
         "204":

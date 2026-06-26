@@ -13,7 +13,7 @@ type WalletTargetContext struct {
 	DraftCount  int
 }
 
-// Checker asks CPM internal reference endpoints (service token).
+// Checker asks cafe-persistence internal/cp/v1 reference endpoints (service token).
 // When nil, Discovery fails closed on scan delete and wallet POST /scan W1 (503).
 type Checker interface {
 	PersistedPoliciesReferenceScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (referenced bool, err error)
