@@ -481,19 +481,18 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 	}
 	tenantID := tenantIDFromDiscoveryV1Request(c)
 
+	if h.scanRead == nil {
+		return respondScanReadUnavailable(c, "wallet scan delete is temporarily unavailable")
+	}
+
 	var walletEnt *domain.ScanResultEntity
 	var pendingRec *repository.PendingV1ScanRecord
 
-	if h.scanResultRepo != nil {
-		ent, qerr := h.scanResultRepo.FindOwnedWalletScanByID(userID, scanID)
-		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
-		walletEnt = ent
+	ent, qerr := h.scanRead.GetWalletScan(c.Context(), userID, tenantID, scanID)
+	if qerr != nil {
+		return respondScanReadError(c, qerr, "wallet scan delete is temporarily unavailable")
 	}
+	walletEnt = ent
 	if walletEnt == nil && h.pendingV1 != nil {
 		rec, perr := h.pendingV1.Get(c.Context(), scanID)
 		if perr != nil {
@@ -525,30 +524,15 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 	}
 
 	if walletEnt != nil {
-		deleted, derr := h.scanResultRepo.DeleteOwnedWalletScan(userID, scanID)
+		deleted, derr := h.scanRead.DeleteWalletScan(c.Context(), userID, tenantID, scanID)
 		if derr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": derr.Error(),
-			}))
+			return respondScanReadError(c, derr, "wallet scan delete is temporarily unavailable")
 		}
 		if !deleted {
 			return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
 				"error":   "not_found",
 				"message": "scan not found",
 			}))
-		}
-		if h.redisWalletRepo != nil {
-			remaining, rerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, walletEnt.Address)
-			if rerr != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-					"error":   "internal_error",
-					"message": rerr.Error(),
-				}))
-			}
-			if len(remaining) == 0 {
-				_ = h.redisWalletRepo.DeleteByUserIDAndAddress(c.Context(), userID.String(), walletEnt.Address)
-			}
 		}
 		if err := h.clearPendingV1ScanCorrelation(c, userID, scanID, walletEnt.Address); err != nil {
 			return respondPolicyReferenceCheckUnavailable(c)
@@ -577,17 +561,18 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 	}
 	tenantID := tenantIDFromDiscoveryV1Request(c)
 
+	if h.scanRead == nil {
+		return respondScanReadUnavailable(c, "TLS scan delete is temporarily unavailable")
+	}
+
 	var tlsEnt *domain.TLSScanResultEntity
 	var pendingRec *repository.PendingV1ScanRecord
 
-	if h.tlsScanResultRepo != nil {
-		ent, qerr := h.tlsScanResultRepo.FindOwnedUserTLSScanByID(userID, scanID)
-		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
+	ent, qerr := h.scanRead.GetTLSScan(c.Context(), userID, tenantID, scanID)
+	if qerr != nil {
+		return respondScanReadError(c, qerr, "TLS scan delete is temporarily unavailable")
+	}
+	if ent != nil && !ent.Default {
 		tlsEnt = ent
 	}
 	if tlsEnt == nil && h.pendingV1 != nil {
@@ -621,21 +606,15 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 	}
 
 	if tlsEnt != nil {
-		deleted, derr := h.tlsScanResultRepo.DeleteOwnedUserTLSScan(userID, scanID)
+		deleted, derr := h.scanRead.DeleteTLSScan(c.Context(), userID, tenantID, scanID)
 		if derr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": derr.Error(),
-			}))
+			return respondScanReadError(c, derr, "TLS scan delete is temporarily unavailable")
 		}
 		if !deleted {
 			return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
 				"error":   "not_found",
 				"message": "scan not found",
 			}))
-		}
-		if h.redisTLSRepo != nil {
-			_ = h.redisTLSRepo.DeleteByUserIDAndURL(c.Context(), userID.String(), tlsEnt.URL)
 		}
 		if err := h.clearPendingV1ScanCorrelation(c, scanID); err != nil {
 			return respondPolicyReferenceCheckUnavailable(c)

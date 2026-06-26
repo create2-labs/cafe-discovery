@@ -8,20 +8,16 @@ import (
 
 // TLSHandler handles TLS-related HTTP requests.
 type TLSHandler struct {
-	redisTLSRepo      repository.RedisTLSScanRepository
-	scanRead          scanread.Store
-	tlsScanResultRepo repository.TLSScanResultRepository
-	pendingV1         repository.PendingV1ScanRepository
-	policyRef         policyref.Checker
+	scanRead  scanread.Store
+	pendingV1 repository.PendingV1ScanRepository
+	policyRef policyref.Checker
 }
 
 // NewTLSHandler creates a new TLS handler.
-func NewTLSHandler(redisTLSRepo repository.RedisTLSScanRepository, scanRead scanread.Store, tlsScanResultRepo repository.TLSScanResultRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *TLSHandler {
+func NewTLSHandler(scanRead scanread.Store, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *TLSHandler {
 	return &TLSHandler{
-		redisTLSRepo:      redisTLSRepo,
-		scanRead:          scanRead,
-		tlsScanResultRepo: tlsScanResultRepo,
-		pendingV1:         pendingV1,
-		policyRef:         policyRef,
+		scanRead:  scanRead,
+		pendingV1: pendingV1,
+		policyRef: policyRef,
 	}
 }

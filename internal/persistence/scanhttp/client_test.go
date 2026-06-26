@@ -100,3 +100,55 @@ func TestClientListWalletScansUnavailable(t *testing.T) {
 		t.Fatalf("err = %v, want ErrUnavailable", err)
 	}
 }
+
+func TestClientDeleteWalletScan(t *testing.T) {
+	deleted := false
+	mux := http.NewServeMux()
+	path := scanhttp.V1Base + strings.ReplaceAll(scanhttp.WalletScanByID, "{scan_id}", testScanID.String())
+	mux.HandleFunc("DELETE "+path, func(w http.ResponseWriter, r *http.Request) {
+		requireBearer(t, r)
+		deleted = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	client := newTestClient(t, mux)
+	ok, err := client.DeleteWalletScan(t.Context(), testUserID, "tenant-a", testScanID)
+	if err != nil {
+		t.Fatalf("DeleteWalletScan: %v", err)
+	}
+	if !ok || !deleted {
+		t.Fatalf("deleted = %v, ok = %v", deleted, ok)
+	}
+}
+
+func TestClientDeleteWalletScanNotFound(t *testing.T) {
+	mux := http.NewServeMux()
+	path := scanhttp.V1Base + strings.ReplaceAll(scanhttp.WalletScanByID, "{scan_id}", testScanID.String())
+	mux.HandleFunc("DELETE "+path, func(w http.ResponseWriter, r *http.Request) {
+		requireBearer(t, r)
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	client := newTestClient(t, mux)
+	ok, err := client.DeleteWalletScan(t.Context(), testUserID, "", testScanID)
+	if err != nil {
+		t.Fatalf("DeleteWalletScan: %v", err)
+	}
+	if ok {
+		t.Fatal("want ok=false on 404")
+	}
+}
+
+func TestClientDeleteTLSScanUnavailable(t *testing.T) {
+	mux := http.NewServeMux()
+	path := scanhttp.V1Base + strings.ReplaceAll(scanhttp.TLSScanByID, "{scan_id}", testScanID.String())
+	mux.HandleFunc("DELETE "+path, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	client := newTestClient(t, mux)
+	_, err := client.DeleteTLSScan(t.Context(), testUserID, "", testScanID)
+	if err != scanread.ErrUnavailable {
+		t.Fatalf("err = %v, want ErrUnavailable", err)
+	}
+}

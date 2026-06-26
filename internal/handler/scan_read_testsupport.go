@@ -22,6 +22,7 @@ type scanResultReader interface {
 	FindOwnedWalletScanByID(userID, scanID uuid.UUID) (*domain.ScanResultEntity, error)
 	ListOwnerWalletScansDiscoveryV1(userID uuid.UUID, address string, limit, offset int) ([]*domain.ScanResultEntity, int64, error)
 	ListOwnerWalletScansByAddress(userID uuid.UUID, address string) ([]*domain.ScanResultEntity, error)
+	DeleteOwnedWalletScan(userID, scanID uuid.UUID) (bool, error)
 }
 
 var _ scanread.Store = (*RepoScanReadStub)(nil)
@@ -84,6 +85,10 @@ func (s *RepoScanReadStub) GetWalletScan(_ context.Context, userID uuid.UUID, _ 
 	return s.repo.FindOwnedWalletScanByID(userID, scanID)
 }
 
+func (s *RepoScanReadStub) DeleteWalletScan(_ context.Context, userID uuid.UUID, _ string, scanID uuid.UUID) (bool, error) {
+	return s.repo.DeleteOwnedWalletScan(userID, scanID)
+}
+
 func (s *RepoScanReadStub) ListTLSScans(context.Context, uuid.UUID, string, int, int) ([]*domain.TLSScanResultEntity, int64, error) {
 	return nil, 0, nil
 }
@@ -94,4 +99,8 @@ func (s *RepoScanReadStub) ListTLSDefaultScans(context.Context, uuid.UUID, strin
 
 func (s *RepoScanReadStub) GetTLSScan(context.Context, uuid.UUID, string, uuid.UUID) (*domain.TLSScanResultEntity, error) {
 	return nil, nil
+}
+
+func (s *RepoScanReadStub) DeleteTLSScan(context.Context, uuid.UUID, string, uuid.UUID) (bool, error) {
+	return false, nil
 }
