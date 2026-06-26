@@ -359,10 +359,21 @@ postgres healthy → nats started → redis healthy
 
 ## PERS-D6a-read — Scan read/list via D3a
 
-| Lead | `cafe-discovery` |
+| Lead | `cafe-discovery` + `cafe-deploy` |
 | Prérequis | PERS-D3a-impl |
-| Livrable | GET/list v1 → client interne D3a ; retrait lectures `scan_result_repository` |
-| Test | Parité réponses API publique ; perf acceptable |
+| Livrable | GET/list v1 (+ CBOM read) → client HTTP `internal/scan/v1` ; retrait lectures `scan_result_repository` / `tls_scan_result_repository` sur les handlers v1 read |
+| **Hors scope** | DELETE v1, pending Redis, W8 in-flight, scan-authz interne, quotas plan, legacy `Create` wallet → **D6a-delete** / **D6a-pending** |
+| **Deploy** | `compose/20-discovery.yml` : `DISCOVERY_PERSISTENCE_URL`, `DISCOVERY_PERSISTENCE_TIMEOUT_SEC`, `CAFE_PERSISTENCE_SERVICE_TOKEN` sur **cafe-discovery-backend** ; `env/*.env.template` : `DISCOVERY_PERSISTENCE_URL=http://cafe-discovery-persistence:8082` ; `scripts/contract-checks.sh` |
+| **Config Discovery** | `DISCOVERY_PERSISTENCE_URL`, `CAFE_PERSISTENCE_SERVICE_TOKEN` (obligatoires au boot) ; `DISCOVERY_PERSISTENCE_TIMEOUT_SEC` (défaut 15s) |
+| Test | Parité réponses API publique ; `go test ./...` ; persistence down → 503 `service_unavailable` sur read v1 |
+
+**Critères merge**
+
+- [x] `internal/persistence/scanread` + `scanhttp` ; handlers v1 wallet/TLS list/detail/defaults/CBOM
+- [x] Boot fail-closed si URL/token absents
+- [x] `cafe-deploy` : env + compose backend + contract-checks
+- [ ] PR discovery + deploy mergées ; stack dev : list/get scan v1 OK après recreate `cafe-discovery-backend`
+- [ ] Smoke : persistence arrêtée → GET scan v1 = 503
 
 ---
 

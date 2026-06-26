@@ -676,7 +676,7 @@ Trois durcissements recommandés avant exécution :
 | **PERS-D5a**         | D5    | **D4b**               | `cafe-crypto-policy-mgt`                      | Client persistence                 | HTTP client §5.5 ; `CPM_PERSISTENCE_URL` ; **`CPM_STORE=memory` défaut**                             |
 | **PERS-D5b**         | D5    | D5a                   | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Bascule `CPM_STORE=persistence`    | Staging → prod ; smokes restart ; **`OwnerScopedStore` conservé** (rollback env)                     |
 | **PERS-D5c**         | D5    | D5b stable            | `cafe-crypto-policy-mgt`                      | Retrait memory prod                | Supprimer chemin prod `OwnerScopedStore` après fenêtre §5.6                                         |
-| **PERS-D6a-read**    | D6    | D3a-impl              | `cafe-discovery`                              | Scan read/list interne             | GET/list v1 via D3a                                                                                 |
+| **PERS-D6a-read**    | D6    | D3a-impl              | `cafe-discovery` + `cafe-deploy`              | Scan read/list interne             | GET/list v1 via D3a ; `DISCOVERY_PERSISTENCE_URL` + `CAFE_PERSISTENCE_SERVICE_TOKEN` sur backend |
 | **PERS-D6a-delete**  | D6    | D6a-read              | `cafe-discovery`                              | Scan delete interne                | DELETE v1 via D3a                                                                                   |
 | **PERS-D6a-pending** | D6    | D6a-delete            | `cafe-discovery`                              | Scan pending interne               | POST accept / réservation via D3a ; **dernier** (W8)                                                |
 | **PERS-D6b**         | D6    | **D4b**, **D5c**      | `cafe-discovery` + `cafe-crypto-policy-mgt`   | W1/W3 via persistence              | Existence only §9.3 ; API `internal/cp/v1` ; retrait refs internes CPM                              |
@@ -727,7 +727,7 @@ flowchart TD
 | **PERS-D5a**         | `cafe-crypto-policy-mgt`                      | Mergé  | [cpm#57](https://github.com/create2-labs/cafe-persistence/pull/57) |
 | **PERS-D5b**         | `cafe-crypto-policy-mgt` + `cafe-deploy`      | Mergé  | [cpm#58](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/58); [deploy#36](https://github.com/create2-labs/cafe-deploy/pull/36) |
 | **PERS-D5c**         | `cafe-crypto-policy-mgt`                      | Mergé  | [cpm#59](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/59) |
-| **PERS-D6a-read**    | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
+| **PERS-D6a-read**    | `cafe-discovery` + `cafe-deploy`              | En cours  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) ; [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) — branche `pers-d6a-read-scan-via-persistence` |
 | **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
 | **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | [discovery#](https://github.com/create2-labs/cafe-discovery/pull/) |
 | **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/) ; [discovery#](https://github.com/create2-labs/cafe-discovery/pull/)|
@@ -810,6 +810,7 @@ Copier la section jalon correspondante dans la description GitHub à l’ouvertu
 | 2026-06-22 | 1.4.4   | §14.1 colonne Prérequis ; alignement explicite ADR ↔ ADR_20260622_PR_PLAN (D4b, D5c, D6b, D6c)                            |
 | 1.4.5   | PERS-D0 : liens README/TODO Discovery, workplan/TODO CPM ; corrections Markdown §5.6 / §14                            |
 | 1.4.6   | §14.2 tableau de suivi des PR (liens GitHub D0–D2 mergés)                                                             |
+| 2026-06-26 | 1.4.7   | **PERS-D6a-read** en cours : client `scanread`/`scanhttp` Discovery ; wiring `DISCOVERY_PERSISTENCE_URL` + token sur `cafe-discovery-backend` (`cafe-deploy`) ; lectures v1 hors Postgres ; DELETE/pending/W8 inchangés |
 
 
 ---
