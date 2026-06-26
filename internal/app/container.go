@@ -5,18 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
-	"strings"
 	"time"
 
 	"cafe-discovery/internal/config"
-	"cafe-discovery/internal/cpmpolicyref"
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/handler"
 	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/middleware"
-	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/internal/version"
@@ -130,18 +126,11 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// User scan cache: TLS read-through and warm on sign-in (wallet history is Postgres-only).
 	userScanCache := service.NewUserScanCacheService(tlsScanResultRepo, redisTLSRepo)
 
-	cpmInternalBase := strings.TrimSpace(viper.GetString(config.CafeCPMInternalBaseURL))
-	policyRefToken := strings.TrimSpace(viper.GetString(config.CafePolicyReferenceInternalServiceToken))
-	var policyRef policyref.Checker
-	if cpmInternalBase != "" && policyRefToken != "" {
-		policyRef = cpmpolicyref.NewHTTPClient(cpmInternalBase, policyRefToken, &http.Client{Timeout: 5 * time.Second})
-	} else {
-		policyRef = nil
-		log.Printf("Warning: %s and %s must both be set for CPM reference checks (DELETE scan + POST wallet scan W1); otherwise those routes return 503 fail-closed",
-			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
-	}
-
 	scanClient, err := newScanPersistenceClient()
+	if err != nil {
+		return nil, err
+	}
+	policyRef, err := newPolicyReferenceChecker()
 	if err != nil {
 		return nil, err
 	}

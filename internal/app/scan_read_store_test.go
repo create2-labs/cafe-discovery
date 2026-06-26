@@ -41,3 +41,16 @@ func TestNewScanPersistenceClientOK(t *testing.T) {
 		t.Fatal("expected client")
 	}
 }
+
+func TestNewPolicyReferenceCheckerOK(t *testing.T) {
+	viper.Set(config.DiscoveryPersistenceURL, "http://persistence:8082")
+	viper.Set(config.CafePersistenceServiceToken, "secret")
+
+	checker, err := newPolicyReferenceChecker()
+	if err != nil {
+		t.Fatalf("newPolicyReferenceChecker: %v", err)
+	}
+	if checker == nil {
+		t.Fatal("expected checker")
+	}
+}
