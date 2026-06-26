@@ -15,7 +15,7 @@ import (
 var ErrUnavailable = errors.New("scan persistence unavailable")
 
 // Store provides owner-scoped scan reads and deletes for public v1 handlers.
-// Writes, pending, authz, and quotas remain on direct repositories until later D6a milestones.
+// Writes, authz, and quotas remain on direct repositories until later D6a milestones.
 type Store interface {
 	ListWalletScans(ctx context.Context, userID uuid.UUID, tenantID string, query url.Values) (items []*domain.ScanResultEntity, total int64, limit, offset int, err error)
 	GetWalletScan(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID) (*domain.ScanResultEntity, error)

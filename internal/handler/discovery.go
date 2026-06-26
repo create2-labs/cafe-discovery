@@ -10,6 +10,7 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/persistence/scanread"
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
@@ -33,7 +34,7 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Wallet v1 GET/list/delete and CBOM read via cafe-persistence (PERS-D6a-read / D6a-delete); W8 still uses Postgres until D6a-pending.
+// Wallet v1 GET/list/delete and CBOM read via cafe-persistence (PERS-D6a-read / D6a-delete); pending/W8 via D6a-pending.
 type DiscoveryHandler struct {
 	discoveryService *service.DiscoveryService
 	cfgChain         *config.ChainConfig
@@ -44,12 +45,12 @@ type DiscoveryHandler struct {
 	scanRead         scanread.Store
 	scanResultRepo   repository.ScanResultRepository
 	scanUsageLedger  repository.ScanUsageLedgerRepository
-	pendingV1        repository.PendingV1ScanRepository
+	scanPending      scanpending.Store
 	policyRef        policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, scanPending scanpending.Store, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		discoveryService: discoveryService,
 		cfgChain:         cfgChain,
@@ -60,7 +61,7 @@ func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *c
 		scanRead:         scanRead,
 		scanResultRepo:   scanResultRepo,
 		scanUsageLedger:  scanUsageLedger,
-		pendingV1:        pendingV1,
+		scanPending:      scanPending,
 		policyRef:        policyRef,
 	}
 }
@@ -185,29 +186,26 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 			}
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
-		if h.pendingV1 != nil {
-			reserved, err := h.pendingV1.PutWallet(c.Context(), &repository.PendingV1ScanRecord{
-				ScanID:    scanID,
-				UserID:    userID,
-				Family:    "wallet",
-				Address:   normalized,
-				CreatedAt: time.Now().UTC(),
-			})
-			if err != nil {
-				log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 wallet scan put failed before NATS")
-				return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-					"error":   "service_unavailable",
-					"message": "The scan could not be accepted; please try again.",
-				}))
-			}
-			if !reserved {
-				return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanInProgressErrorBody()))
-			}
+		tenantID := tenantIDFromDiscoveryV1Request(c)
+		reserved, err := h.scanPending.ReserveWallet(c.Context(), userID, tenantID, &scanpending.Record{
+			ScanID:    scanID,
+			UserID:    userID,
+			Family:    "wallet",
+			Address:   normalized,
+			CreatedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 wallet scan put failed before NATS")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+				"error":   "service_unavailable",
+				"message": "The scan could not be accepted; please try again.",
+			}))
+		}
+		if !reserved {
+			return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanInProgressErrorBody()))
 		}
 		if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
-			if h.pendingV1 != nil {
-				_ = h.pendingV1.Delete(c.Context(), scanID)
-			}
+			_ = h.scanPending.Delete(c.Context(), userID, tenantID, scanID)
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		return c.JSON(postScanV1AcceptedJSON(scanID, "wallet"))
@@ -219,20 +217,19 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 		}
 		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 	}
-	if h.pendingV1 != nil {
-		if err := h.pendingV1.Put(c.Context(), &repository.PendingV1ScanRecord{
-			ScanID:    scanID,
-			UserID:    userID,
-			Family:    "tls",
-			Endpoint:  endpoint,
-			CreatedAt: time.Now().UTC(),
-		}); err != nil {
-			log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 TLS scan put failed before NATS")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-				"error":   "service_unavailable",
-				"message": "The scan could not be accepted; please try again.",
-			}))
-		}
+	tenantID := tenantIDFromDiscoveryV1Request(c)
+	if err := h.scanPending.PutTLS(c.Context(), userID, tenantID, &scanpending.Record{
+		ScanID:    scanID,
+		UserID:    userID,
+		Family:    "tls",
+		Endpoint:  endpoint,
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		log.Error().Err(err).Str("scan_id", scanID.String()).Msg("pending v1 TLS scan put failed before NATS")
+		return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
+			"error":   "service_unavailable",
+			"message": "The scan could not be accepted; please try again.",
+		}))
 	}
 	if qe := h.publishTLSScanRequested(scanID, userID, endpoint); qe != nil {
 		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
@@ -318,7 +315,7 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 		}
 	}
 
-	if qe := h.checkWalletScanInFlight(c.Context(), userID, normalizedAddress); qe != nil {
+	if qe := h.checkWalletScanInFlight(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress); qe != nil {
 		return uuid.Nil, uuid.Nil, "", qe
 	}
 	if qe := h.checkWalletCPMContext(c, userID, normalizedAddress); qe != nil {
@@ -342,29 +339,27 @@ func (h *DiscoveryHandler) checkWalletCPMContext(c *fiber.Ctx, userID uuid.UUID,
 	return nil
 }
 
-func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID uuid.UUID, address string) *queueScanError {
-	if h.pendingV1 != nil {
-		rec, err := h.pendingV1.GetWalletByOwnerAddress(ctx, userID, address)
-		if err != nil {
-			return &queueScanError{
-				status: fiber.StatusServiceUnavailable,
-				body: fiber.Map{
-					"error":   "service_unavailable",
-					"message": "wallet scan queue state is temporarily unavailable",
-				},
-			}
+func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID uuid.UUID, tenantID, address string) *queueScanError {
+	rec, err := h.scanPending.GetWalletByOwnerAddress(ctx, userID, tenantID, address)
+	if err != nil {
+		return &queueScanError{
+			status: fiber.StatusServiceUnavailable,
+			body: fiber.Map{
+				"error":   "service_unavailable",
+				"message": "wallet scan queue state is temporarily unavailable",
+			},
 		}
-		if rec != nil {
-			block, stale, qe := h.pendingWalletReservationState(userID, address, rec)
-			if qe != nil {
-				return qe
-			}
-			if block {
-				return scanInProgressQueueError()
-			}
-			if stale {
-				_ = h.pendingV1.DeleteWalletReservation(ctx, userID, address, rec.ScanID)
-			}
+	}
+	if rec != nil {
+		block, stale, qe := h.pendingWalletReservationState(userID, address, rec)
+		if qe != nil {
+			return qe
+		}
+		if block {
+			return scanInProgressQueueError()
+		}
+		if stale {
+			_ = h.scanPending.DeleteWalletReservation(ctx, userID, tenantID, address, rec.ScanID)
 		}
 	}
 
@@ -387,7 +382,7 @@ func (h *DiscoveryHandler) checkWalletScanInFlight(ctx context.Context, userID u
 	return nil
 }
 
-func (h *DiscoveryHandler) pendingWalletReservationState(userID uuid.UUID, address string, rec *repository.PendingV1ScanRecord) (block bool, stale bool, qe *queueScanError) {
+func (h *DiscoveryHandler) pendingWalletReservationState(userID uuid.UUID, address string, rec *scanpending.Record) (block bool, stale bool, qe *queueScanError) {
 	if rec.ScanID == uuid.Nil {
 		return false, true, nil
 	}

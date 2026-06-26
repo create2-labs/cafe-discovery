@@ -9,7 +9,7 @@ import (
 
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
-	"cafe-discovery/internal/repository"
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/pkg/scan"
 
 	"github.com/gofiber/fiber/v2"
@@ -155,13 +155,10 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScan(c *fiber.Ctx) error {
 		}
 	}
 
-	if h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-				"error":   "service_unavailable",
-				"message": "scan detail is temporarily unavailable",
-			}))
+			return respondScanPendingError(c, perr, "scan detail is temporarily unavailable")
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "wallet" {
 			return c.JSON(fiber.Map{
@@ -377,13 +374,10 @@ func (h *TLSHandler) GetDiscoveryV1TLSScan(c *fiber.Ctx) error {
 		}
 	}
 
-	if h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-				"error":   "service_unavailable",
-				"message": "scan detail is temporarily unavailable",
-			}))
+			return respondScanPendingError(c, perr, "scan detail is temporarily unavailable")
 		}
 		if rec != nil && rec.UserID == userID && rec.Family == "tls" {
 			return c.JSON(fiber.Map{
@@ -444,26 +438,27 @@ func respondPolicyReferenceCheckUnavailable(c *fiber.Ctx) error {
 	}))
 }
 
-// clearPendingV1ScanCorrelation removes Redis pending v1 keys for scan_id so GET detail
+// clearPendingV1ScanCorrelation removes pending v1 keys for scan_id so GET detail
 // does not resurrect a deleted scan as status "requested" after the Postgres row is gone.
 func (h *DiscoveryHandler) clearPendingV1ScanCorrelation(c *fiber.Ctx, userID, scanID uuid.UUID, walletAddress string) error {
-	if h.pendingV1 == nil {
+	if h.scanPending == nil {
 		return nil
 	}
-	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+	tenantID := tenantIDFromDiscoveryV1Request(c)
+	if err := h.scanPending.Delete(c.Context(), userID, tenantID, scanID); err != nil {
 		return err
 	}
 	if addr := strings.TrimSpace(walletAddress); addr != "" {
-		_ = h.pendingV1.DeleteWalletReservation(c.Context(), userID, addr, scanID)
+		_ = h.scanPending.DeleteWalletReservation(c.Context(), userID, tenantID, addr, scanID)
 	}
 	return nil
 }
 
-func (h *TLSHandler) clearPendingV1ScanCorrelation(c *fiber.Ctx, scanID uuid.UUID) error {
-	if h.pendingV1 == nil {
+func (h *TLSHandler) clearPendingV1ScanCorrelation(c *fiber.Ctx, userID, scanID uuid.UUID) error {
+	if h.scanPending == nil {
 		return nil
 	}
-	return h.pendingV1.Delete(c.Context(), scanID)
+	return h.scanPending.Delete(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 }
 
 // DeleteDiscoveryV1WalletScan handles DELETE /discovery/v1/wallets/scans/:scan_id (WORKPLAN_API_PR PR6).
@@ -486,15 +481,15 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 	}
 
 	var walletEnt *domain.ScanResultEntity
-	var pendingRec *repository.PendingV1ScanRecord
+	var pendingRec *scanpending.Record
 
 	ent, qerr := h.scanRead.GetWalletScan(c.Context(), userID, tenantID, scanID)
 	if qerr != nil {
 		return respondScanReadError(c, qerr, "wallet scan delete is temporarily unavailable")
 	}
 	walletEnt = ent
-	if walletEnt == nil && h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if walletEnt == nil && h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantID, scanID)
 		if perr != nil {
 			return respondPolicyReferenceCheckUnavailable(c)
 		}
@@ -540,7 +535,10 @@ func (h *DiscoveryHandler) DeleteDiscoveryV1WalletScan(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 
-	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+	if h.scanPending == nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	if err := h.scanPending.Delete(c.Context(), userID, tenantID, scanID); err != nil {
 		return respondPolicyReferenceCheckUnavailable(c)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -566,7 +564,7 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 	}
 
 	var tlsEnt *domain.TLSScanResultEntity
-	var pendingRec *repository.PendingV1ScanRecord
+	var pendingRec *scanpending.Record
 
 	ent, qerr := h.scanRead.GetTLSScan(c.Context(), userID, tenantID, scanID)
 	if qerr != nil {
@@ -575,8 +573,8 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 	if ent != nil && !ent.Default {
 		tlsEnt = ent
 	}
-	if tlsEnt == nil && h.pendingV1 != nil {
-		rec, perr := h.pendingV1.Get(c.Context(), scanID)
+	if tlsEnt == nil && h.scanPending != nil {
+		rec, perr := h.scanPending.Get(c.Context(), userID, tenantID, scanID)
 		if perr != nil {
 			return respondPolicyReferenceCheckUnavailable(c)
 		}
@@ -616,13 +614,16 @@ func (h *TLSHandler) DeleteDiscoveryV1TLSScan(c *fiber.Ctx) error {
 				"message": "scan not found",
 			}))
 		}
-		if err := h.clearPendingV1ScanCorrelation(c, scanID); err != nil {
+		if err := h.clearPendingV1ScanCorrelation(c, userID, scanID); err != nil {
 			return respondPolicyReferenceCheckUnavailable(c)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 
-	if err := h.pendingV1.Delete(c.Context(), scanID); err != nil {
+	if h.scanPending == nil {
+		return respondPolicyReferenceCheckUnavailable(c)
+	}
+	if err := h.scanPending.Delete(c.Context(), userID, tenantID, scanID); err != nil {
 		return respondPolicyReferenceCheckUnavailable(c)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
