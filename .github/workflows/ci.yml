@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           docker build \
             --target ci \
-            -f Dockerfile-discovery-backend \
+            -f Dockerfile \
             -t cafe-discovery-backend:ci .
 
       - name: Run backend CI checks (inside CI image)

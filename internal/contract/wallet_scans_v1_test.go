@@ -107,7 +107,7 @@ func walletScanEntityWithNetworks(id, owner uuid.UUID, address string, networks 
 
 func TestDiscoveryV1WalletScans_listWithoutPrincipalReturns401(t *testing.T) {
 	t.Parallel()
-	h := handler.NewDiscoveryHandlerForContractTest(&memoryWalletScanRepo{}, nil)
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(&memoryWalletScanRepo{}, nil)
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Get("/wallets/scans", h.ListDiscoveryV1WalletScans)
 	req := httptest.NewRequest(http.MethodGet, "/wallets/scans", nil)
@@ -131,7 +131,7 @@ func TestDiscoveryV1WalletScans_listWithPrincipalReturns200Envelope(t *testing.T
 		},
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app.Use(func(c *fiber.Ctx) error {
@@ -177,7 +177,7 @@ func TestDiscoveryV1WalletScans_addressFilterReturnsAllExecutions(t *testing.T) 
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -228,7 +228,7 @@ func TestDiscoveryV1WalletScans_latestReturnsNewestCompletedOnly(t *testing.T) {
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -280,7 +280,7 @@ func TestDiscoveryV1WalletScans_latestReturnsEmptyWhenNoCompletedScanExists(t *t
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -315,7 +315,7 @@ func TestDiscoveryV1WalletScans_latestReturnsEmptyWhenNoCompletedScanExists(t *t
 
 func TestDiscoveryV1WalletScans_latestRequiresAddress(t *testing.T) {
 	t.Parallel()
-	h := handler.NewDiscoveryHandlerForContractTest(&memoryWalletScanRepo{}, nil)
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(&memoryWalletScanRepo{}, nil)
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
@@ -347,7 +347,7 @@ func TestDiscoveryV1WalletScans_latestChainIDReturnsNewestCompletedMatchingChain
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{
 			{Name: "ethereum", ChainID: 1},
 			{Name: "polygon", ChainID: 137},
@@ -399,7 +399,7 @@ func TestDiscoveryV1WalletScans_chainIDFilterUsesAllAddressRowsBeforePagination(
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{
 			{Name: "ethereum", ChainID: 1},
 			{Name: "polygon", ChainID: 137},
@@ -449,7 +449,7 @@ func TestDiscoveryV1WalletScans_detailOwnerIsolation(t *testing.T) {
 			ownerA: {walletScanEntity(scanID, ownerA, "0x0802b015613ef6701192811e595e085a9c560caf")},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -479,7 +479,7 @@ func TestDiscoveryV1WalletScans_detailStableFieldsForOwner(t *testing.T) {
 			owner: {walletScanEntity(scanID, owner, "0x0802b015613ef6701192811e595e085a9c560caf")},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -534,7 +534,7 @@ func TestDiscoveryV1WalletScans_twoExecutionsSameAddress_listContainsBoth(t *tes
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -601,7 +601,7 @@ func TestDiscoveryV1WalletScans_historicalScanIDDetailIsStable(t *testing.T) {
 			owner: {entityB, entityA},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -659,7 +659,7 @@ func TestDiscoveryV1WalletScans_listItemSynopsisExcludesPostureFields(t *testing
 			},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -735,7 +735,7 @@ func TestDiscoveryV1WalletScans_detailOmitsResultUntilTerminal(t *testing.T) {
 			repo := &memoryWalletScanRepo{
 				byOwner: map[uuid.UUID][]*domain.ScanResultEntity{owner: {ent}},
 			}
-			h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+			h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 				Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 			})
 			app := fiber.New(fiber.Config{DisableStartupMessage: true})
@@ -780,7 +780,7 @@ func TestDiscoveryV1WalletScans_detailIncludesResultAtTerminal(t *testing.T) {
 			owner: {walletScanEntity(scanID, owner, address)},
 		},
 	}
-	h := handler.NewDiscoveryHandlerForContractTest(repo, &config.ChainConfig{
+	h := handler.NewDiscoveryHandlerForContractTestFromRepo(repo, &config.ChainConfig{
 		Blockchains: []config.Blockchain{{Name: "ethereum", ChainID: 1}},
 	})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})

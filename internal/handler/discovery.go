@@ -10,6 +10,7 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/persistence/scanread"
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
@@ -32,39 +33,39 @@ type ScannerPresenceChecker interface {
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
-// Wallet v1 list/get/delete and plan limits use Postgres as source of truth for wallet scans.
+// Wallet v1 GET/list and CBOM read via cafe-persistence (PERS-D6a-read); delete and W8 still use Postgres until D6a-delete.
 type DiscoveryHandler struct {
-	discoveryService  *service.DiscoveryService
-	cfgChain          *config.ChainConfig
-	natsConn          nats.Connection
-	planService       *service.PlanService
-	scannerPresence   ScannerPresenceChecker
-	redisWalletRepo   repository.RedisWalletScanRepository
-	redisTLSRepo      repository.RedisTLSScanRepository
-	userScanCache     *service.UserScanCacheService
-	scanResultRepo    repository.ScanResultRepository
-	tlsScanResultRepo repository.TLSScanResultRepository
-	scanUsageLedger   repository.ScanUsageLedgerRepository
-	pendingV1         repository.PendingV1ScanRepository
-	policyRef         policyref.Checker
+	discoveryService *service.DiscoveryService
+	cfgChain         *config.ChainConfig
+	natsConn         nats.Connection
+	planService      *service.PlanService
+	scannerPresence  ScannerPresenceChecker
+	redisWalletRepo  repository.RedisWalletScanRepository
+	redisTLSRepo     repository.RedisTLSScanRepository
+	userScanCache    *service.UserScanCacheService
+	scanRead         scanread.Store
+	scanResultRepo   repository.ScanResultRepository
+	scanUsageLedger  repository.ScanUsageLedgerRepository
+	pendingV1        repository.PendingV1ScanRepository
+	policyRef        policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, redisWalletRepo repository.RedisWalletScanRepository, redisTLSRepo repository.RedisTLSScanRepository, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, pendingV1 repository.PendingV1ScanRepository, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
-		discoveryService:  discoveryService,
-		cfgChain:          cfgChain,
-		natsConn:          natsConn,
-		planService:       planService,
-		scannerPresence:   scannerPresence,
-		redisWalletRepo:   redisWalletRepo,
-		redisTLSRepo:      redisTLSRepo,
-		userScanCache:     userScanCache,
-		scanResultRepo:    scanResultRepo,
-		tlsScanResultRepo: tlsScanResultRepo,
-		scanUsageLedger:   scanUsageLedger,
-		pendingV1:         pendingV1,
-		policyRef:         policyRef,
+		discoveryService: discoveryService,
+		cfgChain:         cfgChain,
+		natsConn:         natsConn,
+		planService:      planService,
+		scannerPresence:  scannerPresence,
+		redisWalletRepo:  redisWalletRepo,
+		redisTLSRepo:     redisTLSRepo,
+		userScanCache:    userScanCache,
+		scanRead:         scanRead,
+		scanResultRepo:   scanResultRepo,
+		scanUsageLedger:  scanUsageLedger,
+		pendingV1:        pendingV1,
+		policyRef:        policyRef,
 	}
 }
 
@@ -449,9 +450,9 @@ func cpmPolicyExistsForWalletTargetQueueError() *queueScanError {
 
 func cpmPolicyExistsForWalletTargetErrorBody() fiber.Map {
 	return fiber.Map{
-		"error":          "CPM_EXISTS_FOR_WALLET_TARGET",
-		"blocking_kind":  "policy",
-		"message":        "A persisted crypto policy already exists for this wallet address. Delete or replace it before starting a new scan.",
+		"error":         "CPM_EXISTS_FOR_WALLET_TARGET",
+		"blocking_kind": "policy",
+		"message":       "A persisted crypto policy already exists for this wallet address. Delete or replace it before starting a new scan.",
 	}
 }
 

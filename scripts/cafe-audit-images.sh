@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cafe-discovery: golangci-lint, govulncheck, build Dockerfile-discovery-backend, Docker Scout, rapport.
+# cafe-discovery: golangci-lint, govulncheck, build Dockerfile, Docker Scout, rapport.
 # PERS-D1b: persistence image is built from cafe-persistence (not this repo).
 # Compatible bash 3.2+ (macOS).
 #
@@ -71,7 +71,7 @@ main() {
   fi
 
   IM_BACK="$(tag cafe-discovery-backend)"
-  if ( cd "$REPO_ROOT" && docker build -f Dockerfile-discovery-backend -t "$IM_BACK" . ); then
+  if ( cd "$REPO_ROOT" && docker build -f Dockerfile -t "$IM_BACK" . ); then
     OK_BACK=1
   else
     OK_BACK=0

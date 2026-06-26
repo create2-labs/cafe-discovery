@@ -68,6 +68,14 @@ const (
 	// #nosec G101 -- configuration key name
 	CafePolicyReferenceInternalServiceToken = "CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN"
 
+	// DiscoveryPersistenceURL is the cafe-persistence origin for internal/scan/v1 reads (PERS-D6a-read).
+	DiscoveryPersistenceURL = "DISCOVERY_PERSISTENCE_URL"
+	// DiscoveryPersistenceTimeoutSec is the HTTP client timeout for persistence scan reads (default 15).
+	DiscoveryPersistenceTimeoutSec = "DISCOVERY_PERSISTENCE_TIMEOUT_SEC"
+	// CafePersistenceServiceToken is the bearer for internal scan/cp APIs on cafe-persistence.
+	// #nosec G101 -- configuration key name
+	CafePersistenceServiceToken = "CAFE_PERSISTENCE_SERVICE_TOKEN"
+
 	defaultProduction         = true
 	defaultPostgreSQLHost     = "127.0.0.1"
 	defaultPostgreSQLPort     = "5432"

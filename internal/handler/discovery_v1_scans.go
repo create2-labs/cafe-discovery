@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -68,71 +69,27 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 		normalizedAddr = n
 	}
 
-	if h.scanResultRepo == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-			"error":   "service_unavailable",
-			"message": "wallet scan history is temporarily unavailable",
-		}))
+	if h.scanRead == nil {
+		return respondScanReadUnavailable(c, "wallet scan history is temporarily unavailable")
 	}
 
 	limit, offset := parsePaginationParams(c)
-
-	var entities []*domain.ScanResultEntity
-	var total int64
-
+	query := url.Values{}
+	if normalizedAddr != "" {
+		query.Set("address", normalizedAddr)
+	}
+	if chainID != nil {
+		query.Set("chain_id", strconv.FormatInt(*chainID, 10))
+	}
 	if latest {
-		all, lerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, normalizedAddr)
-		if lerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": lerr.Error(),
-			}))
-		}
-		for _, ent := range all {
-			if !walletEntityIsCompleted(ent) {
-				continue
-			}
-			if chainID != nil && !walletEntityMatchesChainID(ent, *chainID, h.cfgChain) {
-				continue
-			}
-			entities = []*domain.ScanResultEntity{ent}
-			total = 1
-			break
-		}
-	} else if normalizedAddr != "" && chainID != nil {
-		all, lerr := h.scanResultRepo.ListOwnerWalletScansByAddress(userID, normalizedAddr)
-		if lerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": lerr.Error(),
-			}))
-		}
-		filtered := make([]*domain.ScanResultEntity, 0, len(all))
-		for _, ent := range all {
-			if walletEntityMatchesChainID(ent, *chainID, h.cfgChain) {
-				filtered = append(filtered, ent)
-			}
-		}
-		total = int64(len(filtered))
-		entities = paginateWalletScanEntities(filtered, limit, offset)
-	} else if normalizedAddr != "" {
-		var qerr error
-		entities, total, qerr = h.scanResultRepo.ListOwnerWalletScansDiscoveryV1(userID, normalizedAddr, limit, offset)
-		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
-	} else {
-		var qerr error
-		entities, total, qerr = h.scanResultRepo.ListOwnerWalletScansDiscoveryV1(userID, "", limit, offset)
-		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
+		query.Set("latest", "true")
+	}
+	query.Set("limit", strconv.Itoa(limit))
+	query.Set("offset", strconv.Itoa(offset))
+
+	entities, total, respLimit, respOffset, qerr := h.scanRead.ListWalletScans(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), query)
+	if qerr != nil {
+		return respondScanReadError(c, qerr, "wallet scan history is temporarily unavailable")
 	}
 
 	items := make([]fiber.Map, 0, len(entities))
@@ -142,8 +99,8 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"items":  items,
 		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"limit":  respLimit,
+		"offset": respOffset,
 	})
 }
 
@@ -188,13 +145,10 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScan(c *fiber.Ctx) error {
 		}))
 	}
 
-	if h.scanResultRepo != nil {
-		ent, qerr := h.scanResultRepo.FindOwnedWalletScanByID(userID, scanID)
+	if h.scanRead != nil {
+		ent, qerr := h.scanRead.GetWalletScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
+			return respondScanReadError(c, qerr, "scan detail is temporarily unavailable")
 		}
 		if ent != nil {
 			return c.JSON(walletScanDetailV1(ent, h.cfgChain))
@@ -339,21 +293,16 @@ func nistLevelToPQPosture(l domain.NISTLevel) string {
 // ListDiscoveryV1TLSDefaultScans handles GET /discovery/v1/tls/scans/defaults.
 // Returns the shared catalog of default TLS endpoints (not owner-scoped user scans).
 func (h *TLSHandler) ListDiscoveryV1TLSDefaultScans(c *fiber.Ctx) error {
-	if _, err := requireAuthenticatedUserID(c); err != nil {
+	userID, err := requireAuthenticatedUserID(c)
+	if err != nil {
 		return err
 	}
-	if h.tlsScanResultRepo == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-			"error":   "service_unavailable",
-			"message": "TLS default scan catalog is temporarily unavailable",
-		}))
+	if h.scanRead == nil {
+		return respondScanReadUnavailable(c, "TLS default scan catalog is temporarily unavailable")
 	}
-	entities, err := h.tlsScanResultRepo.FindAllDefault()
+	entities, err := h.scanRead.ListTLSDefaultScans(c.Context(), userID, tenantIDFromDiscoveryV1Request(c))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-			"error":   "internal_error",
-			"message": err.Error(),
-		}))
+		return respondScanReadError(c, err, "TLS default scan catalog is temporarily unavailable")
 	}
 	items := make([]fiber.Map, 0, len(entities))
 	for _, e := range entities {
@@ -384,19 +333,13 @@ func (h *TLSHandler) ListDiscoveryV1TLSScans(c *fiber.Ctx) error {
 			"message": "address and chain_id are not applicable to TLS scan list",
 		}))
 	}
-	if h.tlsScanResultRepo == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
-			"error":   "service_unavailable",
-			"message": "TLS scan history is temporarily unavailable",
-		}))
+	if h.scanRead == nil {
+		return respondScanReadUnavailable(c, "TLS scan history is temporarily unavailable")
 	}
 	limit, offset := parsePaginationParams(c)
-	entities, total, qerr := h.tlsScanResultRepo.ListOwnerUserTLSScansDiscoveryV1(userID, limit, offset)
+	entities, total, qerr := h.scanRead.ListTLSScans(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), limit, offset)
 	if qerr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-			"error":   "internal_error",
-			"message": qerr.Error(),
-		}))
+		return respondScanReadError(c, qerr, "TLS scan history is temporarily unavailable")
 	}
 	items := make([]fiber.Map, 0, len(entities))
 	for _, e := range entities {
@@ -424,22 +367,10 @@ func (h *TLSHandler) GetDiscoveryV1TLSScan(c *fiber.Ctx) error {
 		}))
 	}
 
-	if h.tlsScanResultRepo != nil {
-		ent, qerr := h.tlsScanResultRepo.FindOwnedUserTLSScanByID(userID, scanID)
+	if h.scanRead != nil {
+		ent, qerr := h.scanRead.GetTLSScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-				"error":   "internal_error",
-				"message": qerr.Error(),
-			}))
-		}
-		if ent == nil {
-			ent, qerr = h.tlsScanResultRepo.FindDefaultTLSScanByID(scanID)
-			if qerr != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(v1ErrorBody(fiber.Map{
-					"error":   "internal_error",
-					"message": qerr.Error(),
-				}))
-			}
+			return respondScanReadError(c, qerr, "scan detail is temporarily unavailable")
 		}
 		if ent != nil {
 			return c.JSON(tlsScanDetailV1(ent))

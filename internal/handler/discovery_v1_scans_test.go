@@ -18,7 +18,7 @@ func TestListDiscoveryV1WalletScans_ChainIDWithoutAddress(t *testing.T) {
 	h := &DiscoveryHandler{
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		cfgChain:         &config.ChainConfig{},
-		scanResultRepo:   nil,
+		scanRead:         nil,
 	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Get("/wallets/scans", func(c *fiber.Ctx) error {
@@ -38,7 +38,7 @@ func TestListDiscoveryV1WalletScans_ChainIDWithoutAddress(t *testing.T) {
 
 func TestListDiscoveryV1TLSScans_ForbiddenAddressQuery(t *testing.T) {
 	t.Parallel()
-	h := &TLSHandler{tlsScanResultRepo: nil}
+	h := &TLSHandler{scanRead: nil}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Get("/tls/scans", func(c *fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))

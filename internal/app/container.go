@@ -147,9 +147,14 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 			config.CafeCPMInternalBaseURL, config.CafePolicyReferenceInternalServiceToken)
 	}
 
-	// Initialize handlers (wallet v1 and plan quotas from Postgres; TLS list uses Redis read-through)
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanResultRepo, tlsScanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
-	tlsHandler := handler.NewTLSHandler(redisTLSRepo, tlsScanResultRepo, pendingV1Repo, policyRef)
+	scanRead, err := newScanReadStore()
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize handlers (v1 GET/list via persistence; delete and W8 still use Postgres until D6a-delete).
+	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, redisWalletRepo, redisTLSRepo, userScanCache, scanRead, scanResultRepo, scanUsageLedgerRepo, pendingV1Repo, policyRef)
+	tlsHandler := handler.NewTLSHandler(redisTLSRepo, scanRead, tlsScanResultRepo, pendingV1Repo, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
 	planHandler := handler.NewPlanHandler(planService, scanUsageLedgerRepo)

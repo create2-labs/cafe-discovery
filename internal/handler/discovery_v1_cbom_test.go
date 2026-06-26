@@ -33,7 +33,7 @@ func TestGetDiscoveryV1WalletScanCBOM_Success200(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 	}
 	h := &DiscoveryHandler{
-		scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}},
+		scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}}, nil),
 	}
 	app := fiber.New()
 	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
@@ -85,7 +85,7 @@ func TestGetDiscoveryV1WalletScanCBOM_NonSuccess404(t *testing.T) {
 				Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: 1,
 			}
 			h := &DiscoveryHandler{
-				scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}},
+				scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}}, nil),
 			}
 			app := fiber.New()
 			app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
@@ -113,7 +113,7 @@ func TestGetDiscoveryV1WalletScanCBOM_NotFound404(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	scanID := uuid.New()
-	h := &DiscoveryHandler{scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}}
+	h := &DiscoveryHandler{scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}, nil)}
 	app := fiber.New()
 	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
 		c.Locals("user_id", userID)
@@ -138,8 +138,8 @@ func TestGetDiscoveryV1WalletScanCBOM_Pending404(t *testing.T) {
 		ScanID: scanID, UserID: userID, Family: "wallet", Address: "0xabc",
 	})
 	h := &DiscoveryHandler{
-		scanResultRepo: &scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}},
-		pendingV1:      pending,
+		scanRead:  NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}, nil),
+		pendingV1: pending,
 	}
 	app := fiber.New()
 	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
