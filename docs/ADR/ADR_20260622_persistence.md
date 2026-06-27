@@ -730,7 +730,7 @@ flowchart TD
 | **PERS-D6a-read**    | `cafe-discovery` + `cafe-deploy`              | En cours  | [discovery#105](https://github.com/create2-labs/cafe-discovery/pull/105) ; [deploy ](https://github.com/create2-labs/cafe-deploy/commit/5c022a084b5338237eca8d64006360559f820cb2)  |
 | **PERS-D6a-delete**  | `cafe-discovery`                              | Planifié  | [discovery#106](https://github.com/create2-labs/cafe-discovery/pull/106) |
 | **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | [discovery#107](https://github.com/create2-labs/cafe-discovery/pull/107) |
-| **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/) ; [discovery#](https://github.com/create2-labs/cafe-discovery/pull/)|
+| **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#60](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/60) ; [discovery#108](https://github.com/create2-labs/cafe-discovery/pull/108)|
 | **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) |
 
 

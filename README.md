@@ -307,7 +307,7 @@ The project uses a multi-stage Docker build approach:
    - Output: `cafe-discovery-backend` service
 
 3. **Persistence image** (separate repo [cafe-persistence](https://github.com/create2-labs/cafe-persistence)):
-   - `Dockerfile-persistence` builds the persistence binary; deployed as `oleglod/cafe-persistence`
+   - `Dockerfile` builds the persistence binary; deployed as `oleglod/cafe-persistence`
    - Not built from this repository after PERS-D1b — see [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md)
    - Run this service so the backend can receive `persistence.ready` and seed default endpoints; API GET results depend on persistence writing after scanner completion.
 
