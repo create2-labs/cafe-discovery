@@ -263,7 +263,7 @@ L’extraction cafe-persistence et le module CP sont des changements **internes*
 
 ### 5.4 Conséquences / risques
 
-- Nouveau repo + pipeline deploy (`cafe-deploy` : cafe-persistence remplace `cafe-discovery-persistence` en alias).
+- Nouveau repo + pipeline deploy (`cafe-deploy` : image `cafe-persistence` depuis **PERS-D2** ; rename service compose `cafe-discovery-persistence` → `cafe-persistence` en **PERS-D6d**).
 - Contrats internes à versionner séparément (`cafe-contracts` ou OpenAPI interne scan vs CP).
 - Phase transitoire : Discovery lit encore Postgres scan jusqu’à D6 — **dette documentée**.
 - Chemin critique : toutes les opérations durables CP (persist **et** GET draft/policy/list) dépendent de cafe-persistence une fois `CPM_STORE=persistence` (§5.5).
@@ -639,14 +639,14 @@ cafe-crypto-policy-mgt/
 └── internal/persistence/owner_scoped_store.go  → retiré prod en D5c (bascule D5b)
 
 cafe-deploy/
-└── compose/20-discovery.yml             → cafe-discovery-persistence (à renommer)
+└── compose/20-discovery.yml             → service `cafe-persistence` (rename PERS-D6d ; option B jusqu’à D6c)
 ```
 
 ---
 
 ## 14. Découpage PR (PERS-D*)
 
-> **Statut du §14 :** index normatif (ordre + table PR). **Source d’exécution détaillée :** [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md) — les deux documents doivent rester **alignés** (ordre, prérequis, jalons D4b / D5c). L’**ADR architecture (§1–§13)** peut être signée indépendamment.
+> **Statut du §14 :** index normatif (ordre + table PR). **Source d’exécution détaillée :** [ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md) — les deux documents doivent rester **alignés** (ordre, prérequis, jalons D4b / D5c / D6b / D6d). L’**ADR architecture (§1–§13)** peut être signée indépendamment.
 
 ### 14.0 Ajustements prioritaires (retour revue)
 
@@ -681,6 +681,7 @@ Trois durcissements recommandés avant exécution :
 | **PERS-D6a-pending** | D6    | D6a-delete            | `cafe-discovery`                              | Scan pending interne               | POST accept / réservation via D3a ; **dernier** (W8)                                                |
 | **PERS-D6b**         | D6    | **D4b**, **D5c**      | `cafe-discovery` + `cafe-crypto-policy-mgt`   | W1/W3 via persistence              | Existence only §9.3 ; API `internal/cp/v1` ; retrait refs internes CPM                              |
 | **PERS-D6c**         | D6    | D6a-pending, D6b, D5c | `cafe-deploy`                                 | E2E stack                          | Smokes scan + CP + restart ; checklist §11                                                          |
+| **PERS-D6d**         | D6    | **D6c**               | `cafe-deploy` (+ doc CPM / Discovery)        | Rename service compose             | Service `cafe-discovery-persistence` → `cafe-persistence` ; DNS/URLs/smokes alignés ; image inchangée |
 
 
 ### 14.2 Ordre de merge recommandé (révisé)
@@ -705,6 +706,7 @@ flowchart TD
   D5c --> D6b[PERS-D6b W1 W3]
   D6p --> D6c[PERS-D6c E2E]
   D6b --> D6c
+  D6c --> D6dR[PERS-D6d compose rename]
 ```
 
 
@@ -732,6 +734,7 @@ flowchart TD
 | **PERS-D6a-pending** | `cafe-discovery`                              | Planifié  | [discovery#107](https://github.com/create2-labs/cafe-discovery/pull/107) |
 | **PERS-D6b**         | `cafe-discovery` + `cafe-crypto-policy-mgt`   | Planifié  | [cpm#60](https://github.com/create2-labs/cafe-crypto-policy-mgt/pull/60) ; [discovery#108](https://github.com/create2-labs/cafe-discovery/pull/108)|
 | **PERS-D6c**         | `cafe-deploy`                                 | Planifié  | [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) |
+| **PERS-D6d**         | `cafe-deploy`                                 | Planifié  | [deploy#](https://github.com/create2-labs/cafe-deploy/pull/) |
 
 
 **Parallèle après D2b :** chaînes **scan** et **CP** indépendantes :
@@ -741,10 +744,10 @@ flowchart TD
 | ----------- | ---------------------------------------------------------------------------------------- |
 | Scan        | `D3a-spec → D3a-impl → D6a-read → D6a-delete → D6a-pending`                              |
 | CP / CPM    | `D3b-spec → D4 → D4b → D5a → D5b → D5c`                                                  |
-| Convergence | `D6b` après **D4b** (existence API) et **D5c** ; `D6c` après `D6a-pending`, `D6b`, `D5c` |
+| Convergence | `D6b` après **D4b** (existence API) et **D5c** ; `D6c` après `D6a-pending`, `D6b`, `D5c` ; `D6d` après **D6c** (rename compose, ops) |
 
 
-**D6a-*** et la chaîne CP peuvent avancer **en parallèle** après leurs prérequis respectifs (pas de dépendance croisée scan/CP avant D6c).
+**D6a-*** et la chaîne CP peuvent avancer **en parallèle** après leurs prérequis respectifs (pas de dépendance croisée scan/CP avant D6c). **PERS-D6d** est **hors chemin critique** fonctionnel (alignement nommage ops uniquement).
 
 ### 14.3 Rollback D1 / D2 (entre-deux)
 
@@ -784,10 +787,11 @@ flowchart TD
 - **PERS-D4b** : pas de routes publiques `/api/persistence/`* ni `/api/cpm/v1`.
 - **PERS-D5** : pas de changement OpenAPI `cpm-v1.yaml` paths publics ; pas de bascule prod `CPM_STORE=persistence` dans D5a ; pas de suppression `OwnerScopedStore` dans D5b.
 - **PERS-D6** : pas de logique explore/ranking CP dans Discovery (§9.3, §11.2).
+- **PERS-D6d** : pas de changement image, DDL, API publiques, ni contrats internes ; pas de purge tags registry `oleglod/cafe-discovery-persistence` (fenêtre §PERSISTENCE_EXTRACTION).
 
 ### 14.7 Mini-plans PR (exécution)
 
-**[ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md)** est la **source d’exécution** (checklists, rollback, tests). Le §14 ci-dessus en est le **résumé normatif** : en cas d’écart, mettre à jour les deux fichiers. Au minimum : ordre de merge, colonne **Prérequis** §14.1, et jalons **D4b / D5c / D6b**.
+**[ADR_20260622_PR_PLAN.md](./ADR_20260622_PR_PLAN.md)** est la **source d’exécution** (checklists, rollback, tests). Le §14 ci-dessus en est le **résumé normatif** : en cas d’écart, mettre à jour les deux fichiers. Au minimum : ordre de merge, colonne **Prérequis** §14.1, et jalons **D4b / D5c / D6b / D6d**.
 
 Copier la section jalon correspondante dans la description GitHub à l’ouverture de chaque PR.
 
@@ -811,6 +815,7 @@ Copier la section jalon correspondante dans la description GitHub à l’ouvertu
 | 1.4.5   | PERS-D0 : liens README/TODO Discovery, workplan/TODO CPM ; corrections Markdown §5.6 / §14                            |
 | 1.4.6   | §14.2 tableau de suivi des PR (liens GitHub D0–D2 mergés)                                                             |
 | 2026-06-26 | 1.4.7   | **PERS-D6a-read** en cours : client `scanread`/`scanhttp` Discovery ; wiring `DISCOVERY_PERSISTENCE_URL` + token sur `cafe-discovery-backend` (`cafe-deploy`) ; lectures v1 hors Postgres ; DELETE/pending/W8 inchangés |
+| 2026-06-27 | 1.4.8   | **PERS-D6d** : rename service compose `cafe-discovery-persistence` → `cafe-persistence` (option A PERS-D2), planifié après D6c ; §14.1, PR plan, PERSISTENCE_EXTRACTION |
 
 
 ---

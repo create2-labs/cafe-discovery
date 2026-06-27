@@ -113,6 +113,8 @@ Bascule **compose / smokes** vers `cafe-persistence` **sans** supprimer le code 
 | **A** — Renommer service `cafe-persistence`, nouvelle var `PERSISTENCE_VERSION` | Clair | Deux vars à gérer |
 | **B** — Garder nom compose `cafe-discovery-persistence`, image `oleglod/cafe-persistence` | Moins de churn scripts | Nom service ≠ nom image |
 
+**Décision PERS-D2 (mergé) :** option **B**. L’option **A** (rename service → `cafe-persistence`) est reportée à **PERS-D6d** (après D6c) — voir [§ PERS-D6d](#pers-d6d--rename-service-compose).
+
 **Recommandation PR :** documenter le choix + commande rollback explicite.
 
 ### Critères merge
@@ -413,6 +415,71 @@ postgres healthy → nats started → redis healthy
 
 ---
 
+## PERS-D6d — Rename service compose
+
+| Champ | Valeur |
+|-------|--------|
+| **Lead** | `cafe-deploy` |
+| **Prérequis** | **PERS-D6c** mergé (migration persistence fonctionnellement close) |
+| **Scope** | Alignement DNS Docker / nommage ops — **option A** reportée depuis PERS-D2 |
+| **Ne touche pas** | Image `oleglod/cafe-persistence` ; contrats `internal/scan/v1` et `internal/cp/v1` ; API publiques ; purge registry `oleglod/cafe-discovery-persistence` |
+
+### Contexte
+
+PERS-D2 a basculé l’**image** vers `oleglod/cafe-persistence` en conservant le **nom de service** `cafe-discovery-persistence` (option B). PERS-D6d aligne le nom compose/DNS sur le repo plateforme.
+
+| Avant (option B) | Après (PERS-D6d) |
+|------------------|------------------|
+| Service compose `cafe-discovery-persistence` | `cafe-persistence` |
+| `container_name: cafe-discovery-persistence-${ENV}` | `cafe-persistence-${ENV}` |
+| `http://cafe-discovery-persistence:8082` | `http://cafe-persistence:8082` |
+| Image | **Inchangée** — `oleglod/cafe-persistence:${PERSISTENCE_VERSION}` |
+
+### Fichiers touchés (indicatif)
+
+| Fichier | Changement |
+|---------|------------|
+| `compose/20-discovery.yml` | Clé service, `container_name`, `depends_on`, commentaires token |
+| `compose/25-cpm.yml` | `depends_on`, commentaires token |
+| `env/dev.env.template`, `env/staging.env.template`, `env/prod.env.template` | `CPM_PERSISTENCE_URL`, `DISCOVERY_PERSISTENCE_URL` |
+| `env/dev.local.env` | idem (si présent dans le repo) |
+| `scripts/contract-checks.sh` | Assertions URL + `depends_on` |
+| `scripts/test-cpm-cp-persist-d5-restart-survival.sh` | `PERSISTENCE_CONTAINER`, `compose_restart` |
+| `scripts/test-discovery-imm6b1-ledger-schema.sh` | défaut `PERSISTENCE_CONTAINER` |
+| `scripts/test-discovery-imm6b4-commit-on-success.sh` | idem |
+| `README.md`, `CHANGELOG.md`, `TODO.md` | références service |
+| `docs/RUNBOOK_SCAN_HISTORY.md`, `docs/RUNBOOK_CP_PERSISTENCE.md` | commandes `docker compose` / `docker exec` |
+| `cafe-crypto-policy-mgt/README.md`, `docs/PERS_D5B_ROLLOUT.md`, `docs/PERS_D5C_REMOVE_MEMORY.md` | exemples d’URL |
+| `cafe-discovery/README.md`, `docs/PERSISTENCE_EXTRACTION.md` | tableau « compose service name » |
+
+### Critères merge
+
+- [ ] Service compose et `container_name` = `cafe-persistence` / `cafe-persistence-${ENV}`
+- [ ] Tous les `*_PERSISTENCE_URL` internes pointent `http://cafe-persistence:8082`
+- [ ] `contract-checks.sh` vert
+- [ ] Smokes scan + CP + restart **verts** (`test-discovery-imm*`, `test-cpm-cp-persist-d5-restart-survival.sh`)
+- [ ] Redéploiement stack dev/staging : `up -d` sur persistence, backend, cpm (recréation conteneurs requise — hostname DNS change)
+- [ ] Doc rollback **image** legacy inchangée (`oleglod/cafe-discovery-persistence` sur registry — hors scope)
+
+### Test plan
+
+1. `scripts/contract-checks.sh`
+2. `./scripts/test-discovery-imm6b4-commit-on-success.sh` (ou suite IMM pertinente)
+3. `./scripts/test-cpm-cp-persist-d5-restart-survival.sh` (CPM `CPM_STORE=persistence`)
+4. Vérifier résolution DNS depuis `cafe-cpm` et `cafe-discovery-backend` : `curl -fsS http://cafe-persistence:8082/ready` *(adapter port si health interne)*
+
+### Rollback
+
+Revert la PR compose/env/scripts ; recréer les conteneurs avec l’ancien hostname `cafe-discovery-persistence`. Aucun changement de données Postgres/Redis.
+
+### Non-objectifs
+
+- Renommer l’image Docker Hub ou purger `oleglod/cafe-discovery-persistence`
+- Modifier le code applicatif Discovery / CPM / cafe-persistence (sauf commentaires doc)
+- Exposer cafe-persistence sur l’edge public
+
+---
+
 ## Ordre rappel (jalons sensibles)
 
 ```
@@ -421,6 +488,7 @@ D0 → D1 → D2 → D1b ─┐
 
 Chaîne scan : D3a-spec → D3a-impl → D6a-read → D6a-delete → D6a-pending
 Chaîne CP   : D3b-spec → D4 → D4b → D5a → D5b → D5c → D6b
+Ops         : D6c (E2E) → D6d (rename compose service)
 ```
 
 **Règle d’or :** tant que D2 n’est pas vert, **ne pas merger D1b**.  
