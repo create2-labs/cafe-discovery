@@ -185,7 +185,7 @@ The application is designed to be scalable with a focus on performance.
   - Enforcing valid scan state transitions
   - Publishing `persistence.ready` on startup so the backend can wait for persistence before initializing default endpoints
 - **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run cafe-persistence before or with the backend for full functionality.
-- **Deployment**: Image `oleglod/cafe-persistence:${PERSISTENCE_VERSION}` via [cafe-deploy](https://github.com/create2-labs/cafe-deploy) (compose service `cafe-discovery-persistence`). Legacy rollback: [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md).
+- **Deployment**: Image `oleglod/cafe-persistence:${PERSISTENCE_VERSION}` via [cafe-deploy](https://github.com/create2-labs/cafe-deploy) (compose service `cafe-persistence`). Legacy rollback: [docs/PERSISTENCE_EXTRACTION.md](docs/PERSISTENCE_EXTRACTION.md).
 
 #### 4. NATS
 
