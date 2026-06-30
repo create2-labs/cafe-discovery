@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
@@ -19,14 +18,14 @@ func initHTTPMetrics() {
 	if httpRequestsTotal != nil {
 		return
 	}
-	httpRequestsTotal = promauto.NewCounterVec(
+	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Total number of HTTP requests",
 		},
 		[]string{"method", "status", "path"},
 	)
-	httpRequestDurationSeconds = promauto.NewHistogramVec(
+	httpRequestDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "http_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
@@ -34,6 +33,7 @@ func initHTTPMetrics() {
 		},
 		[]string{"method", "status", "path"},
 	)
+	registerCollectors(httpRequestsTotal, httpRequestDurationSeconds)
 }
 
 // HTTPMiddleware records Prometheus metrics compatible with the Grafana API dashboard (http_requests_total, http_request_duration_seconds_bucket).
@@ -43,9 +43,13 @@ func HTTPMiddleware() fiber.Handler {
 		start := time.Now()
 		err := c.Next()
 
+		if c.Path() == "/metrics" {
+			return err
+		}
+
 		path := routePath(c)
-		status := strconv.Itoa(c.Response().StatusCode())
-		method := canonicalHTTPMethod(c.Method())
+		status := sanitizeLabelValue(strconv.Itoa(c.Response().StatusCode()))
+		method := sanitizeLabelValue(canonicalHTTPMethod(c.Method()))
 
 		httpRequestsTotal.WithLabelValues(method, status, path).Inc()
 		httpRequestDurationSeconds.WithLabelValues(method, status, path).Observe(time.Since(start).Seconds())
@@ -74,11 +78,20 @@ func canonicalHTTPMethod(m string) string {
 
 func routePath(c *fiber.Ctx) string {
 	if r := c.Route(); r != nil && r.Path != "" {
-		return r.Path
+		return sanitizeLabelValue(r.Path)
 	}
-	p := c.Path()
-	if p == "" {
-		return "/"
+	return "_unmatched"
+}
+
+const maxLabelValueLen = 128
+
+func sanitizeLabelValue(v string) string {
+	v = strings.ToValidUTF8(strings.TrimSpace(v), "_")
+	if v == "" {
+		return "_empty"
 	}
-	return p
+	if len(v) > maxLabelValueLen {
+		return v[:maxLabelValueLen]
+	}
+	return v
 }

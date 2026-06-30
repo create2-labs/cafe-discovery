@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 // ScanMetrics holds all Prometheus metrics for scan operations
@@ -42,14 +41,14 @@ func Init() *ScanMetrics {
 
 	defaultMetrics = &ScanMetrics{
 		// Wallet scan metrics
-		WalletScansTotal: promauto.NewCounterVec(
+		WalletScansTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_wallet_scans_total",
 				Help: "Total number of wallet scans performed",
 			},
 			[]string{"scan_type"}, // scan_type: wallet
 		),
-		WalletScanDuration: promauto.NewHistogramVec(
+		WalletScanDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "cafe_discovery_wallet_scan_duration_seconds",
 				Help:    "Duration of wallet scans in seconds",
@@ -57,14 +56,14 @@ func Init() *ScanMetrics {
 			},
 			[]string{"scan_type"}, // scan_type: wallet
 		),
-		WalletScanSuccessTotal: promauto.NewCounterVec(
+		WalletScanSuccessTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_wallet_scan_success_total",
 				Help: "Total number of successful wallet scans",
 			},
 			[]string{"scan_type", "result"}, // scan_type: wallet, result: success
 		),
-		WalletScanErrorTotal: promauto.NewCounterVec(
+		WalletScanErrorTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_wallet_scan_error_total",
 				Help: "Total number of failed wallet scans",
@@ -73,14 +72,14 @@ func Init() *ScanMetrics {
 		),
 
 		// TLS scan metrics
-		TLSScansTotal: promauto.NewCounterVec(
+		TLSScansTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_tls_scans_total",
 				Help: "Total number of TLS scans performed",
 			},
 			[]string{"scan_type"}, // scan_type: tls
 		),
-		TLSScanDuration: promauto.NewHistogramVec(
+		TLSScanDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "cafe_discovery_tls_scan_duration_seconds",
 				Help:    "Duration of TLS scans in seconds",
@@ -88,14 +87,14 @@ func Init() *ScanMetrics {
 			},
 			[]string{"scan_type"}, // scan_type: tls
 		),
-		TLSScanSuccessTotal: promauto.NewCounterVec(
+		TLSScanSuccessTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_tls_scan_success_total",
 				Help: "Total number of successful TLS scans",
 			},
 			[]string{"scan_type", "result"}, // scan_type: tls, result: success
 		),
-		TLSScanErrorTotal: promauto.NewCounterVec(
+		TLSScanErrorTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cafe_discovery_tls_scan_error_total",
 				Help: "Total number of failed TLS scans",
@@ -103,7 +102,7 @@ func Init() *ScanMetrics {
 			[]string{"scan_type", "result"}, // scan_type: tls, result: failure
 		),
 
-		ScanAuthzDecisionsTotal: promauto.NewCounterVec(
+		ScanAuthzDecisionsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "discovery_scan_authz_decisions_total",
 				Help: "Total number of scan authorization decisions evaluated by the AUTH-05 internal endpoint",
@@ -111,6 +110,18 @@ func Init() *ScanMetrics {
 			[]string{"outcome", "reason_code", "route"},
 		),
 	}
+
+	registerCollectors(
+		defaultMetrics.WalletScansTotal,
+		defaultMetrics.WalletScanDuration,
+		defaultMetrics.WalletScanSuccessTotal,
+		defaultMetrics.WalletScanErrorTotal,
+		defaultMetrics.TLSScansTotal,
+		defaultMetrics.TLSScanDuration,
+		defaultMetrics.TLSScanSuccessTotal,
+		defaultMetrics.TLSScanErrorTotal,
+		defaultMetrics.ScanAuthzDecisionsTotal,
+	)
 
 	initHTTPMetrics()
 	return defaultMetrics

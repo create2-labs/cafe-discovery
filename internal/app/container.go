@@ -27,7 +27,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 )
 
@@ -252,7 +251,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 
 	// Prometheus metrics endpoint (public)
 	// This endpoint exposes metrics in Prometheus format for scraping
-	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+	app.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
 
 	// Public discovery utilities v1 (no JWT) — WORKPLAN_API_PR PR13d.
 	v1Public := app.Group(discoveryroutes.V1Base)
