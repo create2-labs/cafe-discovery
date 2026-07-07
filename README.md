@@ -25,7 +25,8 @@
       2. [Pipeline Separation](#pipeline-separation)
          1. [1. Pull Request CI (`.github/workflows/ci.yml`)](#1-pull-request-ci-githubworkflowsciyml)
             1. [Running CI Locally](#running-ci-locally)
-         2. [2. Docker Release Pipeline (`.github/workflows/docker-release.yml`)](#2-docker-release-pipeline-githubworkflowsdocker-releaseyml)
+         2. [2. Docker RC Pipeline (`.github/workflows/docker-rc.yml`)](#2-docker-rc-pipeline-githubworkflowsdocker-rcyml)
+         3. [3. Docker Release Pipeline (`.github/workflows/docker-release.yml`)](#3-docker-release-pipeline-githubworkflowsdocker-releaseyml)
       3. [Release Procedure](#release-procedure)
       4. [Security and Auditability](#security-and-auditability)
       5. [Image Tags](#image-tags)
@@ -425,7 +426,7 @@ Scanner images are published from dedicated repositories:
 
 ### Pipeline Separation
 
-The CI/CD pipeline is strictly separated into two distinct workflows:
+The CI/CD pipeline is strictly separated into three distinct workflows:
 
 #### 1. Pull Request CI (`.github/workflows/ci.yml`)
 
@@ -532,44 +533,55 @@ The CI images (`ci` target) include:
 
 The CI images are based on the `builder` stage, which includes the full build environment. They execute the CI checks as the default command when run.
 
-#### 2. Docker Release Pipeline (`.github/workflows/docker-release.yml`)
+#### 2. Docker RC Pipeline (`.github/workflows/docker-rc.yml`)
+
+**Trigger**: PR label `rc-vX.Y.Z` or `build-vX.Y.Z` (internal PRs only), or manual **Run workflow** (`workflow_dispatch`).
+
+**Purpose**: Build, scan, and push RC images to Docker Hub for staging and later release promotion. This is the **only** workflow that compiles the backend image and injects `APP_VERSION`.
+
+**Registry**: `oleglod/cafe-discovery-backend` on Docker Hub.
+
+**Process**:
+1. **Extract version information** from the commit being built:
+   - `short_sha` — always (source of truth for promotion)
+   - Optional `rc_tag` — when **Target version** is set on manual run, or from PR label (`vX.Y.Z-rc<run_id>`)
+   - `app_version` — passed as `--build-arg APP_VERSION=...` (exposed by `GET /version`):
+     - `vX.Y.Z-rc<run_id>` when an RC tag is produced
+     - `dev-<short_sha>` otherwise
+
+2. **Build and scan** (linux/amd64 local load, then multi-arch push):
+   - Docker Scout scans the amd64 image (critical/high; non-blocking by default)
+   - Multi-arch push: `linux/amd64`, `linux/arm64`
+
+3. **Publish** (always `sha-<short_sha>`; optional RC tag):
+   - `oleglod/cafe-discovery-backend:sha-<short_sha>` — **required** before release
+   - `oleglod/cafe-discovery-backend:vX.Y.Z-rc<run_id>` — optional, human-readable RC tag
+   - Does **not** push `vX.Y.Z` or `latest` (release promotes those)
+
+**Security Gates**:
+- Fork PRs are refused (no secrets on untrusted code)
+- Docker Scout runs on the RC build
+
+See [cafe-deploy README — Step 2 (Docker RC)](https://github.com/create2-labs/cafe-deploy/blob/main/README.md#step-2--build-and-push-rc-images-docker-rc) for operational triggers and env pinning.
+
+#### 3. Docker Release Pipeline (`.github/workflows/docker-release.yml`)
 
 **Trigger**: Push of Git tags matching `v*.*.*` (e.g., `v1.2.3`)
 
-**Purpose**: Build, scan, and publish Docker images to GitHub Container Registry (GHCR) for use by cafe-deploy.
+**Purpose**: **Promote** an existing RC image to release tags — **no rebuild**, same image digest as `sha-<short_sha>`.
 
-**Registry**: Images are published to Docker Hub (`oleglod/`):
-- `oleglod/cafe-discovery-backend:${VERSION}`
-- `oleglod/cafe-scanner-wallet:${VERSION}` (published from `cafe-scanner-wallet`)
+**Registry**: `oleglod/cafe-discovery-backend` on Docker Hub.
 
 **Process**:
-1. **Extract version information** from the Git tag:
-   - Full version: `vX.Y.Z` (from tag)
-   - Minor version: `vX.Y` (derived)
-   - Short commit SHA (for traceability)
+1. **Extract version** from the Git tag (`vX.Y.Z`) and resolve `short_sha` from the tagged commit.
+2. **Verify** that `oleglod/cafe-discovery-backend:sha-<short_sha>` exists and is multi-arch (`linux/amd64`, `linux/arm64`).
+3. **Promote** via `docker buildx imagetools create` (retag only):
+   - `oleglod/cafe-discovery-backend:vX.Y.Z`
+   - `oleglod/cafe-discovery-backend:latest`
 
-2. **Build images** (linux/amd64 only):
-   - `oleglod/cafe-discovery-backend`
-   - scanner images are built in their dedicated repositories
-   - persistence: `oleglod/cafe-persistence` (cafe-persistence repo)
+**Important**: Release does **not** rebuild the image and does **not** change `APP_VERSION` baked in at RC build time. `GET /version` still reports whatever was set when Docker RC ran. Aligning `/version` with the semver Docker tag without rebuilding is an open decision — see [cafe-deploy `TODO.md`](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md) (must preserve promote-without-rebuild).
 
-3. **Security scanning** (Docker Scout):
-   - Scan backend image for critical and high-severity vulnerabilities
-   - If the scan fails, the job fails
-   - **No images are published** if scanning fails
-
-4. **Publish images** (only if scan passes):
-   - Backend image is published with tags:
-     - `vX.Y.Z` (full version from tag)
-     - `vX.Y` (minor version)
-     - `sha-<short-sha>` (commit SHA for traceability)
-     - `latest` (points to most recent release)
-   - All tags are linux/amd64
-   - Images include version metadata via `APP_VERSION` build argument
-
-**Security Gates**:
-- Docker Scout vulnerability scanning blocks publication
-- All published images are traceable to a Git tag and commit SHA
+**Prerequisite**: Docker RC must have been run for the same commit before pushing the Git tag; otherwise promotion fails.
 
 ### Release Procedure
 
@@ -581,7 +593,13 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
    - Ensure the PR has passed all CI checks (lint, tests, govulncheck)
    - Merge the PR into `main`
 
-2. **Create Git tag** (manually, after merge):
+2. **Run Docker RC** on `main` (Actions → Docker RC → Run workflow):
+   - Optionally set **Target version** to the planned semver (`1.2.3` or `v1.2.3`) so `APP_VERSION` and an optional RC tag reflect the release line
+   - Confirms `oleglod/cafe-discovery-backend:sha-<short_sha>` exists on Docker Hub
+
+3. **Validate in staging** (cafe-deploy): pin `DISCOVERY_VERSION` to `sha-<short_sha>` or the RC tag; run smokes.
+
+4. **Create Git tag** (manually, after validation):
    ```bash
    git checkout main
    git pull origin main
@@ -589,12 +607,9 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
    git push origin v1.2.3
    ```
 
-3. **CI automatically**:
-   - Detects the tag push
-   - Builds both Docker images (amd64)
-   - Scans both images with Docker Scout
-   - If scans pass, publishes both images with all tags
-   - If scans fail, publishes nothing
+5. **Docker Release runs automatically**:
+   - Promotes `sha-<short_sha>` to `v1.2.3` and `latest` (no rebuild)
+   - Fails if the RC image for that commit is missing or not multi-arch
 
 ### Security and Auditability
 
@@ -611,24 +626,25 @@ Releases are **manual and explicit**. The CI system never creates tags automatic
 
 **Security Enforcement**:
 - `govulncheck` blocks PR merges (prevents vulnerable code from entering `main`)
-- Docker Scout blocks image publication (prevents vulnerable images from being published)
-- Backend and persistence images are released together; scanner images are versioned independently in dedicated repositories.
+- Docker Scout runs on RC builds (critical/high severities)
+- Backend and persistence images are built and released from separate repositories; scanner images are versioned independently.
 
 **Failure Handling**:
-- If any image fails scanning, **nothing is published**
-- This ensures all services are always at the same security level
-- Failed releases require fixing vulnerabilities and re-tagging
+- Release promotion fails if the RC image `sha-<short_sha>` is absent — fix by running Docker RC for that commit, then re-push the tag or create a new tag on the same commit
 
 ### Image Tags
 
-All three images receive identical tags:
+**Docker RC** (build):
 
-- `v1.2.3`: Full semantic version (from Git tag)
-- `v1.2`: Minor version (for compatibility)
-- `sha-abc1234`: Commit SHA (for traceability)
-- `latest`: Latest release (points to most recent release)
+- `sha-<short_sha>` — always pushed; source of truth for promotion and staging pins
+- `vX.Y.Z-rc<run_id>` — optional, when target version or PR label is provided
 
-All tags are built for `linux/amd64` (and `linux/arm64` in RC/release). Image from this repository: `cafe-discovery-backend`. Persistence: `oleglod/cafe-persistence` ([cafe-persistence](https://github.com/create2-labs/cafe-persistence)).
+**Docker Release** (promote, no rebuild):
+
+- `vX.Y.Z` — from Git tag
+- `latest` — most recent release
+
+RC and release images are multi-arch (`linux/amd64`, `linux/arm64`). Image from this repository: `cafe-discovery-backend`. Persistence: `oleglod/cafe-persistence` ([cafe-persistence](https://github.com/create2-labs/cafe-persistence)).
 
 ### Version Endpoint
 
@@ -645,17 +661,18 @@ Response:
 }
 ```
 
-The version is extracted from the `APP_VERSION` build argument during Docker image build, which is set from Git tags in CI/CD pipelines.
+`APP_VERSION` is set **only** when Docker RC builds the image (`--build-arg APP_VERSION=...`): `vX.Y.Z-rc<run_id>` when a target version or RC label is provided, otherwise `dev-<short_sha>`. Docker Release promotes tags but does **not** rebuild or change `APP_VERSION`.
 
 #### Version flow (end-to-end)
 
-The version displayed to users is consistent from build to frontend:
+1. **Docker RC** (`docker-rc.yml`): passes `--build-arg APP_VERSION=...` to the backend image build.
+2. **Dockerfile**: embeds `APP_VERSION` into the Go binary via `-ldflags` (`internal/version`). Runtime override via `APP_VERSION` env is also supported (not set by cafe-deploy compose today).
+3. **Docker Release** (`docker-release.yml`): retags `sha-<short_sha>` to `vX.Y.Z` / `latest` only — same digest, same baked-in version.
+4. **Backend container**: serves `GET /version` on port **8080**, returning `{"version": "..."}`.
+5. **Infra** (cafe-deploy): NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8080/version`.
+6. **Frontend** (cafe-frontend): `platformService.getBackendVersion()` calls `/api/version` and displays the value to the user.
 
-1. **GitHub Action** (on tag): `docker-release.yml` sets `APP_VERSION` from the Git tag (e.g. `v1.2.3`) and passes it as `--build-arg APP_VERSION=...` to the backend image build.
-2. **Dockerfile**: At build time, embeds `APP_VERSION` into the Go binary via `-ldflags` (`internal/version`). Runtime override via `APP_VERSION` env is also supported.
-3. **Backend container**: The Go server serves `GET /version` on port **8080** (same port as the main API), returning `{"version": "..."}`.
-4. **Infra** (cafe-deploy): The main NGINX proxies `location = /api/version` to `http://cafe-discovery-backend:8080/version`.
-5. **Frontend** (cafe-frontend): `platformService.getBackendVersion()` calls `api.get('/version')` (i.e. `/api/version`), receives `{"version": "vX.Y.Z"}`, and displays the discovery backend version to the user.
+`GET /version` may therefore differ from the Docker Hub release tag (e.g. `dev-abc1234` or `v1.2.3-rc123` while the deployed image tag is `v1.2.3`). How to align them without rebuilding at release is documented as an open decision in [cafe-deploy `TODO.md`](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md).
 
 The response format **must** remain `{"version": "..."}`; the frontend and infra rely on it.
 
@@ -1728,7 +1745,7 @@ Get the backend version information.
 }
 ```
 
-The version is embedded at Docker build time via `-ldflags` (`internal/version`) from the `APP_VERSION` build argument, with optional runtime override via the `APP_VERSION` environment variable.
+The version is embedded at Docker RC build time via `-ldflags` (`internal/version`) from the `APP_VERSION` build argument, with optional runtime override via the `APP_VERSION` environment variable. Docker Release does not change this value.
 
 ### GET /health
 
