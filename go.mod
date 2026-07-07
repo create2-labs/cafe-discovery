@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/create2-labs/cafe-contracts v0.0.2-0.20260427135040-13e8ec5f9ea0
 	github.com/ethereum/go-ethereum v1.17.2
-	github.com/gofiber/fiber/v2 v2.52.13
+	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.51.0

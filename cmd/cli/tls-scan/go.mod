@@ -7,7 +7,7 @@ replace github.com/consensys/gnark-crypto => github.com/consensys/gnark-crypto v
 require (
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.17.0
-	github.com/gofiber/fiber/v2 v2.52.13
+	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/jackc/pgx/v5 v5.9.2
 	golang.org/x/crypto v0.45.0
 	gorm.io/driver/postgres v1.6.0
