@@ -4,7 +4,7 @@ import (
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
@@ -23,7 +23,7 @@ func NewPlanHandler(planService *service.PlanService, scanUsageLedger repository
 }
 
 // GetUserPlan handles GET /plans/current
-func (h *PlanHandler) GetUserPlan(c *fiber.Ctx) error {
+func (h *PlanHandler) GetUserPlan(c fiber.Ctx) error {
 	// Get user ID from JWT context
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
@@ -50,7 +50,7 @@ func (h *PlanHandler) GetUserPlan(c *fiber.Ctx) error {
 }
 
 // GetAllPlans handles GET /plans
-func (h *PlanHandler) GetAllPlans(c *fiber.Ctx) error {
+func (h *PlanHandler) GetAllPlans(c fiber.Ctx) error {
 	plans, err := h.planService.GetAllPlans()
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -65,7 +65,7 @@ func (h *PlanHandler) GetAllPlans(c *fiber.Ctx) error {
 }
 
 // GetPlanUsage handles GET /plans/usage
-func (h *PlanHandler) GetPlanUsage(c *fiber.Ctx) error {
+func (h *PlanHandler) GetPlanUsage(c fiber.Ctx) error {
 	// Get user ID from JWT context
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
@@ -87,4 +87,3 @@ func (h *PlanHandler) GetPlanUsage(c *fiber.Ctx) error {
 	}
 	return c.JSON(usage)
 }
-

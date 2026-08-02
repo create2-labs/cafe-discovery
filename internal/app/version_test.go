@@ -5,24 +5,25 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"cafe-discovery/internal/version"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestGetVersionReturnsJSON(t *testing.T) {
 	t.Setenv("APP_VERSION", "v1.2.3-test")
 	t.Cleanup(func() { _ = os.Unsetenv("APP_VERSION") })
 
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Get("/version", func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Get("/version", func(c fiber.Ctx) error {
 		return c.JSON(version.Payload())
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET /version: %v", err)
 	}
@@ -31,8 +32,8 @@ func TestGetVersionReturnsJSON(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("Content-Type = %q, want application/json", ct)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json (+ optional charset)", ct)
 	}
 
 	var body version.Response

@@ -6,7 +6,7 @@ import (
 
 	"cafe-discovery/internal/authz"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // InternalServiceAuthConfig configures the internal service-to-service auth
@@ -38,7 +38,7 @@ type InternalServiceAuthConfig struct {
 // service identity (mTLS or signed service JWT) once the platform supports
 // it. The token comparison is constant-time to avoid timing oracles.
 func InternalServiceAuth(cfg InternalServiceAuthConfig) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		header := strings.TrimSpace(c.Get(fiber.HeaderAuthorization))
 		if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
 			return rejectInternalServiceAuth(c, cfg)
@@ -58,7 +58,7 @@ func InternalServiceAuth(cfg InternalServiceAuthConfig) fiber.Handler {
 	}
 }
 
-func rejectInternalServiceAuth(c *fiber.Ctx, cfg InternalServiceAuthConfig) error {
+func rejectInternalServiceAuth(c fiber.Ctx, cfg InternalServiceAuthConfig) error {
 	if cfg.OnReject != nil {
 		return cfg.OnReject(c)
 	}

@@ -17,7 +17,7 @@ import (
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -74,7 +74,7 @@ type ScanRequest struct {
 
 // ListAvailableScanners returns the list of scanner types currently available (announced via NATS).
 // GET /discovery/v1/scanners
-func (h *DiscoveryHandler) ListAvailableScanners(c *fiber.Ctx) error {
+func (h *DiscoveryHandler) ListAvailableScanners(c fiber.Ctx) error {
 	scanners := []service.ScannerInfo{}
 	if h.scannerPresence != nil {
 		scanners = h.scannerPresence.ListScanners()
@@ -84,7 +84,7 @@ func (h *DiscoveryHandler) ListAvailableScanners(c *fiber.Ctx) error {
 
 // getAuthenticatedUserID extracts user ID from JWT context. Call only on routes protected by JWTMiddleware.
 // Returns 401/403 with explicit error so the frontend can redirect to sign-in.
-func (h *DiscoveryHandler) getAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, error) {
+func (h *DiscoveryHandler) getAuthenticatedUserID(c fiber.Ctx) (uuid.UUID, error) {
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
 		return uuid.Nil, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -158,9 +158,9 @@ type queueScanError struct {
 
 // PostDiscoveryScanV1 handles POST /discovery/v1/scan (WORKPLAN_API.md §0.1, OpenAPI postScan).
 // Body matches legacy POST /discovery/scan; acceptance returns scan_id, scan_family, status requested, and location.
-func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
+func (h *DiscoveryHandler) PostDiscoveryScanV1(c fiber.Ctx) error {
 	var req ScanRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_request",
 			"message": "invalid request body",
@@ -187,7 +187,7 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		tenantID := tenantIDFromDiscoveryV1Request(c)
-		reserved, err := h.scanPending.ReserveWallet(c.Context(), userID, tenantID, &scanpending.Record{
+		reserved, err := h.scanPending.ReserveWallet(c.RequestCtx(), userID, tenantID, &scanpending.Record{
 			ScanID:    scanID,
 			UserID:    userID,
 			Family:    "wallet",
@@ -205,7 +205,7 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanInProgressErrorBody()))
 		}
 		if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
-			_ = h.scanPending.Delete(c.Context(), userID, tenantID, scanID)
+			_ = h.scanPending.Delete(c.RequestCtx(), userID, tenantID, scanID)
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		return c.JSON(postScanV1AcceptedJSON(scanID, "wallet"))
@@ -218,7 +218,7 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c *fiber.Ctx) error {
 		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 	}
 	tenantID := tenantIDFromDiscoveryV1Request(c)
-	if err := h.scanPending.PutTLS(c.Context(), userID, tenantID, &scanpending.Record{
+	if err := h.scanPending.PutTLS(c.RequestCtx(), userID, tenantID, &scanpending.Record{
 		ScanID:    scanID,
 		UserID:    userID,
 		Family:    "tls",
@@ -273,7 +273,7 @@ func v1ErrorBody(body fiber.Map) fiber.Map {
 }
 
 // prepareWalletScanQueue validates and allocates scan_id; does not publish to NATS.
-func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) (scanID uuid.UUID, userID uuid.UUID, normalized string, qe *queueScanError) {
+func (h *DiscoveryHandler) prepareWalletScanQueue(c fiber.Ctx, address string) (scanID uuid.UUID, userID uuid.UUID, normalized string, qe *queueScanError) {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", &queueScanError{committed: true}
@@ -315,7 +315,7 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 		}
 	}
 
-	if qe := h.checkWalletScanInFlight(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress); qe != nil {
+	if qe := h.checkWalletScanInFlight(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress); qe != nil {
 		return uuid.Nil, uuid.Nil, "", qe
 	}
 	if qe := h.checkWalletCPMContext(c, userID, normalizedAddress); qe != nil {
@@ -325,11 +325,11 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c *fiber.Ctx, address string) 
 	return uuid.New(), userID, normalizedAddress, nil
 }
 
-func (h *DiscoveryHandler) checkWalletCPMContext(c *fiber.Ctx, userID uuid.UUID, normalizedAddress string) *queueScanError {
+func (h *DiscoveryHandler) checkWalletCPMContext(c fiber.Ctx, userID uuid.UUID, normalizedAddress string) *queueScanError {
 	if h.policyRef == nil {
 		return cpmContextCheckUnavailableQueueError()
 	}
-	active, err := h.policyRef.ActiveWalletCPMContextForTarget(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress)
+	active, err := h.policyRef.ActiveWalletCPMContextForTarget(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), normalizedAddress)
 	if err != nil {
 		return cpmContextCheckUnavailableQueueError()
 	}
@@ -479,7 +479,7 @@ func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, 
 }
 
 // prepareTLSScanQueue validates and allocates scan_id; does not publish to NATS.
-func (h *DiscoveryHandler) prepareTLSScanQueue(c *fiber.Ctx, endpointURL string) (scanID uuid.UUID, userID uuid.UUID, endpoint string, qe *queueScanError) {
+func (h *DiscoveryHandler) prepareTLSScanQueue(c fiber.Ctx, endpointURL string) (scanID uuid.UUID, userID uuid.UUID, endpoint string, qe *queueScanError) {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", &queueScanError{committed: true}
@@ -562,7 +562,7 @@ func (h *DiscoveryHandler) publishTLSScanRequested(scanID, userID uuid.UUID, end
 
 // ListRPCs handles GET /discovery/v1/rpcs.
 // Returns the list of configured RPC endpoints.
-func (h *DiscoveryHandler) ListRPCs(c *fiber.Ctx) error {
+func (h *DiscoveryHandler) ListRPCs(c fiber.Ctx) error {
 	rpcs := make([]fiber.Map, 0, len(h.cfgChain.Blockchains))
 	for _, blockchain := range h.cfgChain.Blockchains {
 		rpcs = append(rpcs, fiber.Map{
@@ -576,3 +576,5 @@ func (h *DiscoveryHandler) ListRPCs(c *fiber.Ctx) error {
 		"count":       len(rpcs),
 	})
 }
+
+// fiber:context-methods migrated

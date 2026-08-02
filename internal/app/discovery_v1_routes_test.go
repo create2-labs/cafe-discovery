@@ -8,48 +8,48 @@ import (
 
 	"cafe-discovery/internal/discoveryroutes"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type testV1WalletHandlers struct {
 	last atomic.Value // string: which wallet handler ran
 }
 
-func (t *testV1WalletHandlers) GetAllWallets(c *fiber.Ctx) error {
+func (t *testV1WalletHandlers) GetAllWallets(c fiber.Ctx) error {
 	t.last.Store("list")
 	return c.SendStatus(fiber.StatusOK)
 }
 
-func (t *testV1WalletHandlers) CreateWallet(c *fiber.Ctx) error {
+func (t *testV1WalletHandlers) CreateWallet(c fiber.Ctx) error {
 	t.last.Store("create")
 	return c.SendStatus(fiber.StatusCreated)
 }
 
-func (t *testV1WalletHandlers) GetWallet(c *fiber.Ctx) error {
+func (t *testV1WalletHandlers) GetWallet(c fiber.Ctx) error {
 	t.last.Store("get:" + c.Params("pubKeyHash"))
 	return c.SendStatus(fiber.StatusOK)
 }
 
-func (t *testV1WalletHandlers) UpdateWallet(c *fiber.Ctx) error {
+func (t *testV1WalletHandlers) UpdateWallet(c fiber.Ctx) error {
 	t.last.Store("put:" + c.Params("pubKeyHash"))
 	return c.SendStatus(fiber.StatusOK)
 }
 
-func (t *testV1WalletHandlers) DeleteWallet(c *fiber.Ctx) error {
+func (t *testV1WalletHandlers) DeleteWallet(c fiber.Ctx) error {
 	t.last.Store("del:" + c.Params("pubKeyHash"))
 	return c.SendStatus(fiber.StatusOK)
 }
 
 func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 	t.Parallel()
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	v1 := app.Group(discoveryroutes.V1Base)
 	h := &testV1WalletHandlers{}
 	registerDiscoveryV1Routes(v1, nil, nil, h)
 
 	// Literal /wallets/scans must hit 501 stub, not GetWallet(pubKeyHash="scans").
 	req := httptest.NewRequest("GET", discoveryroutes.WalletScans, nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 	_ = resp.Body.Close()
 
 	cbom := httptest.NewRequest("GET", discoveryroutes.WalletScanCBOMByID("550e8400-e29b-41d4-a716-446655440000"), nil)
-	respCbom, err := app.Test(cbom, -1)
+	respCbom, err := app.Test(cbom, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET wallets/scans/:id/cbom: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 	_ = respCbom.Body.Close()
 
 	del := httptest.NewRequest("DELETE", discoveryroutes.WalletScanByID("550e8400-e29b-41d4-a716-446655440000"), nil)
-	respDel, err := app.Test(del, -1)
+	respDel, err := app.Test(del, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("DELETE wallets/scans: %v", err)
 	}
@@ -84,13 +84,13 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 
 func TestDiscoveryV1Routes_WalletByPubKeyHashUsesParamRoute(t *testing.T) {
 	t.Parallel()
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	v1 := app.Group(discoveryroutes.V1Base)
 	h := &testV1WalletHandlers{}
 	registerDiscoveryV1Routes(v1, nil, nil, h)
 
 	req := httptest.NewRequest("GET", discoveryroutes.Wallets+"/0xabc123", nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestDiscoveryV1Routes_WalletByPubKeyHashUsesParamRoute(t *testing.T) {
 
 func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 	t.Parallel()
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	v1 := app.Group(discoveryroutes.V1Base)
 	registerDiscoveryV1Routes(v1, nil, nil, &testV1WalletHandlers{})
 
@@ -116,7 +116,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 		discoveryroutes.TLSScanByID("550e8400-e29b-41d4-a716-446655440000"),
 	} {
 		req := httptest.NewRequest("GET", path, nil)
-		resp, err := app.Test(req, -1)
+		resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
@@ -128,7 +128,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 	}
 
 	delTLS := httptest.NewRequest("DELETE", discoveryroutes.TLSScanByID("550e8400-e29b-41d4-a716-446655440000"), nil)
-	respDel, err := app.Test(delTLS, -1)
+	respDel, err := app.Test(delTLS, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("DELETE tls scan: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 	_ = respDel.Body.Close()
 
 	post := httptest.NewRequest("POST", discoveryroutes.PostScan, nil)
-	resp, err := app.Test(post, -1)
+	resp, err := app.Test(post, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("POST /scan: %v", err)
 	}

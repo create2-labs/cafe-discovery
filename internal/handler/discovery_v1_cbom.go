@@ -7,12 +7,12 @@ import (
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/pkg/scan"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
 // GetDiscoveryV1WalletScanCBOM handles GET /discovery/v1/wallets/scans/:scan_id/cbom (W6, G4).
-func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
+func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c fiber.Ctx) error {
 	userID, err := h.getAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 	}
 
 	if h.scanRead != nil {
-		ent, qerr := h.scanRead.GetWalletScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
+		ent, qerr := h.scanRead.GetWalletScan(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
 			return respondScanReadError(c, qerr, "scan CBOM is temporarily unavailable")
 		}
@@ -39,7 +39,7 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c *fiber.Ctx) error {
 	}
 
 	if h.scanPending != nil {
-		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
+		rec, perr := h.scanPending.Get(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
 			return respondScanPendingError(c, perr, "scan CBOM is temporarily unavailable")
 		}
@@ -62,7 +62,7 @@ func (h *DiscoveryHandler) walletCBOMFromEntity(ent *domain.ScanResultEntity) fi
 	return cbom.Wallet(sr, address)
 }
 
-func scanCBOMNotFound(c *fiber.Ctx) error {
+func scanCBOMNotFound(c fiber.Ctx) error {
 	return c.Status(fiber.StatusNotFound).JSON(v1ErrorBody(fiber.Map{
 		"error":   "not_found",
 		"message": "scan not found",
@@ -70,7 +70,7 @@ func scanCBOMNotFound(c *fiber.Ctx) error {
 }
 
 // GetDiscoveryV1TLSScanCBOM handles GET /discovery/v1/tls/scans/:scan_id/cbom (W6, G4, TLS sibling).
-func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
+func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 	}
 
 	if h.scanRead != nil {
-		ent, qerr := h.scanRead.GetTLSScan(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
+		ent, qerr := h.scanRead.GetTLSScan(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if qerr != nil {
 			return respondScanReadError(c, qerr, "scan CBOM is temporarily unavailable")
 		}
@@ -97,7 +97,7 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 	}
 
 	if h.scanPending != nil {
-		rec, perr := h.scanPending.Get(c.Context(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
+		rec, perr := h.scanPending.Get(c.RequestCtx(), userID, tenantIDFromDiscoveryV1Request(c), scanID)
 		if perr != nil {
 			return respondScanPendingError(c, perr, "scan CBOM is temporarily unavailable")
 		}
@@ -108,3 +108,5 @@ func (h *TLSHandler) GetDiscoveryV1TLSScanCBOM(c *fiber.Ctx) error {
 
 	return scanCBOMNotFound(c)
 }
+
+// fiber:context-methods migrated

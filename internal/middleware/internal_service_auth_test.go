@@ -7,13 +7,13 @@ import (
 
 	"cafe-discovery/internal/authz"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func newTestApp(token string) *fiber.App {
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	app.Use(InternalServiceAuth(InternalServiceAuthConfig{ExpectedToken: token}))
-	app.Post("/internal/ping", func(c *fiber.Ctx) error {
+	app.Post("/internal/ping", func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"ok": true})
 	})
 	return app

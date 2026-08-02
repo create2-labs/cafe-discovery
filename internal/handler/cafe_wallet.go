@@ -3,7 +3,7 @@ package handler
 import (
 	"cafe-discovery/internal/service"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 const errPubKeyHashRequired = "pub_key_hash is required"
@@ -21,14 +21,14 @@ func NewCafeWalletHandler(walletService *service.CafeWalletService) *CafeWalletH
 }
 
 // CreateWallet handles POST /discovery/v1/wallets
-func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
+func (h *CafeWalletHandler) CreateWallet(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err
 	}
 
 	var req service.CreateWalletRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid request body",
 		})
@@ -50,7 +50,7 @@ func (h *CafeWalletHandler) CreateWallet(c *fiber.Ctx) error {
 }
 
 // GetWallet handles GET /discovery/v1/wallets/:pubKeyHash
-func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
+func (h *CafeWalletHandler) GetWallet(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (h *CafeWalletHandler) GetWallet(c *fiber.Ctx) error {
 }
 
 // GetAllWallets handles GET /discovery/v1/wallets
-func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
+func (h *CafeWalletHandler) GetAllWallets(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (h *CafeWalletHandler) GetAllWallets(c *fiber.Ctx) error {
 }
 
 // UpdateWallet handles PUT /discovery/v1/wallets/:pubKeyHash
-func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
+func (h *CafeWalletHandler) UpdateWallet(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
 	}
 
 	var req service.UpdateWalletRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid request body",
 		})
@@ -135,7 +135,7 @@ func (h *CafeWalletHandler) UpdateWallet(c *fiber.Ctx) error {
 }
 
 // DeleteWallet handles DELETE /discovery/v1/wallets/:pubKeyHash
-func (h *CafeWalletHandler) DeleteWallet(c *fiber.Ctx) error {
+func (h *CafeWalletHandler) DeleteWallet(c fiber.Ctx) error {
 	userID, err := requireAuthenticatedUserID(c)
 	if err != nil {
 		return err

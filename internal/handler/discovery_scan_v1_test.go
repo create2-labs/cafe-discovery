@@ -20,7 +20,7 @@ import (
 	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
 )
@@ -224,8 +224,8 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 		scanPending:      newMemoryPendingV1Repo(),
 		policyRef:        policyRefStub{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
 		return h.PostDiscoveryScanV1(c)
 	})
@@ -233,7 +233,7 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	body := []byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -299,21 +299,21 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		t.Fatal(err)
 	}
 	h := &DiscoveryHandler{
-		scanRead:  NewRepoScanReadStub(repo, nil),
+		scanRead:    NewRepoScanReadStub(repo, nil),
 		scanPending: pending,
-		policyRef: policyRefStub{},
+		policyRef:   policyRefStub{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Delete("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Delete("/wallets/scans/:scan_id", func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.DeleteDiscoveryV1WalletScan(c)
 	})
-	app.Get("/wallets/scans/:scan_id", func(c *fiber.Ctx) error {
+	app.Get("/wallets/scans/:scan_id", func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.GetDiscoveryV1WalletScan(c)
 	})
 
-	delResp, err := app.Test(httptest.NewRequest(http.MethodDelete, "/wallets/scans/"+scanID.String(), nil), -1)
+	delResp, err := app.Test(httptest.NewRequest(http.MethodDelete, "/wallets/scans/"+scanID.String(), nil), fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestDeleteDiscoveryV1WalletScan_ClearsPendingSoGetReturns404(t *testing.T) 
 		t.Fatalf("pending still present after DELETE: %+v", rec)
 	}
 
-	getResp, err := app.Test(httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanID.String(), nil), -1)
+	getResp, err := app.Test(httptest.NewRequest(http.MethodGet, "/wallets/scans/"+scanID.String(), nil), fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,19 +357,19 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        pending,
+		scanPending:      pending,
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef:        policyRefStub{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
 			UserID:  userID,
@@ -407,15 +407,15 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 		}}},
 		policyRef: policyRefStub{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,21 +437,21 @@ func TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
 		},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,21 +483,21 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
 		},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +519,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -530,15 +530,15 @@ func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
 			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
 		},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -556,19 +556,19 @@ func TestPostDiscoveryScanV1_WalletCPMContextCheckUnavailable(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         &mockNATSConn{},
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo:   &scanResultRepoStub{},
 		policyRef:        nil,
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -594,7 +594,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
-		scanPending:        newMemoryPendingV1Repo(),
+		scanPending:      newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -603,15 +603,15 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 		}}},
 		policyRef: policyRefStub{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.PostDiscoveryScanV1(c)
 	})
 
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -634,15 +634,15 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post(discoveryroutes.PostScan, func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
 		return h.PostDiscoveryScanV1(c)
 	})
 	body := []byte(`{"url":"https://example.com/path"}`)
 	req := httptest.NewRequest(http.MethodPost, discoveryroutes.PostScan, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -671,14 +671,14 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 func TestPostDiscoveryScanV1_BothAddressAndURL(t *testing.T) {
 	t.Parallel()
 	h := &DiscoveryHandler{discoveryService: service.NewDiscoveryService(nil, nil, nil, nil)}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post("/scan", func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post("/scan", func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())
 		return h.PostDiscoveryScanV1(c)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/scan", bytes.NewReader([]byte(`{"address":"0x","url":"https://a"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -695,14 +695,14 @@ func TestPostDiscoveryScanV1_NoScanner503(t *testing.T) {
 		natsConn:         &mockNATSConn{},
 		scannerPresence:  walletScannerAbsent{},
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Post("/scan", func(c *fiber.Ctx) error {
+	app := fiber.New(fiber.Config{})
+	app.Post("/scan", func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())
 		return h.PostDiscoveryScanV1(c)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/scan", bytes.NewReader([]byte(`{"address":"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}`)))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatal(err)
 	}

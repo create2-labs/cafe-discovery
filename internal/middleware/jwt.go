@@ -4,13 +4,13 @@ import (
 	"cafe-discovery/internal/service"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
 // JWTMiddleware creates a middleware to protect routes with JWT authentication
 func JWTMiddleware(authService *service.AuthService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		// Get token from Authorization header
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {

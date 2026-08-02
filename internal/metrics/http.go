@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -39,7 +39,7 @@ func initHTTPMetrics() {
 // HTTPMiddleware records Prometheus metrics compatible with the Grafana API dashboard (http_requests_total, http_request_duration_seconds_bucket).
 func HTTPMiddleware() fiber.Handler {
 	initHTTPMetrics()
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
 
@@ -76,7 +76,7 @@ func canonicalHTTPMethod(m string) string {
 	}
 }
 
-func routePath(c *fiber.Ctx) string {
+func routePath(c fiber.Ctx) string {
 	if r := c.Route(); r != nil && r.Path != "" {
 		return sanitizeLabelValue(r.Path)
 	}

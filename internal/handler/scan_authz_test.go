@@ -13,7 +13,7 @@ import (
 	"cafe-discovery/internal/authz"
 	"cafe-discovery/internal/middleware"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
@@ -44,7 +44,7 @@ func (s *stubAuthzService) CanReadScan(_ context.Context, principal authz.Princi
 // service-auth middleware as production so tests exercise the full route.
 func newAuthzTestApp(t *testing.T, stub *stubAuthzService, enabled bool, serviceToken string) *fiber.App {
 	t.Helper()
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	internal := app.Group("/internal/authz", middleware.InternalServiceAuth(middleware.InternalServiceAuthConfig{
 		ExpectedToken: serviceToken,
 	}))

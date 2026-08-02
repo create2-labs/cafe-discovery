@@ -9,13 +9,13 @@ import (
 	"cafe-discovery/internal/authz"
 	"cafe-discovery/internal/service"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // AuthHandler handles authentication-related HTTP requests
 type AuthHandler struct {
-	authService    *service.AuthService
-	userScanCache  *service.UserScanCacheService
+	authService   *service.AuthService
+	userScanCache *service.UserScanCacheService
 }
 
 // NewAuthHandler creates a new auth handler
@@ -27,9 +27,9 @@ func NewAuthHandler(authService *service.AuthService, userScanCache *service.Use
 }
 
 // Signup handles POST /auth/signup
-func (h *AuthHandler) Signup(c *fiber.Ctx) error {
+func (h *AuthHandler) Signup(c fiber.Ctx) error {
 	var req service.SignupRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid request body",
 		})
@@ -51,9 +51,9 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 }
 
 // Signin handles POST /auth/signin
-func (h *AuthHandler) Signin(c *fiber.Ctx) error {
+func (h *AuthHandler) Signin(c fiber.Ctx) error {
 	var req service.SigninRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid request body",
 		})
@@ -73,7 +73,7 @@ func (h *AuthHandler) Signin(c *fiber.Ctx) error {
 
 	// Warm user scan cache from Postgres so first list after sign-in is fast
 	if h.userScanCache != nil && response.User != nil {
-		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(c.RequestCtx(), 5*time.Second)
 		defer cancel()
 		if warmErr := h.userScanCache.WarmForUser(ctx, response.User.ID); warmErr != nil {
 			log.Printf("auth: warm user cache after sign-in: %v", warmErr)
@@ -87,14 +87,14 @@ func (h *AuthHandler) Signin(c *fiber.Ctx) error {
 // It is protected by InternalServiceAuth; CPM must send the shared service bearer token.
 // Body: JSON {"token":"<Discovery-issued session token>"}.
 // Success body matches cafe-crypto-policy-mgt discoveryValidationResponse (`accepted`, `claims`).
-func (h *AuthHandler) ValidateSessionForCPM(c *fiber.Ctx) error {
+func (h *AuthHandler) ValidateSessionForCPM(c fiber.Ctx) error {
 	requestID := authz.EnsureRequestID(c.Get(authz.HeaderRequestID))
 	c.Set(authz.HeaderRequestID, requestID)
 
 	var body struct {
 		Token string `json:"token"`
 	}
-	if err := c.BodyParser(&body); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"accepted":   false,
 			"request_id": requestID,
@@ -133,3 +133,5 @@ func (h *AuthHandler) ValidateSessionForCPM(c *fiber.Ctx) error {
 		"request_id": requestID,
 	})
 }
+
+// fiber:context-methods migrated

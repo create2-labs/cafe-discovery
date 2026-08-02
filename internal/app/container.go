@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"cafe-discovery/internal/config"
@@ -22,9 +23,8 @@ import (
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
 	"github.com/spf13/viper"
@@ -164,15 +164,13 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		WriteBufferSize: 10240,
 	})
 
-	// Enable CORS
-	corsOrigins := viper.GetString(config.CORSAllowOrigins)
-	corsMethods := viper.GetString(config.CORSAllowMethods)
+	// Enable CORS — Viper keeps CSV env strings; Fiber v3 requires []string.
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     corsOrigins,
-		AllowMethods:     corsMethods,
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Requested-With",
+		AllowOrigins:     splitCSV(viper.GetString(config.CORSAllowOrigins)),
+		AllowMethods:     splitCSV(viper.GetString(config.CORSAllowMethods)),
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
 		AllowCredentials: true,
-		ExposeHeaders:    "Content-Length",
+		ExposeHeaders:    []string{"Content-Length"},
 		MaxAge:           60, // 1 mn - cache preflight requests (reduces OPTIONS requests)
 		// MaxAge:           3600, // 1 hour - cache preflight requests (reduces OPTIONS requests)
 	}))
@@ -234,7 +232,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	auth.Post("/signin", authHandler.Signin)
 
 	// Health check endpoint (public).
-	healthHandler := func(c *fiber.Ctx) error {
+	healthHandler := func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":    "ok",
 			"app_name":  "Cafe Discovery Service",
@@ -245,13 +243,12 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	app.Get("/health", healthHandler)
 
 	// Version endpoint (public) — DISC-OPS-1: same contract as CPM GET /version.
-	app.Get("/version", func(c *fiber.Ctx) error {
+	app.Get("/version", func(c fiber.Ctx) error {
 		return c.JSON(version.Payload())
 	})
 
-	// Prometheus metrics endpoint (public)
-	// This endpoint exposes metrics in Prometheus format for scraping
-	app.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
+	// Prometheus metrics endpoint (public) — Fiber v3 registers net/http.Handler directly.
+	app.Get("/metrics", metrics.Handler())
 
 	// Public discovery utilities v1 (no JWT) — WORKPLAN_API_PR PR13d.
 	v1Public := app.Group(discoveryroutes.V1Base)
@@ -315,10 +312,25 @@ func assignPlanToUsersWithoutPlan(db postgresdb.PostgreSQLConnection, freePlan *
 	return nil
 }
 
+// splitCSV splits a comma-separated config string into a trimmed slice.
+// Empty input and empty segments are dropped so Fiber never sees [""].
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
 // Start starts the HTTP server
 func (c *Container) Start() error {
 	addr := viper.GetString(config.ServerHost) + ":" + viper.GetString(config.ServerPort)
-	return c.App.Listen(addr)
+	return c.App.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
 }
 
 // Shutdown gracefully shuts down the server
