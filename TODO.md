@@ -37,3 +37,13 @@ Scan persistence code removed from this repo after **PERS-D2** validated `oleglo
 **Acceptance:** Same behaviour and tests ; no change to paths or wire types.
 
 **Repos:** `cafe-discovery` only.
+
+---
+
+## Fiber v3 — migrate off `gofiber/fiber/v2`
+
+**Plan détaillé :** [docs/FIBER_V3_MIGRATION.md](docs/FIBER_V3_MIGRATION.md)
+
+**Résumé :** 27 fichiers Fiber ; cutover `v2.52.14` → `fiber/v3` (≥ 3.4.0) via **une PR multi-commits** (slices D1–D6, D7a/b/c, D8 ≤ ~400 lignes chacune, tip CI vert) + PR docs D0. Puis scanners TLS/wallet.
+
+**Priority :** after current security bumps ; deliberate backlog — not blocking releases.
