@@ -1,6 +1,6 @@
 module cafe-discovery
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/create2-labs/cafe-contracts v0.0.2-0.20260427135040-13e8ec5f9ea0
