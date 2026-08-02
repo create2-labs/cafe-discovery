@@ -9,7 +9,7 @@ import (
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/scan"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -55,12 +55,12 @@ func TestIntegration_IMM6b8_CBOM404OnNonSuccess(t *testing.T) {
 
 			h := &DiscoveryHandler{scanRead: NewRepoScanReadStub(repo, nil)}
 			app := fiber.New()
-			app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+			app.Get("/wallets/scans/:scan_id/cbom", func(c fiber.Ctx) error {
 				c.Locals("user_id", userID)
 				return h.GetDiscoveryV1WalletScanCBOM(c)
 			})
 			req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-			resp, err := app.Test(req, -1)
+			resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)
 			}

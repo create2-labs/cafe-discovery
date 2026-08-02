@@ -4,21 +4,21 @@ import (
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/handler"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // discoveryV1WalletHandlers is the subset of CAFE wallet HTTP handlers mounted under
 // /discovery/v1/wallets (WORKPLAN_API.md §0.1). Implemented by *handler.CafeWalletHandler.
 type discoveryV1WalletHandlers interface {
-	GetAllWallets(c *fiber.Ctx) error
-	CreateWallet(c *fiber.Ctx) error
-	GetWallet(c *fiber.Ctx) error
-	UpdateWallet(c *fiber.Ctx) error
-	DeleteWallet(c *fiber.Ctx) error
+	GetAllWallets(c fiber.Ctx) error
+	CreateWallet(c fiber.Ctx) error
+	GetWallet(c fiber.Ctx) error
+	UpdateWallet(c fiber.Ctx) error
+	DeleteWallet(c fiber.Ctx) error
 }
 
 func discoveryV1NotImplemented(feature string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
 			"error":   "not_implemented",
 			"message": feature + " (see WORKPLAN_API_PR.md PR3–PR6)",

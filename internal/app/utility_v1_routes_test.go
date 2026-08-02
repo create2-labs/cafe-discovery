@@ -11,7 +11,7 @@ import (
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/handler"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
@@ -27,13 +27,13 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{})
 	v1Public := app.Group(discoveryroutes.V1Base)
 	v1Public.Get("/rpcs", h.ListRPCs)
 	v1Public.Get("/scanners", h.ListAvailableScanners)
 
 	req := httptest.NewRequest(http.MethodGet, discoveryroutes.RPCs, nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET rpcs: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 	}
 
 	reqScanners := httptest.NewRequest(http.MethodGet, discoveryroutes.Scanners, nil)
-	respScanners, err := app.Test(reqScanners, -1)
+	respScanners, err := app.Test(reqScanners, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("GET scanners: %v", err)
 	}

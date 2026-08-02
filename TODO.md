@@ -40,10 +40,8 @@ Scan persistence code removed from this repo after **PERS-D2** validated `oleglo
 
 ---
 
-## Fiber v3 — migrate off `gofiber/fiber/v2`
+## Fiber v3 — migrate off `gofiber/fiber/v2` — **done**
 
-**Plan détaillé :** [docs/FIBER_V3_MIGRATION.md](docs/FIBER_V3_MIGRATION.md)
+**Plan :** [docs/FIBER_V3_MIGRATION.md](docs/FIBER_V3_MIGRATION.md)
 
-**Résumé :** 27 fichiers Fiber ; cutover `v2.52.14` → `fiber/v3` (≥ 3.4.0) via **une PR multi-commits** (slices D1–D6, D7a/b/c, D8 ≤ ~400 lignes chacune, tip CI vert) + PR docs D0. Puis scanners TLS/wallet.
-
-**Priority :** after current security bumps ; deliberate backlog — not blocking releases.
+**Résultat :** `fiber/v3` **v3.4.0** (module racine + `cmd/cli/tls-scan`). `cmd/cli/wallet-scan` hors Fiber. Contrat HTTP public inchangé (routes/status/JSON) ; `Content-Type` peut inclure `charset=utf-8`.

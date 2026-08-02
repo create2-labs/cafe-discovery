@@ -6,7 +6,7 @@ import (
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fiber.Map {

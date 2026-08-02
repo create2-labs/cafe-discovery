@@ -6,17 +6,17 @@ import (
 	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/persistence/scanread"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
-func respondScanReadUnavailable(c *fiber.Ctx, message string) error {
+func respondScanReadUnavailable(c fiber.Ctx, message string) error {
 	return c.Status(fiber.StatusServiceUnavailable).JSON(v1ErrorBody(fiber.Map{
 		"error":   "service_unavailable",
 		"message": message,
 	}))
 }
 
-func respondScanReadError(c *fiber.Ctx, err error, message string) error {
+func respondScanReadError(c fiber.Ctx, err error, message string) error {
 	if errors.Is(err, scanread.ErrUnavailable) {
 		return respondScanReadUnavailable(c, message)
 	}
@@ -26,7 +26,7 @@ func respondScanReadError(c *fiber.Ctx, err error, message string) error {
 	}))
 }
 
-func respondScanPendingError(c *fiber.Ctx, err error, message string) error {
+func respondScanPendingError(c fiber.Ctx, err error, message string) error {
 	if errors.Is(err, scanpending.ErrUnavailable) {
 		return respondScanReadUnavailable(c, message)
 	}

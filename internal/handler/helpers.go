@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
 // getUserIDFromContext extracts and validates the user ID from the JWT context.
 // Returns error with 401 when no user_id is present (e.g. missing or invalid token).
-func getUserIDFromContext(c *fiber.Ctx) (uuid.UUID, error) {
+func getUserIDFromContext(c fiber.Ctx) (uuid.UUID, error) {
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {
 		return uuid.Nil, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -28,7 +28,7 @@ func getUserIDFromContext(c *fiber.Ctx) (uuid.UUID, error) {
 // requireAuthenticatedUserID extracts user ID from JWT context and rejects unauthenticated or empty user.
 // Use for routes that require a signed-in user (e.g. wallets, persisted data).
 // Returns 401 when user is not authenticated so the frontend can redirect to sign-in.
-func requireAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, error) {
+func requireAuthenticatedUserID(c fiber.Ctx) (uuid.UUID, error) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		return uuid.Nil, err
@@ -42,9 +42,9 @@ func requireAuthenticatedUserID(c *fiber.Ctx) (uuid.UUID, error) {
 }
 
 // parsePaginationParams parses and validates pagination parameters from the query string
-func parsePaginationParams(c *fiber.Ctx) (limit, offset int) {
-	limit = c.QueryInt("limit", 20)  // Default 20, max 100
-	offset = c.QueryInt("offset", 0) // Default 0
+func parsePaginationParams(c fiber.Ctx) (limit, offset int) {
+	limit = fiber.Query(c, "limit", 20)  // Default 20, max 100
+	offset = fiber.Query(c, "offset", 0) // Default 0
 
 	// Validate limit
 	if limit < 1 {

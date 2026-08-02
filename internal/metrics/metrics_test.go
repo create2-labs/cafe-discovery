@@ -9,8 +9,7 @@ import (
 
 	"cafe-discovery/internal/metrics"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestMetricsHandlerReturns200(t *testing.T) {
@@ -28,14 +27,14 @@ func TestMetricsHandlerReturns200(t *testing.T) {
 	}
 }
 
-func TestMetricsHandlerThroughFiberAdaptor(t *testing.T) {
+func TestMetricsHandlerThroughFiber(t *testing.T) {
 	metrics.Init()
 
 	app := fiber.New()
 	app.Use(metrics.HTTPMiddleware())
-	app.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
+	app.Get("/metrics", metrics.Handler())
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/metrics", nil), -1)
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/metrics", nil), fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestMetricsHandlerAfterUnmatchedRequests(t *testing.T) {
 
 	app := fiber.New()
 	app.Use(metrics.HTTPMiddleware())
-	app.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
+	app.Get("/metrics", metrics.Handler())
 
 	for _, path := range []string{
 		"/robots.txt",
@@ -61,12 +60,12 @@ func TestMetricsHandlerAfterUnmatchedRequests(t *testing.T) {
 		"/path/with\"quote",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
-		if _, err := app.Test(req, -1); err != nil {
+		if _, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false}); err != nil {
 			t.Fatalf("request %q: %v", path, err)
 		}
 	}
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/metrics", nil), -1)
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/metrics", nil), fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}

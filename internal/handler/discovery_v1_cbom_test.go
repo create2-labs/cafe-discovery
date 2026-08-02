@@ -11,7 +11,7 @@ import (
 	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/pkg/scan"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
@@ -36,13 +36,13 @@ func TestGetDiscoveryV1WalletScanCBOM_Success200(t *testing.T) {
 		scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}}, nil),
 	}
 	app := fiber.New()
-	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+	app.Get("/wallets/scans/:scan_id/cbom", func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.GetDiscoveryV1WalletScanCBOM(c)
 	})
 
 	req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -88,12 +88,12 @@ func TestGetDiscoveryV1WalletScanCBOM_NonSuccess404(t *testing.T) {
 				scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{scanID: ent}}, nil),
 			}
 			app := fiber.New()
-			app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+			app.Get("/wallets/scans/:scan_id/cbom", func(c fiber.Ctx) error {
 				c.Locals("user_id", userID)
 				return h.GetDiscoveryV1WalletScanCBOM(c)
 			})
 			req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-			resp, err := app.Test(req, -1)
+			resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)
 			}
@@ -115,12 +115,12 @@ func TestGetDiscoveryV1WalletScanCBOM_NotFound404(t *testing.T) {
 	scanID := uuid.New()
 	h := &DiscoveryHandler{scanRead: NewRepoScanReadStub(&scanResultRepoStub{byID: map[uuid.UUID]*domain.ScanResultEntity{}}, nil)}
 	app := fiber.New()
-	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+	app.Get("/wallets/scans/:scan_id/cbom", func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.GetDiscoveryV1WalletScanCBOM(c)
 	})
 	req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -142,12 +142,12 @@ func TestGetDiscoveryV1WalletScanCBOM_Pending404(t *testing.T) {
 		scanPending: pending,
 	}
 	app := fiber.New()
-	app.Get("/wallets/scans/:scan_id/cbom", func(c *fiber.Ctx) error {
+	app.Get("/wallets/scans/:scan_id/cbom", func(c fiber.Ctx) error {
 		c.Locals("user_id", userID)
 		return h.GetDiscoveryV1WalletScanCBOM(c)
 	})
 	req := httptest.NewRequest("GET", "/wallets/scans/"+scanID.String()+"/cbom", nil)
-	resp, err := app.Test(req, -1)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}

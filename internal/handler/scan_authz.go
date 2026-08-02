@@ -7,7 +7,7 @@ import (
 	"cafe-discovery/internal/authz"
 	"cafe-discovery/internal/metrics"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )
 
@@ -53,7 +53,7 @@ const ScanAuthorizationRoutePattern = "/internal/authz/scans/:scanId/can-read"
 //     X-User-Id is only trusted because of that gate.
 //   - Body: empty.
 //   - Response: { allowed, reason_code, request_id } JSON envelope.
-func (h *ScanAuthorizationHandler) CanReadScan(c *fiber.Ctx) error {
+func (h *ScanAuthorizationHandler) CanReadScan(c fiber.Ctx) error {
 	requestID := authz.EnsureRequestID(c.Get(authz.HeaderRequestID))
 	c.Set(authz.HeaderRequestID, requestID)
 
@@ -76,7 +76,7 @@ func (h *ScanAuthorizationHandler) CanReadScan(c *fiber.Ctx) error {
 		return h.respond(c, fiber.StatusBadRequest, false, authz.ReasonCodeScanIDMalformed, requestID, "malformed", principal)
 	}
 
-	decision, err := h.service.CanReadScan(c.Context(), principal, scanID)
+	decision, err := h.service.CanReadScan(c.RequestCtx(), principal, scanID)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -104,7 +104,7 @@ func (h *ScanAuthorizationHandler) CanReadScan(c *fiber.Ctx) error {
 	}
 }
 
-func (h *ScanAuthorizationHandler) respond(c *fiber.Ctx, status int, allowed bool, reasonCode, requestID, outcome string, principal authz.Principal) error {
+func (h *ScanAuthorizationHandler) respond(c fiber.Ctx, status int, allowed bool, reasonCode, requestID, outcome string, principal authz.Principal) error {
 	if h != nil {
 		metrics.Get().RecordScanAuthzDecision(outcome, reasonCode, h.route)
 	}
@@ -132,3 +132,5 @@ func (h *ScanAuthorizationHandler) respond(c *fiber.Ctx, status int, allowed boo
 		"request_id":  requestID,
 	})
 }
+
+// fiber:context-methods migrated
