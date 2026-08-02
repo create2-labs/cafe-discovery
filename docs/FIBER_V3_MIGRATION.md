@@ -5,7 +5,7 @@
 **Source backlog :** [cafe-deploy/TODO.md — Fiber v3](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md)  
 **État actuel :** module racine + `cmd/cli/tls-scan` sur `fiber/v3` **v3.4.0**. CVE-2026-45045 était déjà corrigée en v2.52.14 ; cette migration est un alignement upstream. Go module **1.26.5** (Fiber v3 exige Go ≥ 1.25).
 
-**Livraison :** **un seul commit** sur `chore/fiber-v3` (pas de découpage multi-commits D1–D8).  
+**Livraison :** **un seul commit** sur `chore/fiber-v3` 
 **Contrainte CI :** tip vert avant merge.  
 **Contrainte produit :** aucun changement de contrat HTTP public (routes, status, JSON). Note : Fiber v3 émet `Content-Type: application/json; charset=utf-8` (charset ajouté) — body JSON inchangé.
 
@@ -59,7 +59,7 @@ Les slices D1–D8 ci-dessous restent une **carte de lecture** historique du pla
 
 ---
 
-## 4. Slices (référence plan — non livrées en commits séparés)
+## 4. Slices (référence plan — livrées en un seul commit)
 
 | Slice | Scope |
 | --- | --- |
@@ -89,7 +89,7 @@ Les slices D1–D8 ci-dessous restent une **carte de lecture** historique du pla
 - [x] Audit §2.1 `RequestCtx` — sync only, pas d’escape
 - [ ] Smoke manuel / stack : `GET /health`, `GET /version`, signup/signin, scan wallet/TLS, CORS preflight (staging)
 
-Note : `deadcode ./...` **sans** `-test` signale encore du code hors chemin `main` mais encore exercé par les tests (helpers contract, stubs, chemins legacy `ScanWallet`, etc.) — hors purge Fiber ; ne pas confondre avec du code inatteignable.
+Note : `deadcode ./...` **sans** `-test` signale encore du code hors chemin `main` mais encore exercé par les tests (helpers contract, stubs, chemins legacy `ScanWallet`, etc.) — hors purge Fiber.
 
 ---
 
