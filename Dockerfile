@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go manually (multi-arch)
-ENV GO_VERSION=1.26.4
+ENV GO_VERSION=1.26.6
 RUN set -eux; \
     case "$TARGETARCH" in \
     amd64)  GO_ARCH=amd64 ;; \
@@ -68,7 +68,7 @@ FROM builder AS ci
 WORKDIR /app
 
 # Cache-bust: force reinstall of tools when Go version changes (must match GO_VERSION in builder)
-ENV GO_TOOLING_VERSION=1.26.4
+ENV GO_TOOLING_VERSION=1.26.6
 ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
 
 RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
