@@ -4,8 +4,6 @@ Items deferred; not blocking current IMM work unless noted.
 
 ---
 
-
-
 ## IMM-9 follow-up — Deduplicate CPM internal HTTP client (`cpmpolicyref`)
 
 **Context:** IMM-9 added `ActiveWalletCPMContextForTarget` beside existing `PersistedPoliciesReferenceScan` in `internal/cpmpolicyref/http_client.go`.
@@ -17,8 +15,6 @@ Items deferred; not blocking current IMM work unless noted.
 **Repos:** `cafe-discovery` only.
 
 ---
-
-
 
 ## Retirer Moralis / RPC runtime de Discovery (slim orchestrator)
 
@@ -154,8 +150,8 @@ Config partagée (`cafe-deploy/config/discovery/config.yaml`) montée sur discov
 | Risque                        | Probabilité           | Mitigation                               |
 | ----------------------------- | --------------------- | ---------------------------------------- |
 | Dev local sans scanner-wallet | Moyenne               | Doc : scans wallet = scanner obligatoire |
-| CLI `getpublickey` cassé      | Certaine si non migré | PR4 : migrer vers `cafe-scanner-wallet` |
-| Docs/scripts CLI tls-scan     | Liens morts           | PR5 : migrer vers `cafe-scanner-tls`    |
+| CLI `getpublickey` cassé      | Certaine si non migré | PR4 : migrer vers `cafe-scanner-wallet`  |
+| Docs/scripts CLI tls-scan     | Liens morts           | PR5 : migrer vers `cafe-scanner-tls`     |
 | Tests `ScanWallet` perdus     | Faible                | Couverture dans `cafe-scanner-wallet`    |
 | Config YAML partagée confuse  | Faible                | Commentaires dans config deploy          |
 
@@ -265,21 +261,23 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 **Contexte :**
 
-| Source (`cafe-discovery`) | Contenu | Cible |
-| --- | --- | --- |
-| `cmd/cli/wallet-scan/` | Module `walletscan` ; `main.go` récupère la clé publique depuis un hash tx + RPC URL | `cafe-scanner-wallet/cmd/cli/wallet-scan/` |
-| `cmd/cli/publickey/getpublickey.go` | Outil Moralis + RPC + `RecoverPublicKeyFromTransactionData` | `cafe-scanner-wallet/cmd/cli/publickey/` (fusionner ou remplacer par CLI unifié) |
+
+| Source (`cafe-discovery`)           | Contenu                                                                              | Cible                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `cmd/cli/wallet-scan/`              | Module `walletscan` ; `main.go` récupère la clé publique depuis un hash tx + RPC URL | `cafe-scanner-wallet/cmd/cli/wallet-scan/`                                       |
+| `cmd/cli/publickey/getpublickey.go` | Outil Moralis + RPC + `RecoverPublicKeyFromTransactionData`                          | `cafe-scanner-wallet/cmd/cli/publickey/` (fusionner ou remplacer par CLI unifié) |
+
 
 Le scanner-wallet a déjà `internal/walletscan/` + `pkg/evm/` + `pkg/moralis/` — les CLI doivent **réutiliser** ces packages, pas dupliquer la logique Discovery.
 
-**Scope `cafe-scanner-wallet` :**
+**Scope** `cafe-scanner-wallet` **:**
 
 1. Créer `cmd/cli/wallet-scan/` (module Go séparé ou sous-module) — porter `main.go` + README.
 2. Créer `cmd/cli/publickey/` — porter ou fusionner avec un CLI `wallet-scan --address` qui s’appuie sur l’engine scanner.
 3. Documenter usage local (RPC, `MORALIS_API_KEY` / futur `ETHERSCAN_API_KEY`) dans le README scanner-wallet.
 4. CI : `go test` / build des CLI si applicable.
 
-**Scope `cafe-discovery` (retrait) :**
+**Scope** `cafe-discovery` **(retrait) :**
 
 1. Supprimer `cmd/cli/wallet-scan/`, `cmd/cli/publickey/`.
 2. Retirer références dans README, `docs/FIBER_V3_MIGRATION.md`, `docs/SCAN_REFACTORING_PLAN.md`, SBOM si regénéré.
@@ -303,21 +301,23 @@ Le scanner-wallet a déjà `internal/walletscan/` + `pkg/evm/` + `pkg/moralis/` 
 
 **Contexte :**
 
-| Source (`cafe-discovery`) | Contenu | Cible |
-| --- | --- | --- |
-| `cmd/cli/tls-scan/` | Module `cafe/pq-scan` (`tools.go` — pin deps) ; README ~700 lignes ; scripts install OQS ; Makefile | `cafe-scanner-tls/cmd/cli/tls-scan/` |
-| (absent) | Pas de `main.go` scan local aujourd’hui | **Optionnel PR5b** : CLI `tls-scan <host:port>` branché sur `internal/tlsscan` |
+
+| Source (`cafe-discovery`) | Contenu                                                                                             | Cible                                                                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `cmd/cli/tls-scan/`       | Module `cafe/pq-scan` (`tools.go` — pin deps) ; README ~700 lignes ; scripts install OQS ; Makefile | `cafe-scanner-tls/cmd/cli/tls-scan/`                                           |
+| (absent)                  | Pas de `main.go` scan local aujourd’hui                                                             | **Optionnel PR5b** : CLI `tls-scan <host:port>` branché sur `internal/tlsscan` |
+
 
 Le repo `cafe-scanner-tls` a déjà `internal/tlsscan/`, bindings natifs OQS (`native/`), et `cmd/scanner-tls/main.go` (worker NATS). La migration est surtout **docs + scripts + module tools** ; un vrai binaire CLI local serait un plus cohérent avec wallet-scan.
 
-**Scope `cafe-scanner-tls` :**
+**Scope** `cafe-scanner-tls` **:**
 
 1. Porter `cmd/cli/tls-scan/` : README, `install_oqs_*.sh`, `Makefile`, `tools.go`, `go.mod`.
 2. Renommer module si besoin (`cafe-scanner-tls/cli/tls-scan` ou garder `cafe/pq-scan`).
 3. **(Optionnel PR5b)** Ajouter `main.go` : scan TLS ponctuel via `tlsscan.Engine` (sans NATS), pour debug local.
 4. Mettre à jour `cafe-scanner-tls/README.md` et `TODO.md` avec point d’entrée dev.
 
-**Scope `cafe-discovery` (retrait) :**
+**Scope** `cafe-discovery` **(retrait) :**
 
 1. Supprimer `cmd/cli/tls-scan/`.
 2. Retirer pin Fiber v3 du sous-module tls-scan dans `docs/FIBER_V3_MIGRATION.md` (Discovery seul module racine).
@@ -353,13 +353,13 @@ Reporter le **split config** (Option 3) après PR3 stabilisée.
 ### Effort récapitulatif
 
 
-| PR | Repo(s) | Dev | Tests/CI | Deploy/doc | Total |
-| --- | --- | ---: | ---: | ---: | --- |
-| PR1 — Slim runtime | `cafe-discovery`, deploy | 1 j | 0.5 j | 0.5 j | **1.5–2 j** |
-| PR2 — Config morte | discovery, persistence | 0.5 j | 0.25 j | 0.25 j | **1 j** |
-| PR3 — Etherscan | `cafe-scanner-wallet` | 1 j | 0.5 j | 0.5 j | **2 j** |
-| PR4 — CLI wallet | discovery → scanner-wallet | 0.5 j | 0.25 j | 0.25 j | **1 j** |
-| PR5 — CLI TLS | discovery → scanner-tls | 0.5 j | 0.25 j | 0.25 j | **1 j** (+0.5–1 j PR5b) |
+| PR                 | Repo(s)                    | Dev   | Tests/CI | Deploy/doc | Total                   |
+| ------------------ | -------------------------- | ----- | -------- | ---------- | ----------------------- |
+| PR1 — Slim runtime | `cafe-discovery`, deploy   | 1 j   | 0.5 j    | 0.5 j      | **1.5–2 j**             |
+| PR2 — Config morte | discovery, persistence     | 0.5 j | 0.25 j   | 0.25 j     | **1 j**                 |
+| PR3 — Etherscan    | `cafe-scanner-wallet`      | 1 j   | 0.5 j    | 0.5 j      | **2 j**                 |
+| PR4 — CLI wallet   | discovery → scanner-wallet | 0.5 j | 0.25 j   | 0.25 j     | **1 j**                 |
+| PR5 — CLI TLS      | discovery → scanner-tls    | 0.5 j | 0.25 j   | 0.25 j     | **1 j** (+0.5–1 j PR5b) |
 
 
 **Ordre recommandé :**
