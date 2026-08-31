@@ -175,7 +175,9 @@ Config partagée (`cafe-deploy/config/discovery/config.yaml`) montée sur discov
 
 Deux PRs séquentielles. **Ne pas** faire le split config (Option 3) avant stabilisation du remplacement Moralis → Etherscan sur `cafe-scanner-wallet`.
 
-### PR1 — Slim runtime Discovery (priorité)
+### PR1 — Slim runtime Discovery ✅ merged
+
+**Merged:** [`cafe-discovery` #117](https://github.com/create2-labs/cafe-discovery/pull/117), [`cafe-deploy` #45](https://github.com/create2-labs/cafe-deploy/pull/45), [`cafe-expresso` #14](https://github.com/create2-labs/cafe-expresso/pull/14).
 
 **Objectif :** Discovery = orchestrateur pur ; Moralis/RPC runtime supprimés du serveur ; deploy aligné.
 
@@ -225,17 +227,17 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 **Acceptance PR1 :**
 
-- [ ] Aucun import `pkg/evm`, `pkg/moralis`, `internal/walletscan` dans le binaire serveur (`cmd/server`).
-- [ ] Discovery démarre sans `MORALIS_API_KEY`.
-- [ ] Scan wallet async fonctionne via NATS + scanner-wallet.
-- [ ] `GET /discovery/v1/rpcs` inchangé (payload + status).
-- [ ] Tests verts ; compose dev sans Moralis sur discovery-backend.
+- [x] Aucun import `pkg/evm`, `pkg/moralis`, `internal/walletscan` dans le binaire serveur (`cmd/server`).
+- [x] Discovery démarre sans `MORALIS_API_KEY`.
+- [x] Scan wallet async fonctionne via NATS + scanner-wallet.
+- [x] `GET /discovery/v1/rpcs` inchangé (payload + status).
+- [x] Tests verts ; compose dev sans Moralis sur discovery-backend.
 
 ---
 
 
 
-### PR2 — Outillage et config morte (après PR1)
+### PR2 — Outillage et config morte (après PR1) ✅
 
 **Objectif :** Nettoyer config Moralis morte et docs Discovery ; pas de migration CLI ici.
 
@@ -248,8 +250,8 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 **Acceptance PR2 :**
 
-- [ ] Grep `MORALIS` dans `cafe-discovery` limité à docs historiques en attente de PR4/PR5.
-- [ ] Persistence démarre sans vars Moralis.
+- [x] Grep `MORALIS` dans `cafe-discovery` limité à docs historiques en attente de PR4/PR5.
+- [x] Persistence démarre sans vars Moralis.
 
 ---
 

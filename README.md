@@ -708,10 +708,6 @@ REDIS_URL: "redis://redis:6379"
 # JWT configuration (required for authentication)
 JWT_SECRET: "change-me-for-local"
 
-# Moralis API configuration
-MORALIS_API_KEY: ""
-MORALIS_API_URL: "https://deep-index.moralis.io"
-
 # Cloudflare Turnstile configuration (optional, uses dev keys by default)
 TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
 TURNSTILE_SITE_KEY: "1x00000000000000000AA"
@@ -736,8 +732,8 @@ CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
 
 blockchains:
   - name: ethereum-mainnet
-    rpc: "https://ethereum-rpc.publicnode.com"
-    moralis_chain_name: "eth"
+    rpc: "https://ethereum-rpc.publicnode.com"          # exposed via GET /discovery/v1/rpcs; live RPC calls run in cafe-scanner-wallet
+    moralis_chain_name: "eth"                           # scanner-wallet indexer only (ignored by discovery-backend)
     chain_id: 1   # EIP-155; required for wallet observation export (persistence); must be unique per row
   - name: polygon
     rpc: "https://polygon-bor-rpc.publicnode.com"
@@ -746,7 +742,8 @@ blockchains:
   # ... more networks
 ```
 
-Note: 
+Note:
+- Discovery **does not** call Moralis or blockchain RPC at runtime (orchestrator + NATS only). Wallet scans run in **`cafe-scanner-wallet`**, which consumes `rpc` and `moralis_chain_name` from the shared config and requires `MORALIS_API_KEY` (or a future Etherscan key) in its own environment — see **`cafe-scanner-wallet`** README and **`cafe-deploy`** compose.
 - Environment variables always override values from `config.yaml` 
 - For local Docker Compose, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
 - The `CONFIG_PATH` environment variable can be used to specify a custom config file path (default: `config.yaml`)
@@ -790,7 +787,6 @@ export POSTGRES_PORT=5432
 export NATS_URL="nats://localhost:4222"
 export REDIS_URL="redis://localhost:6379"
 export JWT_SECRET="your-secret-key-here"
-export MORALIS_API_KEY="your-api-key-here"
 ```
 
 4. **Run the server**:
@@ -857,7 +853,6 @@ From the `cafe-discovery` directory:
 ```bash
 # Set required environment variables (optional - can also be set in config.yaml)
 export JWT_SECRET=your-secret-key-here
-export MORALIS_API_KEY=your_api_key_here
 
 # Build and start services (local use only; staging/prod are deployed from cafe-deploy)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
@@ -905,7 +900,6 @@ The services are configured with:
 - **Volumes**: Mounts `./config.yaml` to `/app/config.yaml` (read-only)
 - **Environment Variables**: Supports environment variable overrides with defaults:
   - `JWT_SECRET` (default: `change-me-for-local`)
-  - `MORALIS_API_KEY` (required, no default)
   - `POSTGRES_USER` (default: `cafe`)
   - `POSTGRES_PASSWORD` (default: `cafe`)
   - `LOG_LEVEL` (default: `debug` for backend, `info` for scanner)
@@ -955,7 +949,6 @@ docker run --network cafe-infra_observability --rm \
   -e CONFIG_PATH=/app/config.yaml \
   -e LOG_LEVEL=debug \
   -e JWT_SECRET=your-secret-key-here \
-  -e MORALIS_API_KEY=your-api-key-here \
   -e POSTGRES_HOST=postgres \
   -e POSTGRES_PORT=5432 \
   -e POSTGRES_DATABASE=cafe \
@@ -966,7 +959,7 @@ docker run --network cafe-infra_observability --rm \
   cafe-discovery-backend:latest
 ```
 
-**Start the Wallet scanner:**
+**Start the Wallet scanner** (`cafe-scanner-wallet`; requires Moralis or future Etherscan API key):
 ```bash
 docker run --network cafe-infra_observability --rm \
   -p 8082:8081 \
@@ -1037,11 +1030,6 @@ export REDIS_URL="redis://redis:6379"
 # To enforce security, there is no default value for JWT_SECRET: 
 # It is not set here, so that it can not be copied/pasted
 export JWT_SECRET=
-
-# Moralis API (required for wallet scanning features)
-# Get your API key from https://moralis.io
-export MORALIS_API_KEY=your_api_key_here
-export MORALIS_API_URL=https://deep-index.moralis.io
 
 # Cloudflare Turnstile (required for signup/signin protection)
 # Development keys are configured by default (always pass verification)
@@ -2321,21 +2309,21 @@ The application uses NATS for asynchronous message processing:
 
 ## Development Tools
 
-### Public Key Recovery Utility (`cmd/cli/publickey`)
+### Public Key Recovery Utility (`cmd/cli/publickey`) — moving to `cafe-scanner-wallet` (PR4)
 
-A development utility for testing public key recovery from blockchain transactions. This tool demonstrates how the service recovers public keys from transaction data.
+Legacy dev utility for testing public key recovery from blockchain transactions. **Scheduled for migration** to `cafe-scanner-wallet` (see `TODO.md` PR4). Until then it still lives here and requires a Moralis API key:
 
 Usage:
 
 ```bash
-# Set required environment variable
+# Set required environment variable (scanner-wallet will own this after PR4)
 export MORALIS_API_KEY=your_api_key_here
 
 # Run the utility
 go run cmd/cli/publickey/getpublickey.go
 ```
 
-Note: This utility requires a valid Moralis API key to fetch transaction data. The API key must be provided via the `MORALIS_API_KEY` environment variable.
+Note: This utility requires a valid Moralis API key to fetch transaction data. Production wallet scans do **not** run in Discovery — use **`cafe-scanner-wallet`** with `MORALIS_API_KEY` (see `cafe-deploy` compose).
 
 ## Security Notes
 

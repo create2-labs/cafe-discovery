@@ -47,8 +47,6 @@
                 "POSTGRES_DATABASE": "cafe",
                 "POSTGRES_SSLMODE": "disable",
                 "NATS_URL": "nats://localhost:4222",
-                "MORALIS_API_KEY": "",
-                "MORALIS_API_URL": "https://deep-index.moralis.io",
                 "LOG_LEVEL": "debug"
             },
             "args": [],
