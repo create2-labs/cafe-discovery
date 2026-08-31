@@ -3,7 +3,7 @@
 **Statut :** D-CUTOVER **done** (`fiber/v3` **v3.4.0**)  
 **Cible :** `github.com/gofiber/fiber/v3` ≥ **v3.4.0**  
 **Source backlog :** [cafe-deploy/TODO.md — Fiber v3](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md)  
-**État actuel :** module racine + `cmd/cli/tls-scan` sur `fiber/v3` **v3.4.0**. CVE-2026-45045 était déjà corrigée en v2.52.14 ; cette migration est un alignement upstream. Go module **1.26.5** (Fiber v3 exige Go ≥ 1.25).
+**État actuel :** module racine + `cmd/cli/tls-scan` sur `fiber/v3` **v3.4.0**. CVE-2026-45045 était déjà corrigée en v2.52.14 ; cette migration est un alignement upstream. Go module **1.26.5** (Fiber v3 exige Go ≥ 1.25). `cmd/cli/wallet-scan` / `publickey` ont migré vers `cafe-scanner-wallet` (PR4).
 
 **Livraison :** **un seul commit** sur `chore/fiber-v3` 
 **Contrainte CI :** tip vert avant merge.  
@@ -23,7 +23,7 @@
 | CORS | CSV Viper → `splitCSV` → `[]string` |
 | `/metrics` | `app.Get("/metrics", metrics.Handler())` — **sans** `adaptor` |
 | `app.Test` | `fiber.TestConfig{Timeout: 0, FailOnTimeout: false}` |
-| `cmd/cli/wallet-scan` | **hors Fiber** (confirmé) |
+| `cmd/cli/wallet-scan` | **migré** vers `cafe-scanner-wallet` (PR4 ; hors Fiber) |
 
 ---
 

@@ -387,7 +387,7 @@ This keeps "CBOM never stored" while avoiding ToCBOM() x100 on list. Backward co
 
 ### 4.3 Files not to modify (or minimal)
 
-- **CLI** (`cmd/cli/wallet-scan`, `cmd/cli/tls-scan`): Can stay as-is; they call services. If services accept Target types, CLI builds the target or keeps passing string and service adapts.
+- **CLI** (`cmd/cli/tls-scan`; wallet CLIs → `cafe-scanner-wallet`): Can stay as-is for TLS until PR5; they call services. If services accept Target types, CLI builds the target or keeps passing string and service adapts.
 - **Native/CGO** (TLS PQC): No change.
 - **Auth, middleware, config**: No change unless PlanHandler needs the new PlanService signature.
 - **Redis repos** (anonymous scan counts): No change to key layout; only ensure the “scan type” passed to checkScanLimits uses the same kind as PlanLimitKey where needed.
@@ -483,9 +483,8 @@ cafe-discovery/
 │   ├── worker/
 │   │   └── main.go
 │   └── cli/
-│       ├── wallet-scan/
-│       ├── tls-scan/
-│       └── ...
+│       ├── tls-scan/      # → cafe-scanner-tls (PR5)
+│       └── ...            # wallet-scan/publickey → cafe-scanner-wallet (PR4 done)
 ├── internal/
 │   ├── app/
 │   │   └── container.go      # wire plugins, workers, PlanService with UsageCounter map

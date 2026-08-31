@@ -109,7 +109,7 @@
        5. [Metric Design Principles](#metric-design-principles)
    13. [Background Processing](#background-processing)
    14. [Development Tools](#development-tools)
-       1. [Public Key Recovery Utility (`cmd/cli/publickey`)](#public-key-recovery-utility-cmdclipublickey)
+       1. [Wallet public-key CLIs (moved to `cafe-scanner-wallet`)](#wallet-public-key-clis-moved-to-cafe-scanner-wallet)
    15. [Security Notes](#security-notes)
    16. [Stopping Discovery services](#stopping-discovery-services)
    17. [Additional Resources](#additional-resources)
@@ -258,7 +258,7 @@ cafe-discovery/
 │   ├── server/            # API server entrypoint
 │   ├── scanner/            # Scanner entrypoint (runs TLS and/or Wallet via core + runners)
 │   └── cli/
-│      └── publickey/      # Utility for testing public key recovery
+│      └── tls-scan/       # TLS/OQS tooling (moving to cafe-scanner-tls — PR5)
 ├── internal/
 │   ├── app/               # Application container (orchestration)
 │   ├── domain/            # Domain models and types
@@ -2309,21 +2309,21 @@ The application uses NATS for asynchronous message processing:
 
 ## Development Tools
 
-### Public Key Recovery Utility (`cmd/cli/publickey`) — moving to `cafe-scanner-wallet` (PR4)
+### Wallet public-key CLIs (moved to `cafe-scanner-wallet`)
 
-Legacy dev utility for testing public key recovery from blockchain transactions. **Scheduled for migration** to `cafe-scanner-wallet` (see `TODO.md` PR4). Until then it still lives here and requires a Moralis API key:
-
-Usage:
+Wallet recovery / scan CLIs no longer live in this repo. Use:
 
 ```bash
-# Set required environment variable (scanner-wallet will own this after PR4)
-export MORALIS_API_KEY=your_api_key_here
+# RPC + transaction hash (no Moralis)
+cd ../cafe-scanner-wallet
+go run ./cmd/cli/wallet-scan <rpc-url> <tx-hash>
 
-# Run the utility
-go run cmd/cli/publickey/getpublickey.go
+# Address-based (Moralis + WalletScanEngine)
+export MORALIS_API_KEY=your_api_key_here
+go run ./cmd/cli/publickey --address 0x...
 ```
 
-Note: This utility requires a valid Moralis API key to fetch transaction data. Production wallet scans do **not** run in Discovery — use **`cafe-scanner-wallet`** with `MORALIS_API_KEY` (see `cafe-deploy` compose).
+See [`cafe-scanner-wallet` README](https://github.com/create2-labs/cafe-scanner-wallet) and `cmd/cli/*/README.md` there. TLS/OQS CLI docs remain under `cmd/cli/tls-scan/` until PR5.
 
 ## Security Notes
 
