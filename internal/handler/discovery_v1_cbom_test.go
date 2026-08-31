@@ -57,8 +57,8 @@ func TestGetDiscoveryV1WalletScanCBOM_Success200(t *testing.T) {
 	if !ok || inner["bomFormat"] != "CycloneDX" {
 		t.Fatalf("cbom envelope missing or invalid: %v", out["cbom"])
 	}
-	if out["address"] != ent.Address {
-		t.Fatalf("address = %v, want %q", out["address"], ent.Address)
+	if out["address"] != "0x742d35cc6634c0532925a3b844bc454e4438f44e" {
+		t.Fatalf("address = %v, want normalized lowercase", out["address"])
 	}
 }
 

@@ -10,11 +10,9 @@ import (
 
 // Blockchain represents a blockchain network configuration
 type Blockchain struct {
-	Name             string `yaml:"name"`
-	RPC              string `yaml:"rpc"`
-	MoralisChainName string `yaml:"moralis_chain_name"`
-	// ChainID is the EIP-155 chain identifier used when exporting wallet observations (e.g. CPM wire contract).
-	ChainID int64 `yaml:"chain_id"`
+	Name    string `yaml:"name"`
+	RPC     string `yaml:"rpc"`
+	ChainID int64  `yaml:"chain_id"`
 }
 
 // ChainConfig holds the blockchains section loaded from the Discovery config file.

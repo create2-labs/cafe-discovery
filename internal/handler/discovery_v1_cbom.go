@@ -3,6 +3,7 @@ package handler
 import (
 	"strings"
 
+	"cafe-discovery/internal/address"
 	"cafe-discovery/internal/cbom"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/pkg/scan"
@@ -53,13 +54,11 @@ func (h *DiscoveryHandler) GetDiscoveryV1WalletScanCBOM(c fiber.Ctx) error {
 
 func (h *DiscoveryHandler) walletCBOMFromEntity(ent *domain.ScanResultEntity) fiber.Map {
 	sr := ent.ToScanResult()
-	address := sr.Address
-	if h.discoveryService != nil {
-		if normalized, nerr := h.discoveryService.ValidateAndNormalizeAddress(sr.Address); nerr == nil {
-			address = normalized
-		}
+	normalizedAddr := sr.Address
+	if normalized, nerr := address.ValidateAndNormalizeAddress(sr.Address); nerr == nil {
+		normalizedAddr = normalized
 	}
-	return cbom.Wallet(sr, address)
+	return cbom.Wallet(sr, normalizedAddr)
 }
 
 func scanCBOMNotFound(c fiber.Ctx) error {

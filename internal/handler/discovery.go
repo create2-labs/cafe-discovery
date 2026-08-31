@@ -13,6 +13,7 @@ import (
 	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/persistence/scanread"
 	"cafe-discovery/internal/policyref"
+	walletaddr "cafe-discovery/internal/address"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
@@ -36,7 +37,6 @@ type ScannerPresenceChecker interface {
 // DiscoveryHandler handles discovery-related HTTP requests.
 // Wallet v1 GET/list/delete and CBOM read via cafe-persistence (PERS-D6a-read / D6a-delete); pending/W8 via D6a-pending.
 type DiscoveryHandler struct {
-	discoveryService *service.DiscoveryService
 	cfgChain         *config.ChainConfig
 	natsConn         nats.Connection
 	planService      *service.PlanService
@@ -50,10 +50,9 @@ type DiscoveryHandler struct {
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
-func NewDiscoveryHandler(discoveryService *service.DiscoveryService, cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, scanPending scanpending.Store, policyRef policyref.Checker) *DiscoveryHandler {
+func NewDiscoveryHandler(cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, scanPending scanpending.Store, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
-		discoveryService: discoveryService,
-		cfgChain:         cfgChain,
+		cfgChain:        cfgChain,
 		natsConn:         natsConn,
 		planService:      planService,
 		scannerPresence:  scannerPresence,
@@ -307,7 +306,7 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c fiber.Ctx, address string) (
 		}
 	}
 
-	normalizedAddress, err := h.discoveryService.ValidateAndNormalizeAddress(address)
+	normalizedAddress, err := walletaddr.ValidateAndNormalizeAddress(address)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,

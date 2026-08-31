@@ -20,10 +20,6 @@ REDIS_URL: "redis://localhost:6379"
 # To enforce security, there is no default value for JWT_SECRET: it must explicitly be set.
 # JWT_SECRET: "you-must-set-it"
 
-# Moralis API configuration
-MORALIS_API_KEY: ""
-MORALIS_API_URL: "https://deep-index.moralis.io"
-
 # Cloudflare Turnstile configuration (optional, uses dev keys by default)
 TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
 TURNSTILE_SITE_KEY: "1x00000000000000000AA"

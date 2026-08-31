@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"cafe-discovery/internal/config"
-	"cafe-discovery/internal/service"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -16,7 +15,6 @@ import (
 func TestListDiscoveryV1WalletScans_ChainIDWithoutAddress(t *testing.T) {
 	t.Parallel()
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		cfgChain:         &config.ChainConfig{},
 		scanRead:         nil,
 	}

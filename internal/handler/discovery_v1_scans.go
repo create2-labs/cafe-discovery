@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"cafe-discovery/internal/address"
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/persistence/scanpending"
@@ -59,7 +60,7 @@ func (h *DiscoveryHandler) ListDiscoveryV1WalletScans(c fiber.Ctx) error {
 
 	normalizedAddr := ""
 	if addrQ != "" {
-		n, verr := h.discoveryService.ValidateAndNormalizeAddress(addrQ)
+		n, verr := address.ValidateAndNormalizeAddress(addrQ)
 		if verr != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(v1ErrorBody(fiber.Map{
 				"error":   "invalid_request",

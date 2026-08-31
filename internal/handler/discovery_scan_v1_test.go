@@ -218,7 +218,6 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	t.Parallel()
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -354,7 +353,6 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 	}
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      pending,
@@ -395,7 +393,6 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -434,7 +431,6 @@ func TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -480,7 +476,6 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -516,7 +511,6 @@ func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -553,7 +547,6 @@ func TestPostDiscoveryScanV1_WalletCPMContextCheckUnavailable(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         &mockNATSConn{},
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -591,7 +584,6 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -629,7 +621,6 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 	t.Parallel()
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         n,
 		scannerPresence:  alwaysScanners{},
 		scanPending:      newMemoryPendingV1Repo(),
@@ -670,7 +661,7 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 
 func TestPostDiscoveryScanV1_BothAddressAndURL(t *testing.T) {
 	t.Parallel()
-	h := &DiscoveryHandler{discoveryService: service.NewDiscoveryService(nil, nil, nil, nil)}
+	h := &DiscoveryHandler{}
 	app := fiber.New(fiber.Config{})
 	app.Post("/scan", func(c fiber.Ctx) error {
 		c.Locals("user_id", uuid.New())
@@ -691,7 +682,6 @@ func TestPostDiscoveryScanV1_BothAddressAndURL(t *testing.T) {
 func TestPostDiscoveryScanV1_NoScanner503(t *testing.T) {
 	t.Parallel()
 	h := &DiscoveryHandler{
-		discoveryService: service.NewDiscoveryService(nil, nil, nil, nil),
 		natsConn:         &mockNATSConn{},
 		scannerPresence:  walletScannerAbsent{},
 	}

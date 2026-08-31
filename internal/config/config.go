@@ -28,13 +28,6 @@ const (
 	// Boolean; used to register commands at development guild level or globally.
 	Production = "PRODUCTION"
 
-	// Moralis API key.
-	// #nosec G101 -- This is a configuration key name, not a hardcoded credential
-	MoralisAPIKey = "MORALIS_API_KEY"
-
-	// Moralis API URL.
-	MoralisAPIURL = "MORALIS_API_URL"
-
 	// CORS configuration
 	CORSAllowOrigins = "CORS_ALLOW_ORIGINS"
 	CORSAllowMethods = "CORS_ALLOW_METHODS"
@@ -80,8 +73,6 @@ const (
 	defaultPostgreSQLSSLMode  = "disable"
 	defaultNATSURL            = "nats://localhost:4222"
 	defaultRedisURL           = "redis://localhost:6379"
-	defaultMoralisAPIKey      = ""
-	defaultMoralisAPIURL      = "https://deep-index.moralis.io"
 	defaultServerHost         = "0.0.0.0"
 	defaultServerPort         = "8080"
 	defaultScannerHealthPort  = "8081"
@@ -110,8 +101,6 @@ func GetDefaultConfigValues() map[string]any {
 		ServerHost:               defaultServerHost,
 		ServerPort:               defaultServerPort,
 		ScannerHealthPort:        defaultScannerHealthPort,
-		MoralisAPIKey:            defaultMoralisAPIKey,
-		MoralisAPIURL:            defaultMoralisAPIURL,
 		CORSAllowOrigins:         defaultCORSAllowOrigins,
 		CORSAllowMethods:         defaultCORSAllowMethods,
 		TurnstileSecretKey:       defaultTurnstileSecretKey,
