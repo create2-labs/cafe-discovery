@@ -237,7 +237,9 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 
 
-### PR2 — Outillage et config morte (après PR1) ✅
+### PR2 — Outillage et config morte (après PR1) ✅ merged
+
+**Merged:** [`cafe-discovery` #118](https://github.com/create2-labs/cafe-discovery/pull/118), [`cafe-persistence` #10](https://github.com/create2-labs/cafe-persistence/pull/10), [`cafe-deploy` #46](https://github.com/create2-labs/cafe-deploy/pull/46).
 
 **Objectif :** Nettoyer config Moralis morte et docs Discovery ; pas de migration CLI ici.
 
@@ -257,7 +259,7 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 
 
-### PR4 — Migrer CLI wallet vers `cafe-scanner-wallet`
+### PR4 — Migrer CLI wallet vers `cafe-scanner-wallet` ✅
 
 **Objectif :** Les outils dev wallet vivent avec le moteur de scan wallet, plus dans Discovery.
 
@@ -287,9 +289,9 @@ Le scanner-wallet a déjà `internal/walletscan/` + `pkg/evm/` + `pkg/moralis/` 
 
 **Acceptance PR4 :**
 
-- [ ] `go run ./cmd/cli/wallet-scan/...` fonctionne depuis `cafe-scanner-wallet`.
-- [ ] Plus de `cmd/cli/wallet-scan` ni `cmd/cli/publickey` dans `cafe-discovery`.
-- [ ] Doc dev mise à jour (discovery README + scanner-wallet README).
+- [x] `go run ./cmd/cli/wallet-scan/...` fonctionne depuis `cafe-scanner-wallet`.
+- [x] Plus de `cmd/cli/wallet-scan` ni `cmd/cli/publickey` dans `cafe-discovery`.
+- [x] Doc dev mise à jour (discovery README + scanner-wallet README).
 
 **Effort estimé :** 0.5–1 j.
 
