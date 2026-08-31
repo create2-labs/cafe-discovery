@@ -1,11 +1,9 @@
-package walletscan
+package address
 
 import "testing"
 
 func TestValidateAndNormalizeAddress(t *testing.T) {
 	t.Parallel()
-
-	engine := NewWalletScanEngine(nil, nil)
 
 	tests := []struct {
 		name    string
@@ -39,7 +37,7 @@ func TestValidateAndNormalizeAddress(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := engine.ValidateAndNormalizeAddress(tt.in)
+			got, err := ValidateAndNormalizeAddress(tt.in)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ValidateAndNormalizeAddress(%q) expected error", tt.in)

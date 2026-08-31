@@ -17,8 +17,6 @@ import (
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/internal/version"
-	"cafe-discovery/pkg/evm"
-	"cafe-discovery/pkg/moralis"
 	"cafe-discovery/pkg/nats"
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
@@ -37,7 +35,6 @@ const (
 // Container holds all application dependencies
 type Container struct {
 	ChainConfig              *config.ChainConfig
-	DiscoveryService         *service.DiscoveryService
 	DiscoveryHandler         *handler.DiscoveryHandler
 	TLSHandler               *handler.TLSHandler
 	AuthService              *service.AuthService
@@ -50,21 +47,11 @@ type Container struct {
 	DB                       postgresdb.PostgreSQLConnection
 	NATSConn                 nats.Connection
 	RedisConn                redisconn.Connection
-	MoralisClient            *moralis.MoralisClient
 	ScannerPresenceTracker   *service.ScannerPresenceTracker
 }
 
 // NewContainer creates and initializes the application container
 func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
-	// Create EVM clients for each configured blockchain
-	clients := make(map[string]*evm.Client)
-	for _, blockchain := range cfgChain.Blockchains {
-		clients[blockchain.Name] = evm.NewClient(blockchain.RPC, blockchain.MoralisChainName)
-	}
-
-	// Initialize Moralis client
-	moralisClient := moralis.NewMoralisClient(viper.GetString(config.MoralisAPIKey), viper.GetString(config.MoralisAPIURL))
-
 	// Initialize PostgreSQL database
 	db := postgresdb.New()
 	if err := db.Run(); err != nil {
@@ -106,8 +93,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	// Initialize plan service
 	planService := service.NewPlanService(planRepo, userRepo)
 
-	// Initialize services
-	discoveryService := service.NewDiscoveryService(clients, moralisClient, scanResultRepo, planService)
 	authService, err := service.NewAuthService(userRepo, planRepo, jwtSecret, jwtExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize auth service: %w", err)
@@ -135,7 +120,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 
 	// Initialize handlers (v1 GET/list/delete/pending via cafe-persistence internal/scan/v1).
-	discoveryHandler := handler.NewDiscoveryHandler(discoveryService, cfgChain, natsConn, planService, scannerPresence, userScanCache, scanClient, scanResultRepo, scanUsageLedgerRepo, scanClient, policyRef)
+	discoveryHandler := handler.NewDiscoveryHandler(cfgChain, natsConn, planService, scannerPresence, userScanCache, scanClient, scanResultRepo, scanUsageLedgerRepo, scanClient, policyRef)
 	tlsHandler := handler.NewTLSHandler(scanClient, scanClient, policyRef)
 	authHandler := handler.NewAuthHandler(authService, userScanCache)
 	cafeWalletHandler := handler.NewCafeWalletHandler(cafeWalletService)
@@ -183,7 +168,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 
 	container := &Container{
 		ChainConfig:              cfgChain,
-		DiscoveryService:         discoveryService,
 		DiscoveryHandler:         discoveryHandler,
 		TLSHandler:               tlsHandler,
 		AuthService:              authService,
@@ -196,7 +180,6 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		DB:                       db,
 		NATSConn:                 natsConn,
 		RedisConn:                redisConn,
-		MoralisClient:            moralisClient,
 		ScannerPresenceTracker:   scannerPresence,
 	}
 
