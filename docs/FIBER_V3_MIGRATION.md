@@ -3,7 +3,7 @@
 **Statut :** D-CUTOVER **done** (`fiber/v3` **v3.4.0**)  
 **Cible :** `github.com/gofiber/fiber/v3` ≥ **v3.4.0**  
 **Source backlog :** [cafe-deploy/TODO.md — Fiber v3](https://github.com/create2-labs/cafe-deploy/blob/main/TODO.md)  
-**État actuel :** module racine + `cmd/cli/tls-scan` sur `fiber/v3` **v3.4.0**. CVE-2026-45045 était déjà corrigée en v2.52.14 ; cette migration est un alignement upstream. Go module **1.26.5** (Fiber v3 exige Go ≥ 1.25). `cmd/cli/wallet-scan` / `publickey` ont migré vers `cafe-scanner-wallet` (PR4).
+**État actuel :** module racine sur `fiber/v3` **v3.4.0**. CVE-2026-45045 était déjà corrigée en v2.52.14 ; cette migration est un alignement upstream. Go module **1.26.6** (Fiber v3 exige Go ≥ 1.25). Les CLIs dev (`wallet-scan`, `publickey`, `tls-scan`) ont migré vers `cafe-scanner-wallet` (PR4) et `cafe-scanner-tls` (PR5).
 
 **Livraison :** **un seul commit** sur `chore/fiber-v3` 
 **Contrainte CI :** tip vert avant merge.  
@@ -15,7 +15,7 @@
 
 | Métrique | Valeur |
 | --- | --- |
-| Pin Fiber | `fiber/v3` **v3.4.0** (racine + `cmd/cli/tls-scan`) |
+| Pin Fiber | `fiber/v3` **v3.4.0** (module racine uniquement) |
 | Handlers | `func(c fiber.Ctx)` |
 | Bind body | `c.Bind().Body(...)` |
 | Query int | `fiber.Query(c, ...)` (type inféré) |
@@ -24,6 +24,7 @@
 | `/metrics` | `app.Get("/metrics", metrics.Handler())` — **sans** `adaptor` |
 | `app.Test` | `fiber.TestConfig{Timeout: 0, FailOnTimeout: false}` |
 | `cmd/cli/wallet-scan` | **migré** vers `cafe-scanner-wallet` (PR4 ; hors Fiber) |
+| `cmd/cli/tls-scan` | **migré** vers `cafe-scanner-tls` (PR5 ; module tools-only hors Fiber) |
 
 ---
 
@@ -53,7 +54,7 @@ Register direct `http.Handler` OK — scrape Prometheus inchangé ; tests Fiber 
 
 ## 3. Stratégie livrée
 
-Branche `chore/fiber-v3` ; **un commit** cutover ; tip vert (`go test ./...` + modules CLI + lint/vuln + `deadcode -test`).
+Branche `chore/fiber-v3` ; **un commit** cutover ; tip vert (`go test ./...` + lint/vuln + `deadcode -test` sur module racine).
 
 Les slices D1–D8 ci-dessous restent une **carte de lecture** historique du plan ; elles ne correspondent pas à des commits séparés.
 
@@ -70,17 +71,16 @@ Les slices D1–D8 ci-dessous restent une **carte de lecture** historique du pla
 | D5 | CORS `splitCSV` + `cors_csv_test.go` + `/metrics` direct + ListenConfig |
 | D6 | tests infra app/middleware/metrics |
 | D7a/b/c | tests handlers + contract |
-| D8 | `cmd/cli/tls-scan` → v3 ; wallet-scan hors Fiber ; clôture doc |
+| D8 | clôture doc ; CLIs dev hors repo (wallet → scanner-wallet PR4, tls → scanner-tls PR5) |
 
 ---
 
 ## 5. Checklist de validation (tip)
 
 - [x] `rg 'gofiber/fiber/v2' -g '*.go' -g 'go.mod'` → vide
-- [x] `cmd/cli/wallet-scan` : sans `gofiber`
+- [x] `cmd/cli/wallet-scan` : sans `gofiber` (migré PR4)
+- [x] `cmd/cli/tls-scan` : hors repo (migré PR5)
 - [x] `go test ./...` (module racine)
-- [x] `(cd cmd/cli/tls-scan && go test ./...)` (module tools-only : no packages — OK)
-- [x] `(cd cmd/cli/wallet-scan && go test ./...)`
 - [x] `golangci-lint run ./...` — 0 issues
 - [x] `govulncheck ./...` — 0 vulns in call graph
 - [x] `deadcode -test ./...` — 0 (inclut les tests comme racines ; `Registry()` retiré)
