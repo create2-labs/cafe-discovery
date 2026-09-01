@@ -301,7 +301,9 @@ Le scanner-wallet a déjà `internal/walletscan/` + `pkg/evm/` + `pkg/moralis/` 
 
 
 
-### PR5 — Migrer CLI / docs TLS vers `cafe-scanner-tls`
+### PR5 — Migrer CLI / docs TLS vers `cafe-scanner-tls` ✅ merged
+
+**Merged:** [`cafe-discovery` #120](https://github.com/create2-labs/cafe-discovery/pull/120), [`cafe-scanner-tls` #6](https://github.com/create2-labs/cafe-scanner-tls/pull/6).
 
 **Objectif :** Outils et documentation OQS/OpenSSL TLS vivent avec le scanner TLS, plus dans Discovery.
 
@@ -374,6 +376,6 @@ Reporter le **split config** (Option 3) après PR3 stabilisée.
 2. **PR2** — ✅ merged (doc/config morte).
 3. **PR3** — en parallèle ou juste après PR1 (indexer sur scanner-wallet) — *future*.
 4. **PR4** — ✅ merged (CLI wallet → `cafe-scanner-wallet`).
-5. **PR5** — CLI/docs TLS → `cafe-scanner-tls` (cette branche).
+5. **PR5** — ✅ merged (CLI/docs TLS → `cafe-scanner-tls`).
 
-**Note :** après merge PR5 (+ PR4 déjà merged), `cafe-discovery` ne contient plus de `cmd/cli/` — seul `cmd/server/` reste.
+**Note :** PR4 + PR5 mergés — `cafe-discovery` ne contient plus de `cmd/cli/` ; seul `cmd/server/` reste.
