@@ -255,10 +255,7 @@ Handlers validate requests (optionally via `plugin.DecodeHTTP`) and publish the 
 ```
 cafe-discovery/
 ├── cmd/
-│   ├── server/            # API server entrypoint
-│   ├── scanner/            # Scanner entrypoint (runs TLS and/or Wallet via core + runners)
-│   └── cli/
-│      └── tls-scan/       # TLS/OQS tooling (moving to cafe-scanner-tls — PR5)
+│   └── server/            # API server entrypoint (only cmd/ after PR4/PR5 CLI migration)
 ├── internal/
 │   ├── app/               # Application container (orchestration)
 │   ├── domain/            # Domain models and types
@@ -2323,7 +2320,18 @@ export MORALIS_API_KEY=your_api_key_here
 go run ./cmd/cli/publickey --address 0x...
 ```
 
-See [`cafe-scanner-wallet` README](https://github.com/create2-labs/cafe-scanner-wallet) and `cmd/cli/*/README.md` there. TLS/OQS CLI docs remain under `cmd/cli/tls-scan/` until PR5.
+See [`cafe-scanner-wallet` README](https://github.com/create2-labs/cafe-scanner-wallet) and `cmd/cli/*/README.md` there.
+
+### TLS / OQS dev tooling (moved to `cafe-scanner-tls`)
+
+Install scripts and OQS provider docs no longer live in this repo:
+
+```bash
+cd ../cafe-scanner-tls/cmd/cli/tls-scan
+# see README.md — install_oqs_*.sh, Makefile, tools.go pin module
+```
+
+See [`cafe-scanner-tls` README](https://github.com/create2-labs/cafe-scanner-tls) and [`cmd/cli/tls-scan/README.md`](https://github.com/create2-labs/cafe-scanner-tls/blob/main/cmd/cli/tls-scan/README.md).
 
 ## Security Notes
 

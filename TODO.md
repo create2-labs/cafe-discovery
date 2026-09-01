@@ -123,8 +123,8 @@ Config partagée (`cafe-deploy/config/discovery/config.yaml`) montée sur discov
 
 - `cafe-persistence` : `MORALIS_*` dans `config.go` également mort.
 - Split config discovery vs scanner (Option 3) — reporter après stabilisation Etherscan sur scanner.
-- CLI dev : migrer `cmd/cli/wallet-scan` et `cmd/cli/tls-scan` vers les repos scanner (voir § ci‑dessous).
-- CLI `cmd/cli/publickey/` — migrer avec wallet-scan vers `cafe-scanner-wallet`.
+- CLI dev : ~~migrer `cmd/cli/wallet-scan` et `cmd/cli/tls-scan`~~ → **PR4/PR5 done** (`cafe-scanner-wallet`, `cafe-scanner-tls`).
+- ~~CLI `cmd/cli/publickey/`~~ → PR4.
 
 ---
 
@@ -151,7 +151,7 @@ Config partagée (`cafe-deploy/config/discovery/config.yaml`) montée sur discov
 | ----------------------------- | --------------------- | ---------------------------------------- |
 | Dev local sans scanner-wallet | Moyenne               | Doc : scans wallet = scanner obligatoire |
 | CLI `getpublickey` cassé      | Certaine si non migré | PR4 : migrer vers `cafe-scanner-wallet`  |
-| Docs/scripts CLI tls-scan     | Liens morts           | PR5 : migrer vers `cafe-scanner-tls`     |
+| Docs/scripts CLI tls-scan     | Liens morts           | PR5 : migré vers `cafe-scanner-tls`       |
 | Tests `ScanWallet` perdus     | Faible                | Couverture dans `cafe-scanner-wallet`    |
 | Config YAML partagée confuse  | Faible                | Commentaires dans config deploy          |
 
@@ -252,14 +252,16 @@ curl -s http://localhost:8080/discovery/v1/scanners | jq .
 
 **Acceptance PR2 :**
 
-- [x] Grep `MORALIS` dans `cafe-discovery` limité à docs historiques en attente de PR4/PR5.
+- [x] Grep `MORALIS` dans `cafe-discovery` limité à docs historiques / renvois scanner-wallet (PR4 merged).
 - [x] Persistence démarre sans vars Moralis.
 
 ---
 
 
 
-### PR4 — Migrer CLI wallet vers `cafe-scanner-wallet` ✅
+### PR4 — Migrer CLI wallet vers `cafe-scanner-wallet` ✅ merged
+
+**Merged:** [`cafe-discovery` #119](https://github.com/create2-labs/cafe-discovery/pull/119), [`cafe-scanner-wallet` #8](https://github.com/create2-labs/cafe-scanner-wallet/pull/8).
 
 **Objectif :** Les outils dev wallet vivent avec le moteur de scan wallet, plus dans Discovery.
 
@@ -329,9 +331,9 @@ Le repo `cafe-scanner-tls` a déjà `internal/tlsscan/`, bindings natifs OQS (`n
 
 **Acceptance PR5 :**
 
-- [ ] Docs OQS/install accessibles depuis `cafe-scanner-tls/cmd/cli/tls-scan/README.md`.
-- [ ] Plus de `cmd/cli/tls-scan` dans `cafe-discovery`.
-- [ ] `(cd cafe-scanner-tls/cmd/cli/tls-scan && go mod tidy)` OK.
+- [x] Docs OQS/install accessibles depuis `cafe-scanner-tls/cmd/cli/tls-scan/README.md`.
+- [x] Plus de `cmd/cli/tls-scan` dans `cafe-discovery`.
+- [x] `(cd cafe-scanner-tls/cmd/cli/tls-scan && go mod tidy)` OK.
 - [ ] (PR5b) Scan local `host:port` produit un résultat TLS/PQC comparable au worker.
 
 **Effort estimé :** 0.5 j (docs/scripts) ; +0.5–1 j si PR5b CLI runnable.
@@ -368,9 +370,10 @@ Reporter le **split config** (Option 3) après PR3 stabilisée.
 
 **Ordre recommandé :**
 
-1. **PR1** — avant fermeture compte Moralis (Discovery sans Moralis).
-2. **PR3** — en parallèle ou juste après PR1 (indexer sur scanner-wallet).
-3. **PR4 / PR5** — en parallèle entre eux, après ou pendant PR1 (indépendants du slim runtime).
-4. **PR2** — doc/config cleanup une fois PR1 (+ ideally PR4) mergés.
+1. **PR1** — ✅ merged (Discovery sans Moralis runtime).
+2. **PR2** — ✅ merged (doc/config morte).
+3. **PR3** — en parallèle ou juste après PR1 (indexer sur scanner-wallet) — *future*.
+4. **PR4** — ✅ merged (CLI wallet → `cafe-scanner-wallet`).
+5. **PR5** — CLI/docs TLS → `cafe-scanner-tls` (cette branche).
 
-**Note :** après PR4 + PR5, `cafe-discovery` ne contient plus de `cmd/cli/` — seul `cmd/server/` reste.
+**Note :** après merge PR5 (+ PR4 déjà merged), `cafe-discovery` ne contient plus de `cmd/cli/` — seul `cmd/server/` reste.
