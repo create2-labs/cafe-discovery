@@ -3,6 +3,7 @@ package metrics
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -12,28 +13,28 @@ import (
 var (
 	httpRequestsTotal          *prometheus.CounterVec
 	httpRequestDurationSeconds *prometheus.HistogramVec
+	httpMetricsOnce            sync.Once
 )
 
 func initHTTPMetrics() {
-	if httpRequestsTotal != nil {
-		return
-	}
-	httpRequestsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "http_requests_total",
-			Help: "Total number of HTTP requests",
-		},
-		[]string{"method", "status", "path"},
-	)
-	httpRequestDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
-			Help:    "HTTP request duration in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"method", "status", "path"},
-	)
-	registerCollectors(httpRequestsTotal, httpRequestDurationSeconds)
+	httpMetricsOnce.Do(func() {
+		httpRequestsTotal = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "http_requests_total",
+				Help: "Total number of HTTP requests",
+			},
+			[]string{"method", "status", "path"},
+		)
+		httpRequestDurationSeconds = prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "http_request_duration_seconds",
+				Help:    "HTTP request duration in seconds",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"method", "status", "path"},
+		)
+		registerCollectors(httpRequestsTotal, httpRequestDurationSeconds)
+	})
 }
 
 // HTTPMiddleware records Prometheus metrics compatible with the Grafana API dashboard (http_requests_total, http_request_duration_seconds_bucket).
@@ -41,6 +42,8 @@ func HTTPMiddleware() fiber.Handler {
 	initHTTPMetrics()
 	return func(c fiber.Ctx) error {
 		start := time.Now()
+		// fasthttp reuses request buffers; clone before Next() so Prometheus labels stay stable.
+		method := sanitizeLabelValue(canonicalHTTPMethod(cloneFiberString(c.Method())))
 		err := c.Next()
 
 		if c.Path() == "/metrics" {
@@ -49,7 +52,6 @@ func HTTPMiddleware() fiber.Handler {
 
 		path := routePath(c)
 		status := sanitizeLabelValue(strconv.Itoa(c.Response().StatusCode()))
-		method := sanitizeLabelValue(canonicalHTTPMethod(c.Method()))
 
 		httpRequestsTotal.WithLabelValues(method, status, path).Inc()
 		httpRequestDurationSeconds.WithLabelValues(method, status, path).Observe(time.Since(start).Seconds())
@@ -57,16 +59,25 @@ func HTTPMiddleware() fiber.Handler {
 	}
 }
 
+// cloneFiberString copies a fasthttp/Fiber string that may share the request buffer.
+func cloneFiberString(s string) string {
+	return strings.Clone(s)
+}
+
 // canonicalHTTPMethod maps the request method to a stable label (RFC 7231 methods only; unknown → OTHER).
+// Always returns a safe string (literal or newly allocated), never a fasthttp buffer view.
 func canonicalHTTPMethod(m string) string {
 	s := strings.ToUpper(strings.TrimSpace(m))
 	switch s {
 	case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE":
-		return s
+		// Return a fresh copy: ToUpper may return the input unchanged for already-upper ASCII,
+		// and that input may still be a fasthttp buffer view.
+		return strings.Clone(s)
 	case "POS":
 		// Seen with some proxies/clients + fasthttp (truncated POST).
 		return "POST"
 	case "GETT":
+		// Seen with fasthttp buffer reuse / truncated method reads.
 		return "GET"
 	default:
 		if s == "" {
@@ -78,7 +89,8 @@ func canonicalHTTPMethod(m string) string {
 
 func routePath(c fiber.Ctx) string {
 	if r := c.Route(); r != nil && r.Path != "" {
-		return sanitizeLabelValue(r.Path)
+		// Route templates are normally static, but clone defensively.
+		return sanitizeLabelValue(cloneFiberString(r.Path))
 	}
 	return "_unmatched"
 }
@@ -91,7 +103,8 @@ func sanitizeLabelValue(v string) string {
 		return "_empty"
 	}
 	if len(v) > maxLabelValueLen {
-		return v[:maxLabelValueLen]
+		v = v[:maxLabelValueLen]
 	}
-	return v
+	// Ensure Prometheus never holds a fasthttp buffer view (ToValidUTF8/TrimSpace may share input).
+	return strings.Clone(v)
 }
