@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Fixed
+- **GET /metrics HTTP 500 (`method="GETT"` duplicates):** Prometheus labels for HTTP metrics no longer keep fasthttp/Fiber request-buffer views. `c.Method()` is cloned before `Next()`, and `canonicalHTTPMethod` / `sanitizeLabelValue` always return owned strings. Without this, buffer reuse corrupted `method` labels (e.g. `GET` → `GETT`), so `/metrics` failed gather with “collected before with the same name and label values”, `cafe-discovery-api` stayed down, and `platform_up` stayed 0.
 - **GET /metrics**: serve from a dedicated Prometheus registry (like CPM) instead of `promhttp.Handler()` on the default gatherer, which could return HTTP 500 in the minimal runtime image when `process`/`go` collectors fail. HTTP metric `path` labels now use route templates only (`_unmatched` fallback) with sanitized values to avoid gather errors from high-cardinality or invalid paths.
 
 ### Changed
