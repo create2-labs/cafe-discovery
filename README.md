@@ -333,6 +333,8 @@ Client HTTP → Discovery → NATS (publish) → Scanner → NATS (scan.started/
 4. A scanner consumes the message and processes the scan, then publishes `scan.started` / `scan.completed` or `scan.failed`
 5. The **persistence service** consumes those events and saves the result to PostgreSQL and Redis (write-through); then publishes `scan.ready` so the API can return the result on GET
 
+Wallet classification is owned by `cafe-scanner-wallet` and evaluated per chain. Once the coordinated EIP-7702 delivery is released, Discovery exposes the persisted delegation result; it must not infer chain activation or qualify the delegation target. The shared chain inventory, official activation evidence, delivery status, and scanner semantics are documented in [Wallet scanner — EIP-7702 chain activation](https://github.com/create2-labs/cafe-documentation/blob/main/docs/wallet-scanner-eip7702-chain-support.md).
+
 #### TLS Scan
 
 Authenticated Users:
@@ -680,6 +682,8 @@ The application can be configured using either:
 2. Environment variables (override config.yaml values). This will ease the usage of k8s, later.
 
 ### Configuration File (`config.yaml`)
+
+Wallet-scanner protocol capabilities are deployment-owned chain configuration. The coordinated EIP-7702 delivery adds an explicit capability that fails closed when absent; do not infer support from RPC behavior or account-code bytes. Keep Compose and Helm chain configuration aligned using the [common wallet-scanner chain reference](https://github.com/create2-labs/cafe-documentation/blob/main/docs/wallet-scanner-eip7702-chain-support.md).
 
 The `config.yaml` file contains all configuration settings. Here's the complete structure:
 
