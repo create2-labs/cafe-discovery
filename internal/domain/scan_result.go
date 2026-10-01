@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,10 +24,11 @@ type ScanResultEntity struct {
 	IsEOA           bool           `gorm:"not null" json:"is_eoa"`
 	IsERC4337       bool           `gorm:"not null" json:"is_erc4337"`
 	RiskScore       float64        `gorm:"not null" json:"risk_score"`
-	Networks        string         `gorm:"type:text" json:"-"` // JSON array stored as text
-	Connections     string         `gorm:"type:text" json:"-"` // JSON array stored as text
+	Networks        string         `gorm:"type:text" json:"-"`                   // JSON array stored as text
+	Delegations     string         `gorm:"type:text" json:"-"`                   // JSON array stored as text
+	Connections     string         `gorm:"type:text" json:"-"`                   // JSON array stored as text
 	Status          string         `gorm:"type:varchar(20);index" json:"status"` // empty/PENDING until scan.started (RUNNING); then SUCCESS, FAILED, TIMEOUT, UNREACHABLE
-	Error           string         `gorm:"type:text" json:"error,omitempty"`                    // Error message when status is FAILED
+	Error           string         `gorm:"type:text" json:"error,omitempty"`     // Error message when status is FAILED
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
@@ -49,6 +51,7 @@ func (s *ScanResultEntity) BeforeCreate(tx *gorm.DB) error {
 func (s *ScanResultEntity) ToScanResult() *ScanResult {
 	networks := parseStringArray(s.Networks)
 	connections := parseStringArray(s.Connections)
+	delegations := parseDelegations(s.Delegations)
 
 	return &ScanResult{
 		Address:         s.Address,
@@ -63,6 +66,7 @@ func (s *ScanResultEntity) ToScanResult() *ScanResult {
 		IsERC4337:       s.IsERC4337,
 		RiskScore:       s.RiskScore,
 		Networks:        networks,
+		Delegations:     delegations,
 		Connections:     connections,
 		FirstSeen:       &s.CreatedAt,
 		LastSeen:        &s.UpdatedAt,
@@ -77,6 +81,20 @@ func parseStringArray(s string) []string {
 	var arr []string
 	if err := json.Unmarshal([]byte(s), &arr); err != nil {
 		return []string{}
+	}
+	return arr
+}
+
+// parseDelegations turns the persistence text column into a public slice.
+// Empty, null, invalid, and [] all become an empty slice, never nil.
+func parseDelegations(s string) []Delegation {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "[]" || s == "null" {
+		return []Delegation{}
+	}
+	var arr []Delegation
+	if err := json.Unmarshal([]byte(s), &arr); err != nil || arr == nil {
+		return []Delegation{}
 	}
 	return arr
 }

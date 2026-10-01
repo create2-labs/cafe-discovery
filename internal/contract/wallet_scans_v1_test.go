@@ -695,7 +695,7 @@ func TestDiscoveryV1WalletScans_listItemSynopsisExcludesPostureFields(t *testing
 	forbidden := []string{
 		"result", "wallet_type", "current_pq_posture", "algorithm", "type",
 		"nist_level", "risk_score", "key_exposed", "observations", "networks",
-		"first_seen", "last_seen", "scanned_at",
+		"delegations", "first_seen", "last_seen", "scanned_at",
 	}
 	for _, item := range items {
 		row := item.(map[string]any)

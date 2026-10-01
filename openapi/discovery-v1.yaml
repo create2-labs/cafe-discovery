@@ -584,8 +584,9 @@ components:
         `GET …/wallets/scans/{scan_id}` for crypto posture and business fields.
 
         **Must not appear on list items:** `result`, `wallet_type`, `current_pq_posture`,
-        `algorithm`, `type`, `nist_level`, `risk_score`, `key_exposed`, `observations`, or any
-        other field from `WalletScanResult`. **`status`** is lifecycle metadata, not posture.
+        `algorithm`, `type`, `nist_level`, `risk_score`, `key_exposed`, `observations`,
+        `networks`, `delegations`, or any other field from `WalletScanResult`. **`status`**
+        is lifecycle metadata, not posture.
       properties:
         scan_id:
           type: string
@@ -684,8 +685,23 @@ components:
         lifecycle state (`completed` or `failed`). Posture fields (`wallet_type`,
         `current_pq_posture`, etc.) live **only** under `result`, never on list synopsis items.
 
+    WalletDelegation:
+      type: object
+      required: [chain_id, delegated_address]
+      description: |
+        One EIP-7702 designator observed on a chain. `delegated_address` is the delegation
+        target only; this API does not qualify what that address is.
+      properties:
+        chain_id:
+          type: integer
+          format: int64
+        delegated_address:
+          type: string
+          description: Normalized `0x` delegation target address.
+
     WalletScanResult:
       type: object
+      required: [delegations]
       description: |
         Business result for wallet scan (distinct from TLS). Core shape §5.4.4 plus UI fields
         formerly exposed only via `GET /discovery/cbom/{address}` (PR13a).
@@ -717,11 +733,16 @@ components:
           type: boolean
         type:
           type: string
-          description: Account family label (EOA, AA, Contract) — distinct from `wallet_type` enum.
+          description: Account family label (EOA, AA, Contract, unknown) — distinct from `wallet_type` enum.
         networks:
           type: array
           items:
             type: string
+        delegations:
+          type: array
+          description: EIP-7702 delegation targets. Always present, including when empty.
+          items:
+            $ref: "#/components/schemas/WalletDelegation"
         first_seen:
           type: string
           format: date-time
@@ -827,6 +848,7 @@ components:
 
     WalletCbomDocument:
       type: object
+      required: [delegations]
       description: |
         CycloneDX CBOM envelope for a wallet scan execution (W6). Generated on read; not stored as a
         blob. Top-level fields mirror the former `GET /discovery/cbom/{address}` response.
@@ -854,6 +876,11 @@ components:
           type: array
           items:
             type: string
+        delegations:
+          type: array
+          description: EIP-7702 delegation targets. Always present, including when empty.
+          items:
+            $ref: "#/components/schemas/WalletDelegation"
         scanned_at:
           type: string
           format: date-time
