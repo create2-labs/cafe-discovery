@@ -75,7 +75,7 @@ func InitializeDefaultEndpointsSync(ctx context.Context, natsConn nats.Connectio
 			Endpoint:  url,
 			IsDefault: true,
 		}
-		if err := nats.PublishJSON(natsConn, nats.SubjectScanRequestedTLS, msg); err != nil {
+		if err := nats.PublishJSONJetStream(natsConn, nats.SubjectScanRequestedTLS, msg); err != nil {
 			log.Printf("  ⚠️  %s: failed to publish scan.requested.tls: %v", url, err)
 			continue
 		}

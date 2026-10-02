@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -29,11 +30,19 @@ type countingNATS struct {
 }
 
 func (m *countingNATS) Publish(string, []byte) error {
+	return nil
+}
+
+func (m *countingNATS) PublishJetStream(string, []byte) error {
 	if m.err != nil {
 		return m.err
 	}
 	m.publishes.Add(1)
 	return nil
+}
+
+func (m *countingNATS) ListStreamPayloads(context.Context) ([][]byte, error) {
+	return nil, nil
 }
 
 func (m *countingNATS) Subscribe(string, func(msg *natsio.Msg)) (*natsio.Subscription, error) {

@@ -40,6 +40,14 @@ func (m *mockNATSConn) Publish(subject string, data []byte) error {
 	return nil
 }
 
+func (m *mockNATSConn) PublishJetStream(subject string, data []byte) error {
+	return m.Publish(subject, data)
+}
+
+func (m *mockNATSConn) ListStreamPayloads(context.Context) ([][]byte, error) {
+	return nil, nil
+}
+
 func (m *mockNATSConn) Subscribe(string, func(msg *natsio.Msg)) (*natsio.Subscription, error) {
 	return nil, nil
 }
@@ -218,10 +226,10 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	t.Parallel()
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
-		policyRef:        policyRefStub{},
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
+		policyRef:       policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{})
 	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
@@ -353,11 +361,11 @@ func TestPostDiscoveryScanV1_WalletPendingRequested409(t *testing.T) {
 	}
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      pending,
-		scanResultRepo:   &scanResultRepoStub{},
-		policyRef:        policyRefStub{},
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     pending,
+		scanResultRepo:  &scanResultRepoStub{},
+		policyRef:       policyRefStub{},
 	}
 	app := fiber.New(fiber.Config{})
 	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
@@ -393,9 +401,9 @@ func TestPostDiscoveryScanV1_WalletRunningRow409(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
 			UserID:  userID,
@@ -431,10 +439,10 @@ func TestPostDiscoveryScanV1_WalletCPMContext409PolicyOnly(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
-		scanResultRepo:   &scanResultRepoStub{},
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
+		scanResultRepo:  &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, PolicyCount: 1},
 		},
@@ -476,10 +484,10 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
-		scanResultRepo:   &scanResultRepoStub{},
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
+		scanResultRepo:  &scanResultRepoStub{},
 		policyRef: policyRefStub{
 			walletTarget: policyref.WalletTargetContext{Exists: true, DraftCount: 1},
 		},
@@ -511,9 +519,9 @@ func TestPostDiscoveryScanV1_WalletFailedNewestBlockedByCPMDraft(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -547,11 +555,11 @@ func TestPostDiscoveryScanV1_WalletCPMContextCheckUnavailable(t *testing.T) {
 	t.Parallel()
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	h := &DiscoveryHandler{
-		natsConn:         &mockNATSConn{},
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
-		scanResultRepo:   &scanResultRepoStub{},
-		policyRef:        nil,
+		natsConn:        &mockNATSConn{},
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
+		scanResultRepo:  &scanResultRepoStub{},
+		policyRef:       nil,
 	}
 	app := fiber.New(fiber.Config{})
 	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
@@ -584,9 +592,9 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
 		scanResultRepo: &scanResultRepoStub{byAddress: []*domain.ScanResultEntity{{
 			ID:      uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 			UserID:  userID,
@@ -621,9 +629,9 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 	t.Parallel()
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
-		natsConn:         n,
-		scannerPresence:  alwaysScanners{},
-		scanPending:      newMemoryPendingV1Repo(),
+		natsConn:        n,
+		scannerPresence: alwaysScanners{},
+		scanPending:     newMemoryPendingV1Repo(),
 	}
 	app := fiber.New(fiber.Config{})
 	app.Post(discoveryroutes.PostScan, func(c fiber.Ctx) error {
@@ -682,8 +690,8 @@ func TestPostDiscoveryScanV1_BothAddressAndURL(t *testing.T) {
 func TestPostDiscoveryScanV1_NoScanner503(t *testing.T) {
 	t.Parallel()
 	h := &DiscoveryHandler{
-		natsConn:         &mockNATSConn{},
-		scannerPresence:  walletScannerAbsent{},
+		natsConn:        &mockNATSConn{},
+		scannerPresence: walletScannerAbsent{},
 	}
 	app := fiber.New(fiber.Config{})
 	app.Post("/scan", func(c fiber.Ctx) error {

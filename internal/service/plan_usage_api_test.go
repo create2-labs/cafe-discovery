@@ -68,6 +68,9 @@ func (s *usageAPILedgerStub) ReserveScanUsage(uuid.UUID, uuid.UUID, domain.ScanU
 	return repository.ScanUsageReservation{}, nil
 }
 func (s *usageAPILedgerStub) ReleaseSuccessUsageByScanID(uuid.UUID) error { return nil }
+func (s *usageAPILedgerStub) ListOpenScanReservations() ([]repository.OpenScanReservation, error) {
+	return nil, nil
+}
 
 var _ repository.ScanUsageLedgerRepository = (*usageAPILedgerStub)(nil)
 
