@@ -192,6 +192,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
+	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo)
 
 	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres).
 	if _, err := natsConn.Subscribe(nats.SubjectScanReady, func(msg *natsio.Msg) {

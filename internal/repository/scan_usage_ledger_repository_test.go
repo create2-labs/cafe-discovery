@@ -434,3 +434,48 @@ func TestScanUsageLedger_Reserve_EndpointLegacyInFlight(t *testing.T) {
 		t.Fatalf("reserved=%v deny=%q", res.Reserved, res.Deny)
 	}
 }
+
+func TestListOpenScanReservations_TerminalResultIsExcluded(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	openID := uuid.New()
+	doneID := uuid.New()
+	runningID := uuid.New()
+	for _, id := range []uuid.UUID{openID, doneID, runningID} {
+		if _, err := repo.ReserveScanUsage(userID, id, domain.ScanUsageKindWallet, 10, 10); err != nil {
+			t.Fatalf("reserve %s: %v", id, err)
+		}
+	}
+	if err := db.Create(&domain.ScanResultEntity{
+		ID: doneID, UserID: userID, Address: "0x1111111111111111111111111111111111111111",
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+		Status: scan.StateSUCCESS,
+	}).Error; err != nil {
+		t.Fatalf("seed success: %v", err)
+	}
+	if err := db.Create(&domain.ScanResultEntity{
+		ID: runningID, UserID: userID, Address: "0x2222222222222222222222222222222222222222",
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+		Status: scan.StateRUNNING,
+	}).Error; err != nil {
+		t.Fatalf("seed running: %v", err)
+	}
+
+	rows, err := repo.ListOpenScanReservations()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	got := map[uuid.UUID]struct{}{}
+	for _, row := range rows {
+		got[row.ScanID] = struct{}{}
+	}
+	if _, ok := got[doneID]; ok {
+		t.Fatal("completed scan is still open")
+	}
+	if _, ok := got[openID]; !ok {
+		t.Fatal("reservation without a result was not listed")
+	}
+	if _, ok := got[runningID]; !ok {
+		t.Fatal("running scan was not listed")
+	}
+}

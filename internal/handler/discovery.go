@@ -484,7 +484,7 @@ func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, 
 		Str("address", normalized).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.wallet")
-	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedWallet, scanMsg); err != nil {
+	if err := nats.PublishJSONJetStream(h.natsConn, nats.SubjectScanRequestedWallet, scanMsg); err != nil {
 		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},
@@ -552,7 +552,7 @@ func (h *DiscoveryHandler) publishTLSScanRequested(scanID, userID uuid.UUID, end
 		Str("endpoint", scanMsg.Endpoint).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.tls")
-	if err := nats.PublishJSON(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
+	if err := nats.PublishJSONJetStream(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
 		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},

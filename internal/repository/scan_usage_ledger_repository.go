@@ -33,6 +33,16 @@ type ScanUsageLedgerRepository interface {
 	ReserveScanUsage(userID, scanID uuid.UUID, kind domain.ScanUsageKind, quotaLimit, parallelCap int) (ScanUsageReservation, error)
 	// ReleaseSuccessUsageByScanID deletes the ledger row for this scan.
 	ReleaseSuccessUsageByScanID(scanID uuid.UUID) error
+	// ListOpenScanReservations returns ledger rows that do not yet have a terminal scan result.
+	ListOpenScanReservations() ([]OpenScanReservation, error)
+}
+
+// OpenScanReservation is a reserved scan that has not reached a terminal result.
+type OpenScanReservation struct {
+	ScanID     uuid.UUID
+	UserID     uuid.UUID
+	ScanKind   domain.ScanUsageKind
+	ConsumedAt time.Time
 }
 
 // ScanUsageDeny is why a reservation was refused.
@@ -234,6 +244,25 @@ func (r *scanUsageLedgerRepository) ReserveScanUsage(
 
 func (r *scanUsageLedgerRepository) ReleaseSuccessUsageByScanID(scanID uuid.UUID) error {
 	return r.db.Where("scan_id = ?", scanID).Delete(&domain.ScanUsageEventEntity{}).Error
+}
+
+func (r *scanUsageLedgerRepository) ListOpenScanReservations() ([]OpenScanReservation, error) {
+	var rows []OpenScanReservation
+	err := r.db.Raw(`
+SELECT e.scan_id, e.user_id, e.scan_kind, e.consumed_at
+FROM scan_usage_events e
+WHERE NOT EXISTS (
+  SELECT 1 FROM scan_results s
+  WHERE s.id = e.scan_id AND s.deleted_at IS NULL AND s.status IN (?, ?, ?, ?)
+)
+AND NOT EXISTS (
+  SELECT 1 FROM tls_scan_results t
+  WHERE t.id = e.scan_id AND t.deleted_at IS NULL AND t.status IN (?, ?, ?, ?)
+)`,
+		scan.StateSUCCESS, scan.StateFAILED, scan.StateTIMEOUT, scan.StateUNREACHABLE,
+		scan.StateSUCCESS, scan.StateFAILED, scan.StateTIMEOUT, scan.StateUNREACHABLE,
+	).Scan(&rows).Error
+	return rows, err
 }
 
 type scanQuotaSnapshot struct {
