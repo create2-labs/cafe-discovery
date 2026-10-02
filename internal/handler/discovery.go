@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
+	walletaddr "cafe-discovery/internal/address"
 	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/persistence/scanread"
 	"cafe-discovery/internal/policyref"
-	walletaddr "cafe-discovery/internal/address"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
@@ -37,31 +37,31 @@ type ScannerPresenceChecker interface {
 // DiscoveryHandler handles discovery-related HTTP requests.
 // Wallet v1 GET/list/delete and CBOM read via cafe-persistence (PERS-D6a-read / D6a-delete); pending/W8 via D6a-pending.
 type DiscoveryHandler struct {
-	cfgChain         *config.ChainConfig
-	natsConn         nats.Connection
-	planService      *service.PlanService
-	scannerPresence  ScannerPresenceChecker
-	userScanCache    *service.UserScanCacheService
-	scanRead         scanread.Store
-	scanResultRepo   repository.ScanResultRepository
-	scanUsageLedger  repository.ScanUsageLedgerRepository
-	scanPending      scanpending.Store
-	policyRef        policyref.Checker
+	cfgChain        *config.ChainConfig
+	natsConn        nats.Connection
+	planService     *service.PlanService
+	scannerPresence ScannerPresenceChecker
+	userScanCache   *service.UserScanCacheService
+	scanRead        scanread.Store
+	scanResultRepo  repository.ScanResultRepository
+	scanUsageLedger repository.ScanUsageLedgerRepository
+	scanPending     scanpending.Store
+	policyRef       policyref.Checker
 }
 
 // NewDiscoveryHandler creates a new discovery handler.
 func NewDiscoveryHandler(cfgChain *config.ChainConfig, natsConn nats.Connection, planService *service.PlanService, scannerPresence ScannerPresenceChecker, userScanCache *service.UserScanCacheService, scanRead scanread.Store, scanResultRepo repository.ScanResultRepository, scanUsageLedger repository.ScanUsageLedgerRepository, scanPending scanpending.Store, policyRef policyref.Checker) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		cfgChain:        cfgChain,
-		natsConn:         natsConn,
-		planService:      planService,
-		scannerPresence:  scannerPresence,
-		userScanCache:    userScanCache,
-		scanRead:         scanRead,
-		scanResultRepo:   scanResultRepo,
-		scanUsageLedger:  scanUsageLedger,
-		scanPending:      scanPending,
-		policyRef:        policyRef,
+		natsConn:        natsConn,
+		planService:     planService,
+		scannerPresence: scannerPresence,
+		userScanCache:   userScanCache,
+		scanRead:        scanRead,
+		scanResultRepo:  scanResultRepo,
+		scanUsageLedger: scanUsageLedger,
+		scanPending:     scanPending,
+		policyRef:       policyRef,
 	}
 }
 
@@ -104,22 +104,43 @@ func (h *DiscoveryHandler) getAuthenticatedUserID(c fiber.Ctx) (uuid.UUID, error
 	return userID, nil
 }
 
-// checkScanLimits validates IMM-6b POST guards (G1 ledger success+in-flight, G2 parallel cap).
-func (h *DiscoveryHandler) checkScanLimits(userID uuid.UUID, scanType string) (limitReached bool, errorMsg string, err error) {
+// reserveScanQuota inserts the ledger row for this scan before NATS publication.
+// A nil plan service skips the quota (tests and unconfigured plans).
+func (h *DiscoveryHandler) reserveScanQuota(userID, scanID uuid.UUID, scanType string) *queueScanError {
 	if h.planService == nil {
-		return false, "", nil
+		return nil
 	}
 	if h.scanUsageLedger == nil {
-		return false, "", fmt.Errorf("scan usage ledger not configured")
+		return &queueScanError{
+			status: fiber.StatusInternalServerError,
+			body:   fiber.Map{"error": "failed to check plan limits: scan usage ledger not configured"},
+		}
 	}
-	canScan, usage, deny, err := h.planService.CheckPostScanQuota(userID, scanType, h.scanUsageLedger)
+	reserved, usage, deny, err := h.planService.ReservePostScanQuota(userID, scanID, scanType, h.scanUsageLedger)
 	if err != nil {
-		return false, "", err
+		return &queueScanError{
+			status: fiber.StatusInternalServerError,
+			body:   fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)},
+		}
 	}
-	if !canScan {
-		return true, postScanLimitErrorMessage(scanType, usage, deny), nil
+	if !reserved {
+		return &queueScanError{
+			status: fiber.StatusForbidden,
+			body:   fiber.Map{"error": postScanLimitErrorMessage(scanType, usage, deny)},
+		}
 	}
-	return false, "", nil
+	return nil
+}
+
+func (h *DiscoveryHandler) rollbackScanAccept(ctx context.Context, userID uuid.UUID, tenantID string, scanID uuid.UUID, releaseQuota bool) {
+	if releaseQuota && h.scanUsageLedger != nil {
+		if err := h.scanUsageLedger.ReleaseSuccessUsageByScanID(scanID); err != nil {
+			log.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to release scan quota after accept rollback")
+		}
+	}
+	if h.scanPending != nil {
+		_ = h.scanPending.Delete(ctx, userID, tenantID, scanID)
+	}
 }
 
 func postScanLimitErrorMessage(scanType string, usage *service.PlanUsage, deny service.PostScanQuotaDenyReason) string {
@@ -203,8 +224,12 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c fiber.Ctx) error {
 		if !reserved {
 			return c.Status(fiber.StatusConflict).JSON(v1ErrorBody(scanInProgressErrorBody()))
 		}
+		if qe := h.reserveScanQuota(userID, scanID, "wallet"); qe != nil {
+			h.rollbackScanAccept(c.RequestCtx(), userID, tenantID, scanID, false)
+			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
+		}
 		if qe := h.publishWalletScanRequested(scanID, userID, normalized); qe != nil {
-			_ = h.scanPending.Delete(c.RequestCtx(), userID, tenantID, scanID)
+			h.rollbackScanAccept(c.RequestCtx(), userID, tenantID, scanID, true)
 			return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 		}
 		return c.JSON(postScanV1AcceptedJSON(scanID, "wallet"))
@@ -230,7 +255,12 @@ func (h *DiscoveryHandler) PostDiscoveryScanV1(c fiber.Ctx) error {
 			"message": "The scan could not be accepted; please try again.",
 		}))
 	}
+	if qe := h.reserveScanQuota(userID, scanID, "endpoint"); qe != nil {
+		h.rollbackScanAccept(c.RequestCtx(), userID, tenantID, scanID, false)
+		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
+	}
 	if qe := h.publishTLSScanRequested(scanID, userID, endpoint); qe != nil {
+		h.rollbackScanAccept(c.RequestCtx(), userID, tenantID, scanID, true)
 		return c.Status(qe.status).JSON(v1ErrorBody(qe.body))
 	}
 	return c.JSON(postScanV1AcceptedJSON(scanID, "tls"))
@@ -289,20 +319,6 @@ func (h *DiscoveryHandler) prepareWalletScanQueue(c fiber.Ctx, address string) (
 		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusServiceUnavailable,
 			body:   fiber.Map{"error": "no wallet scanner available, please try again later"},
-		}
-	}
-
-	limitReached, limitMsg, err := h.checkScanLimits(userID, "wallet")
-	if err != nil {
-		return uuid.Nil, uuid.Nil, "", &queueScanError{
-			status: fiber.StatusInternalServerError,
-			body:   fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)},
-		}
-	}
-	if limitReached {
-		return uuid.Nil, uuid.Nil, "", &queueScanError{
-			status: fiber.StatusForbidden,
-			body:   fiber.Map{"error": limitMsg},
 		}
 	}
 
@@ -518,20 +534,6 @@ func (h *DiscoveryHandler) prepareTLSScanQueue(c fiber.Ctx, endpointURL string) 
 		return uuid.Nil, uuid.Nil, "", &queueScanError{
 			status: fiber.StatusBadRequest,
 			body:   fiber.Map{"error": "url must include a valid hostname"},
-		}
-	}
-
-	limitReached, limitMsg, err := h.checkScanLimits(userID, "endpoint")
-	if err != nil {
-		return uuid.Nil, uuid.Nil, "", &queueScanError{
-			status: fiber.StatusInternalServerError,
-			body:   fiber.Map{"error": fmt.Sprintf("failed to check plan limits: %v", err)},
-		}
-	}
-	if limitReached {
-		return uuid.Nil, uuid.Nil, "", &queueScanError{
-			status: fiber.StatusForbidden,
-			body:   fiber.Map{"error": limitMsg},
 		}
 	}
 

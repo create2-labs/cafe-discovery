@@ -11,11 +11,11 @@ import (
 )
 
 type usageAPILedgerStub struct {
-	walletUsed      int64
-	walletVisible   int64
-	walletInFlight  int64
-	endpointUsed    int64
-	endpointVisible int64
+	walletUsed       int64
+	walletVisible    int64
+	walletInFlight   int64
+	endpointUsed     int64
+	endpointVisible  int64
 	endpointInFlight int64
 }
 
@@ -64,6 +64,10 @@ func (s *usageAPILedgerStub) TryAcquireSuccessSlotInTx(*gorm.DB, uuid.UUID, doma
 func (s *usageAPILedgerStub) RecordSuccessUsageIfUnderLimitInTx(*gorm.DB, uuid.UUID, uuid.UUID, domain.ScanUsageKind, int) (bool, error) {
 	return true, nil
 }
+func (s *usageAPILedgerStub) ReserveScanUsage(uuid.UUID, uuid.UUID, domain.ScanUsageKind, int, int) (repository.ScanUsageReservation, error) {
+	return repository.ScanUsageReservation{}, nil
+}
+func (s *usageAPILedgerStub) ReleaseSuccessUsageByScanID(uuid.UUID) error { return nil }
 
 var _ repository.ScanUsageLedgerRepository = (*usageAPILedgerStub)(nil)
 

@@ -206,3 +206,231 @@ func TestScanUsageLedger_RecordSuccessUsageIfUnderLimit_Concurrent(t *testing.T)
 		t.Fatalf("want exactly 1 concurrent slot taker, got %d", recorded)
 	}
 }
+
+func TestScanUsageLedger_Reserve_ConcurrentOneCredit(t *testing.T) {
+	_, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+
+	const workers = 8
+	var wg sync.WaitGroup
+	var reserved int64
+	var mu sync.Mutex
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 1, 3)
+			if err != nil {
+				t.Errorf("reserve: %v", err)
+				return
+			}
+			if res.Reserved {
+				mu.Lock()
+				reserved++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	final, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if final != 1 || reserved != 1 {
+		t.Fatalf("want 1 reservation, ledger=%d reserved=%d", final, reserved)
+	}
+}
+
+func TestScanUsageLedger_Reserve_QuotaFullLeavesLedgerUnchanged(t *testing.T) {
+	_, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	if err := repo.RecordSuccessUsage(userID, uuid.New(), domain.ScanUsageKindWallet); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 1, 3)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if res.Reserved || res.Deny != ScanUsageDenyQuota {
+		t.Fatalf("reserved=%v deny=%q", res.Reserved, res.Deny)
+	}
+	count, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("ledger count = %d, want 1", count)
+	}
+}
+
+func TestScanUsageLedger_Reserve_ParallelCapOnOpenReservations(t *testing.T) {
+	_, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	for i := 0; i < 3; i++ {
+		res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 100, 3)
+		if err != nil || !res.Reserved {
+			t.Fatalf("seed reserve %d: reserved=%v err=%v deny=%q", i, res.Reserved, err, res.Deny)
+		}
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 100, 3)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if res.Reserved || res.Deny != ScanUsageDenyParallel {
+		t.Fatalf("reserved=%v deny=%q parallel=%d", res.Reserved, res.Deny, res.ParallelInFlight)
+	}
+	count, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("ledger count = %d, want 3", count)
+	}
+}
+
+func TestScanUsageLedger_Reserve_DoesNotDoubleCountInFlightWithLedger(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	if err := repo.RecordSuccessUsage(userID, scanID, domain.ScanUsageKindWallet); err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	row := domain.ScanResultEntity{
+		ID: scanID, UserID: userID, Address: "0xrun", Status: scan.StateRUNNING,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed scan: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 2, 3)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if !res.Reserved {
+		t.Fatalf("expected reservation under limit 2 with one in-flight ledger row, deny=%q ledger=%d extra=%d", res.Deny, res.LedgerCount, res.ExtraInFlight)
+	}
+}
+
+func TestScanUsageLedger_Reserve_LegacyInFlightWithoutLedgerCountsTowardQuota(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	row := domain.ScanResultEntity{
+		ID: uuid.New(), UserID: userID, Address: "0xlegacy", Status: scan.StatePENDING,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed scan: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 1, 3)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if res.Reserved || res.Deny != ScanUsageDenyQuota {
+		t.Fatalf("reserved=%v deny=%q", res.Reserved, res.Deny)
+	}
+	count, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("ledger count = %d, want 0", count)
+	}
+}
+
+func TestScanUsageLedger_Reserve_CompletedScanDoesNotUseParallelSlot(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	if err := repo.RecordSuccessUsage(userID, scanID, domain.ScanUsageKindWallet); err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	row := domain.ScanResultEntity{
+		ID: scanID, UserID: userID, Address: "0xdone", Status: scan.StateSUCCESS,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed scan: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 10, 1)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if !res.Reserved {
+		t.Fatalf("completed scan must not fill the parallel cap, deny=%q parallel=%d", res.Deny, res.ParallelInFlight)
+	}
+}
+
+func TestScanUsageLedger_Reserve_SoftDeletedResultIsNotAnOpenReservation(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	if err := repo.RecordSuccessUsage(userID, scanID, domain.ScanUsageKindWallet); err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	row := domain.ScanResultEntity{
+		ID: scanID, UserID: userID, Address: "0xdel", Status: scan.StateSUCCESS,
+		Type: domain.AccountTypeEOA, Algorithm: domain.AlgorithmECDSAsecp256k1, NISTLevel: domain.NISTLevel1,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed scan: %v", err)
+	}
+	if err := db.Delete(&domain.ScanResultEntity{}, "id = ?", scanID).Error; err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindWallet, 10, 1)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if !res.Reserved {
+		t.Fatalf("soft-deleted result must not count as in progress, deny=%q parallel=%d", res.Deny, res.ParallelInFlight)
+	}
+}
+
+func TestScanUsageLedger_ReleaseSuccessUsageByScanID(t *testing.T) {
+	_, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	scanID := uuid.New()
+	res, err := repo.ReserveScanUsage(userID, scanID, domain.ScanUsageKindEndpoint, 1, 3)
+	if err != nil || !res.Reserved {
+		t.Fatalf("reserve: reserved=%v err=%v", res.Reserved, err)
+	}
+	if err := repo.ReleaseSuccessUsageByScanID(scanID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	count, err := repo.CountSuccessUsage(userID, domain.ScanUsageKindEndpoint)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("ledger count = %d, want 0", count)
+	}
+}
+
+func TestScanUsageLedger_Reserve_EndpointLegacyInFlight(t *testing.T) {
+	db, repo := setupScanUsageLedgerTestDB(t)
+	userID := uuid.New()
+	row := domain.TLSScanResultEntity{
+		ID: uuid.New(), UserID: &userID, URL: "https://example.com", Host: "example.com", Port: 443,
+		ProtocolVersion: "TLS1.3", NISTLevel: domain.NISTLevel1, PQCRisk: "unknown",
+		Status: scan.StateRUNNING, Default: false,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed tls: %v", err)
+	}
+
+	res, err := repo.ReserveScanUsage(userID, uuid.New(), domain.ScanUsageKindEndpoint, 1, 3)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if res.Reserved || res.Deny != ScanUsageDenyQuota {
+		t.Fatalf("reserved=%v deny=%q", res.Reserved, res.Deny)
+	}
+}

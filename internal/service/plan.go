@@ -196,7 +196,7 @@ func (s *PlanService) CheckScanLimitFromCounts(userID uuid.UUID, scanType string
 }
 
 // CheckScanLimit checks if a user can perform a scan using legacy row counts.
-// Superseded for POST by CheckPostScanQuota (IMM-6b G1/G2).
+// POST acceptance reserves a ledger row via ReservePostScanQuota.
 func (s *PlanService) CheckScanLimit(userID uuid.UUID, scanType string, scanResultRepo repository.ScanResultRepository, tlsScanResultRepo repository.TLSScanResultRepository) (bool, *PlanUsage, error) {
 	var walletCount, endpointCount int64
 	if scanResultRepo != nil {
@@ -227,14 +227,18 @@ func planParallelScanCap(limit int, unlimited bool) int {
 	return 3
 }
 
-// CheckPostScanQuota enforces IMM-6b POST guards (G1 success+in-flight, G2 parallel cap) via the ledger.
-func (s *PlanService) CheckPostScanQuota(
-	userID uuid.UUID,
+// ReservePostScanQuota inserts a ledger row for scanID when the plan quota and the parallel cap allow it.
+// The row counts as a success. Quota and the parallel cap are decided in that same insert.
+func (s *PlanService) ReservePostScanQuota(
+	userID, scanID uuid.UUID,
 	scanType string,
 	ledger repository.ScanUsageLedgerRepository,
 ) (bool, *PlanUsage, PostScanQuotaDenyReason, error) {
 	if userID == uuid.Nil {
 		return false, nil, PostScanQuotaOK, errors.New("user not authenticated")
+	}
+	if scanID == uuid.Nil {
+		return false, nil, PostScanQuotaOK, errors.New("scan id required")
 	}
 	if ledger == nil {
 		return false, nil, PostScanQuotaOK, errors.New("scan usage ledger required")
@@ -250,32 +254,6 @@ func (s *PlanService) CheckPostScanQuota(
 		return false, nil, PostScanQuotaOK, err
 	}
 
-	successful, err := ledger.CountSuccessUsage(userID, kind)
-	if err != nil {
-		return false, nil, PostScanQuotaOK, fmt.Errorf("count successful usage: %w", err)
-	}
-	inFlight, err := ledger.CountInFlightScans(userID, kind)
-	if err != nil {
-		return false, nil, PostScanQuotaOK, fmt.Errorf("count in-flight scans: %w", err)
-	}
-
-	usage := &PlanUsage{
-		WalletScanLimit:   plan.WalletScanLimit,
-		EndpointScanLimit: plan.EndpointScanLimit,
-	}
-	switch scanType {
-	case scan.PlanLimitKeyWallet:
-		usage.WalletScansUsed = int(successful)
-		usage.WalletScansInFlight = int(inFlight)
-		usage.WalletScansLeft = planScansLeft(plan.WalletScanLimit, successful, plan.IsUnlimited(scan.PlanLimitKeyWallet))
-	case scan.PlanLimitKeyEndpoint:
-		usage.EndpointScansUsed = int(successful)
-		usage.EndpointScansInFlight = int(inFlight)
-		usage.EndpointScansLeft = planScansLeft(plan.EndpointScanLimit, successful, plan.IsUnlimited(scan.PlanLimitKeyEndpoint))
-	default:
-		return false, usage, PostScanQuotaOK, fmt.Errorf("unknown scan type: %s", scanType)
-	}
-
 	unlimited := plan.IsUnlimited(scanType)
 	var limit int
 	switch scanType {
@@ -283,19 +261,50 @@ func (s *PlanService) CheckPostScanQuota(
 		limit = plan.WalletScanLimit
 	case scan.PlanLimitKeyEndpoint:
 		limit = plan.EndpointScanLimit
+	default:
+		return false, nil, PostScanQuotaOK, fmt.Errorf("unknown scan type: %s", scanType)
+	}
+	quotaLimit := limit
+	if unlimited {
+		quotaLimit = 0
 	}
 
-	parallelCap := planParallelScanCap(limit, unlimited)
-	deny := PostScanQuotaOK
-	if !unlimited && successful+inFlight >= int64(limit) {
-		deny = PostScanQuotaDenyQuota
+	res, err := ledger.ReserveScanUsage(userID, scanID, kind, quotaLimit, planParallelScanCap(limit, unlimited))
+	if err != nil {
+		return false, nil, PostScanQuotaOK, err
 	}
-	if inFlight >= int64(parallelCap) {
-		if deny == PostScanQuotaOK {
+
+	usage := usageFromReservation(scanType, plan, res)
+	if !res.Reserved {
+		deny := PostScanQuotaDenyQuota
+		if res.Deny == repository.ScanUsageDenyParallel {
 			deny = PostScanQuotaDenyParallel
 		}
+		return false, usage, deny, nil
 	}
-	return deny == PostScanQuotaOK, usage, deny, nil
+	return true, usage, PostScanQuotaOK, nil
+}
+
+func usageFromReservation(scanType string, plan *domain.Plan, res repository.ScanUsageReservation) *PlanUsage {
+	inFlight := res.ExtraInFlight
+	if res.Deny == repository.ScanUsageDenyParallel {
+		inFlight = res.ParallelInFlight
+	}
+	usage := &PlanUsage{
+		WalletScanLimit:   plan.WalletScanLimit,
+		EndpointScanLimit: plan.EndpointScanLimit,
+	}
+	switch scanType {
+	case scan.PlanLimitKeyWallet:
+		usage.WalletScansUsed = int(res.LedgerCount)
+		usage.WalletScansInFlight = int(inFlight)
+		usage.WalletScansLeft = planScansLeft(plan.WalletScanLimit, res.LedgerCount, plan.IsUnlimited(scan.PlanLimitKeyWallet))
+	case scan.PlanLimitKeyEndpoint:
+		usage.EndpointScansUsed = int(res.LedgerCount)
+		usage.EndpointScansInFlight = int(inFlight)
+		usage.EndpointScansLeft = planScansLeft(plan.EndpointScanLimit, res.LedgerCount, plan.IsUnlimited(scan.PlanLimitKeyEndpoint))
+	}
+	return usage
 }
 
 func planScansLeft(limit int, successful int64, unlimited bool) int {

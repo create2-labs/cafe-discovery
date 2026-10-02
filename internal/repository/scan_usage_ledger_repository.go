@@ -27,6 +27,31 @@ type ScanUsageLedgerRepository interface {
 	TryAcquireSuccessSlotInTx(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind, limit int) (bool, error)
 	// RecordSuccessUsageIfUnderLimitInTx atomically inserts when ledger count < limit (portable).
 	RecordSuccessUsageIfUnderLimitInTx(tx *gorm.DB, userID, scanID uuid.UUID, kind domain.ScanUsageKind, limit int) (bool, error)
+	// ReserveScanUsage inserts one ledger row when quota and the parallel cap both allow it.
+	// quotaLimit <= 0 skips the quota check. parallelCap is always enforced.
+	// A refusal leaves the ledger unchanged.
+	ReserveScanUsage(userID, scanID uuid.UUID, kind domain.ScanUsageKind, quotaLimit, parallelCap int) (ScanUsageReservation, error)
+	// ReleaseSuccessUsageByScanID deletes the ledger row for this scan.
+	ReleaseSuccessUsageByScanID(scanID uuid.UUID) error
+}
+
+// ScanUsageDeny is why a reservation was refused.
+type ScanUsageDeny string
+
+const (
+	ScanUsageAllowed      ScanUsageDeny = ""
+	ScanUsageDenyQuota    ScanUsageDeny = "quota"
+	ScanUsageDenyParallel ScanUsageDeny = "parallel"
+)
+
+// ScanUsageReservation is the outcome of an atomic quota reservation.
+// Counts are the snapshot taken before the insert.
+type ScanUsageReservation struct {
+	Reserved         bool
+	Deny             ScanUsageDeny
+	LedgerCount      int64
+	ExtraInFlight    int64
+	ParallelInFlight int64
 }
 
 type scanUsageLedgerRepository struct {
@@ -75,22 +100,7 @@ func (r *scanUsageLedgerRepository) CountInFlightScans(userID uuid.UUID, kind do
 	if err := validateScanUsageKind(kind); err != nil {
 		return 0, err
 	}
-	switch kind {
-	case domain.ScanUsageKindWallet:
-		var count int64
-		err := r.db.Model(&domain.ScanResultEntity{}).
-			Where("user_id = ? AND status IN ?", userID, scanUsageInFlightStatuses).
-			Count(&count).Error
-		return count, err
-	case domain.ScanUsageKindEndpoint:
-		var count int64
-		err := r.db.Model(&domain.TLSScanResultEntity{}).
-			Where("user_id = ? AND \"default\" = ? AND status IN ?", userID, false, scanUsageInFlightStatuses).
-			Count(&count).Error
-		return count, err
-	default:
-		return 0, errInvalidScanUsageKind
-	}
+	return countInFlight(r.db, userID, kind)
 }
 
 func (r *scanUsageLedgerRepository) CountVisibleSuccessScans(userID uuid.UUID, kind domain.ScanUsageKind) (int64, error) {
@@ -176,6 +186,149 @@ ON CONFLICT (scan_id) DO NOTHING`,
 		return false, res.Error
 	}
 	return res.RowsAffected > 0, nil
+}
+
+func (r *scanUsageLedgerRepository) ReserveScanUsage(
+	userID, scanID uuid.UUID,
+	kind domain.ScanUsageKind,
+	quotaLimit, parallelCap int,
+) (ScanUsageReservation, error) {
+	if scanID == uuid.Nil {
+		return ScanUsageReservation{}, errors.New("scan id required")
+	}
+	if err := validateScanUsageKind(kind); err != nil {
+		return ScanUsageReservation{}, err
+	}
+	var out ScanUsageReservation
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockUserKindQuota(tx, userID, kind); err != nil {
+			return err
+		}
+		snap, err := loadScanQuotaSnapshot(tx, userID, kind)
+		if err != nil {
+			return err
+		}
+		out.LedgerCount = snap.ledger
+		out.ExtraInFlight = snap.extraInFlight
+		out.ParallelInFlight = snap.parallel
+		if quotaLimit > 0 && snap.ledger+snap.extraInFlight >= int64(quotaLimit) {
+			out.Deny = ScanUsageDenyQuota
+			return nil
+		}
+		if parallelCap > 0 && snap.parallel >= int64(parallelCap) {
+			out.Deny = ScanUsageDenyParallel
+			return nil
+		}
+		if err := r.RecordSuccessUsageInTx(tx, userID, scanID, kind); err != nil {
+			return err
+		}
+		out.Reserved = true
+		out.Deny = ScanUsageAllowed
+		return nil
+	})
+	if err != nil {
+		return ScanUsageReservation{}, err
+	}
+	return out, nil
+}
+
+func (r *scanUsageLedgerRepository) ReleaseSuccessUsageByScanID(scanID uuid.UUID) error {
+	return r.db.Where("scan_id = ?", scanID).Delete(&domain.ScanUsageEventEntity{}).Error
+}
+
+type scanQuotaSnapshot struct {
+	ledger        int64
+	extraInFlight int64
+	parallel      int64
+}
+
+func quotaStmt(tx *gorm.DB) *gorm.DB {
+	return tx.Session(&gorm.Session{NewDB: true})
+}
+
+func loadScanQuotaSnapshot(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind) (scanQuotaSnapshot, error) {
+	var snap scanQuotaSnapshot
+	if err := quotaStmt(tx).Model(&domain.ScanUsageEventEntity{}).
+		Where("user_id = ? AND scan_kind = ?", userID, kind).
+		Count(&snap.ledger).Error; err != nil {
+		return snap, err
+	}
+	inFlight, err := countInFlight(tx, userID, kind)
+	if err != nil {
+		return snap, err
+	}
+	extra, err := countInFlightWithoutLedger(tx, userID, kind)
+	if err != nil {
+		return snap, err
+	}
+	open, err := countOpenReservations(tx, userID, kind)
+	if err != nil {
+		return snap, err
+	}
+	snap.extraInFlight = extra
+	snap.parallel = inFlight + open
+	return snap, nil
+}
+
+func countInFlight(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind) (int64, error) {
+	switch kind {
+	case domain.ScanUsageKindWallet:
+		var count int64
+		err := quotaStmt(tx).Model(&domain.ScanResultEntity{}).
+			Where("user_id = ? AND status IN ?", userID, scanUsageInFlightStatuses).
+			Count(&count).Error
+		return count, err
+	case domain.ScanUsageKindEndpoint:
+		var count int64
+		err := quotaStmt(tx).Model(&domain.TLSScanResultEntity{}).
+			Where("user_id = ? AND \"default\" = ? AND status IN ?", userID, false, scanUsageInFlightStatuses).
+			Count(&count).Error
+		return count, err
+	default:
+		return 0, errInvalidScanUsageKind
+	}
+}
+
+func countInFlightWithoutLedger(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind) (int64, error) {
+	ledgerIDs := quotaStmt(tx).Model(&domain.ScanUsageEventEntity{}).
+		Select("scan_id").
+		Where("user_id = ? AND scan_kind = ?", userID, kind)
+	switch kind {
+	case domain.ScanUsageKindWallet:
+		var count int64
+		err := quotaStmt(tx).Model(&domain.ScanResultEntity{}).
+			Where("user_id = ? AND status IN ?", userID, scanUsageInFlightStatuses).
+			Where("id NOT IN (?)", ledgerIDs).
+			Count(&count).Error
+		return count, err
+	case domain.ScanUsageKindEndpoint:
+		var count int64
+		err := quotaStmt(tx).Model(&domain.TLSScanResultEntity{}).
+			Where("user_id = ? AND \"default\" = ? AND status IN ?", userID, false, scanUsageInFlightStatuses).
+			Where("id NOT IN (?)", ledgerIDs).
+			Count(&count).Error
+		return count, err
+	default:
+		return 0, errInvalidScanUsageKind
+	}
+}
+
+func countOpenReservations(tx *gorm.DB, userID uuid.UUID, kind domain.ScanUsageKind) (int64, error) {
+	var presentIDs *gorm.DB
+	switch kind {
+	case domain.ScanUsageKindWallet:
+		presentIDs = quotaStmt(tx).Unscoped().Model(&domain.ScanResultEntity{}).Select("id")
+	case domain.ScanUsageKindEndpoint:
+		presentIDs = quotaStmt(tx).Unscoped().Model(&domain.TLSScanResultEntity{}).Select("id")
+	default:
+		return 0, errInvalidScanUsageKind
+	}
+	var count int64
+	err := quotaStmt(tx).Model(&domain.ScanUsageEventEntity{}).
+		Where("user_id = ? AND scan_kind = ?", userID, kind).
+		Where("scan_id NOT IN (?)", presentIDs).
+		Count(&count).Error
+	return count, err
 }
 
 var errInvalidScanUsageKind = errors.New("invalid scan usage kind")
