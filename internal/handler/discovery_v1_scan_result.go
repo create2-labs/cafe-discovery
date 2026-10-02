@@ -16,6 +16,10 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 	if networks == nil {
 		networks = []string{}
 	}
+	delegations := dto.Delegations
+	if delegations == nil {
+		delegations = []domain.Delegation{}
+	}
 	return fiber.Map{
 		"target_address":     e.Address,
 		"chain_ids":          chainIDsForNetworks(e.Networks, cfg),
@@ -29,6 +33,7 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 		"key_exposed": e.KeyExposed,
 		"type":        string(accountType),
 		"networks":    networks,
+		"delegations": delegations,
 		"first_seen":  formatTimeRFC3339Nano(dto.FirstSeen),
 		"last_seen":   formatTimeRFC3339Nano(dto.LastSeen),
 		"scanned_at":  formatTimeRFC3339Nano(&dto.ScannedAt),

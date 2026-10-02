@@ -74,6 +74,89 @@ func TestWalletScanResultV1_typeEOAWithFalseIsEOA_alignsWalletType(t *testing.T)
 	}
 }
 
+func TestWalletScanResultV1_unknownAndDelegations(t *testing.T) {
+	t.Parallel()
+	target := "0x1111111111111111111111111111111111111111"
+	ent := &domain.ScanResultEntity{
+		ID:          uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+		Address:     "0x2222222222222222222222222222222222222222",
+		Type:        domain.AccountTypeUnknown,
+		Algorithm:   "",
+		NISTLevel:   0,
+		IsEOA:       false,
+		RiskScore:   0,
+		Networks:    "[]",
+		Delegations: `[{"chain_id":1,"delegated_address":"` + target + `"}]`,
+		Status:      scan.StateSUCCESS,
+	}
+	body := walletScanResultV1(ent, nil)
+	if body["wallet_type"] != domain.WalletTypeUnknown {
+		t.Fatalf("wallet_type = %v, want unknown", body["wallet_type"])
+	}
+	if body["type"] != string(domain.AccountTypeUnknown) {
+		t.Fatalf("type = %v, want unknown", body["type"])
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	delegations, ok := doc["delegations"].([]any)
+	if !ok || len(delegations) != 1 {
+		t.Fatalf("delegations = %#v", doc["delegations"])
+	}
+	row := delegations[0].(map[string]any)
+	if row["chain_id"] != float64(1) || row["delegated_address"] != target {
+		t.Fatalf("delegation = %#v", row)
+	}
+}
+
+func TestWalletScanResultV1_emptyInvalidDelegationsAreArray(t *testing.T) {
+	t.Parallel()
+	for _, rawDelegations := range []string{"", "null", "[]", "not-json", "   "} {
+		ent := &domain.ScanResultEntity{
+			Type:        domain.AccountTypeEOA,
+			IsEOA:       true,
+			Algorithm:   domain.AlgorithmECDSAsecp256k1,
+			Delegations: rawDelegations,
+			Status:      scan.StateSUCCESS,
+		}
+		raw, err := json.Marshal(walletScanResultV1(ent, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		delegations, ok := doc["delegations"].([]any)
+		if !ok || len(delegations) != 0 {
+			t.Fatalf("delegations for %q = %#v", rawDelegations, doc["delegations"])
+		}
+	}
+}
+
+func TestWalletScanResultV1_legacyAA(t *testing.T) {
+	t.Parallel()
+	ent := &domain.ScanResultEntity{
+		Type:      domain.AccountTypeAA,
+		IsEOA:     false,
+		IsERC4337: true,
+		Algorithm: domain.AlgorithmECDSAsecp256k1,
+		Status:    scan.StateSUCCESS,
+	}
+	body := walletScanResultV1(ent, nil)
+	if body["wallet_type"] != domain.WalletTypeSmartAccount {
+		t.Fatalf("wallet_type = %v, want smart_account", body["wallet_type"])
+	}
+	if body["type"] != string(domain.AccountTypeAA) {
+		t.Fatalf("type = %v, want AA", body["type"])
+	}
+}
+
 func TestTlsScanResultBodyV1_UIFields(t *testing.T) {
 	t.Parallel()
 	ent := &domain.TLSScanResultEntity{

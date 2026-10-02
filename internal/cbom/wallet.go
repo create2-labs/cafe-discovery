@@ -16,16 +16,17 @@ func Wallet(sr *domain.ScanResult, address string) map[string]any {
 		address = sr.Address
 	}
 
+	qv := quantumVulnerable(sr.Algorithm, sr.NISTLevel)
 	component := map[string]any{
 		"type":               "cryptographic-primitive",
 		"name":               sr.Algorithm,
 		"nist_level":         sr.NISTLevel,
-		"quantum_vulnerable": sr.NISTLevel <= 1,
+		"quantum_vulnerable": qv,
 		"key_exposed":        sr.KeyExposed,
 		"assetType":          "related-crypto-material",
 		"state":              "active",
 	}
-	if sr.NISTLevel <= 1 {
+	if qv {
 		component["customStates"] = []map[string]any{{
 			"name":        "quantum-vulnerable",
 			"description": "Key relies on cryptographic algorithms considered vulnerable to future cryptographic quantum attacks",
@@ -37,6 +38,10 @@ func Wallet(sr *domain.ScanResult, address string) map[string]any {
 		timestamp = time.Now().UTC().Format(time.RFC3339)
 	}
 
+	delegations := sr.Delegations
+	if delegations == nil {
+		delegations = []domain.Delegation{}
+	}
 	return map[string]any{
 		"address":     address,
 		"type":        sr.Type,
@@ -47,6 +52,7 @@ func Wallet(sr *domain.ScanResult, address string) map[string]any {
 		"first_seen":  sr.FirstSeen,
 		"last_seen":   sr.LastSeen,
 		"networks":    sr.Networks,
+		"delegations": delegations,
 		"scanned_at":  sr.ScannedAt,
 		"cbom": map[string]any{
 			"bomFormat":   "CycloneDX",
@@ -59,4 +65,10 @@ func Wallet(sr *domain.ScanResult, address string) map[string]any {
 			"components": []map[string]any{component},
 		},
 	}
+}
+
+// quantumVulnerable is false when the observation has no algorithm.
+// NIST level 0 compares as <= 1, so the level alone must not mark an empty algorithm.
+func quantumVulnerable(algorithm domain.Algorithm, level domain.NISTLevel) bool {
+	return algorithm != "" && level <= domain.NISTLevel1
 }

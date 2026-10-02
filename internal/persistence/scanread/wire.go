@@ -25,6 +25,7 @@ type WalletScanRowWire struct {
 	IsERC4337       bool    `json:"is_erc4337"`
 	RiskScore       float64 `json:"risk_score"`
 	Networks        string  `json:"networks"`
+	Delegations     string  `json:"delegations"`
 	Connections     string  `json:"connections"`
 	Status          string  `json:"status"`
 	Error           string  `json:"error"`
@@ -119,6 +120,7 @@ func WalletRowToEntity(w WalletScanRowWire) (*domain.ScanResultEntity, error) {
 		IsERC4337:       w.IsERC4337,
 		RiskScore:       w.RiskScore,
 		Networks:        w.Networks,
+		Delegations:     w.Delegations,
 		Connections:     w.Connections,
 		Status:          w.Status,
 		Error:           w.Error,
