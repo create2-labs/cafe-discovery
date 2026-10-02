@@ -16,8 +16,9 @@ const (
 	ScanUsageKindEndpoint ScanUsageKind = "endpoint"
 )
 
-// ScanUsageEventEntity is an append-only ledger row for plan quota (IMM-6b P1).
-// One row per completed-success scan_id; never deleted or updated.
+// ScanUsageEventEntity is a ledger row for plan quota (IMM-6b P1).
+// One row per accepted scan_id. Discovery inserts it when the scan is accepted.
+// The row is removed when publication fails or the scan ends without a result.
 type ScanUsageEventEntity struct {
 	ID         uuid.UUID     `gorm:"type:char(36);primary_key" json:"id"`
 	UserID     uuid.UUID     `gorm:"type:char(36);not null" json:"user_id"`
