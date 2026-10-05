@@ -54,6 +54,37 @@ func TestWalletScanResultV1_UIFields(t *testing.T) {
 	}
 }
 
+func TestWalletScanResultV1_activityTimes(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	updated := created.Add(time.Minute)
+	first := time.Date(2019, 5, 6, 7, 8, 9, 0, time.UTC)
+	last := time.Date(2024, 11, 12, 13, 14, 15, 0, time.UTC)
+	scanned := time.Date(2026, 10, 5, 8, 47, 0, 0, time.UTC)
+	ent := &domain.ScanResultEntity{
+		Address:   "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+		Type:      domain.AccountTypeEOA,
+		Algorithm: domain.AlgorithmECDSAsecp256k1,
+		IsEOA:     true,
+		Status:    scan.StateSUCCESS,
+		CreatedAt: created,
+		UpdatedAt: updated,
+		FirstSeen: &first,
+		LastSeen:  &last,
+		ScannedAt: &scanned,
+	}
+	body := walletScanResultV1(ent, nil)
+	if body["first_seen"] != first.Format(time.RFC3339Nano) {
+		t.Fatalf("first_seen = %v", body["first_seen"])
+	}
+	if body["last_seen"] != last.Format(time.RFC3339Nano) {
+		t.Fatalf("last_seen = %v", body["last_seen"])
+	}
+	if body["scanned_at"] != scanned.Format(time.RFC3339Nano) {
+		t.Fatalf("scanned_at = %v", body["scanned_at"])
+	}
+}
+
 func TestWalletScanResultV1_typeEOAWithFalseIsEOA_alignsWalletType(t *testing.T) {
 	t.Parallel()
 	ent := &domain.ScanResultEntity{

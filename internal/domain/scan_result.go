@@ -29,6 +29,9 @@ type ScanResultEntity struct {
 	Connections     string         `gorm:"type:text" json:"-"`                   // JSON array stored as text
 	Status          string         `gorm:"type:varchar(20);index" json:"status"` // empty/PENDING until scan.started (RUNNING); then SUCCESS, FAILED, TIMEOUT, UNREACHABLE
 	Error           string         `gorm:"type:text" json:"error,omitempty"`     // Error message when status is FAILED
+	FirstSeen       *time.Time     `json:"first_seen,omitempty"`                 // Oldest transaction found
+	LastSeen        *time.Time     `json:"last_seen,omitempty"`                  // Newest transaction found
+	ScannedAt       *time.Time     `json:"scanned_at,omitempty"`                 // When this scan ran
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
@@ -68,10 +71,25 @@ func (s *ScanResultEntity) ToScanResult() *ScanResult {
 		Networks:        networks,
 		Delegations:     delegations,
 		Connections:     connections,
-		FirstSeen:       &s.CreatedAt,
-		LastSeen:        &s.UpdatedAt,
-		ScannedAt:       s.UpdatedAt, // Use UpdatedAt as ScannedAt for existing records
+		FirstSeen:       cloneTime(s.FirstSeen),
+		LastSeen:        cloneTime(s.LastSeen),
+		ScannedAt:       scannedAtOr(s.ScannedAt, s.UpdatedAt),
 	}
+}
+
+func cloneTime(t *time.Time) *time.Time {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
+}
+
+func scannedAtOr(scanned *time.Time, fallback time.Time) time.Time {
+	if scanned != nil && !scanned.IsZero() {
+		return scanned.UTC()
+	}
+	return fallback.UTC()
 }
 
 func parseStringArray(s string) []string {

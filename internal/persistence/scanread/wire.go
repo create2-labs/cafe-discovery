@@ -29,6 +29,9 @@ type WalletScanRowWire struct {
 	Connections     string  `json:"connections"`
 	Status          string  `json:"status"`
 	Error           string  `json:"error"`
+	FirstSeen       string  `json:"first_seen"`
+	LastSeen        string  `json:"last_seen"`
+	ScannedAt       string  `json:"scanned_at"`
 	CreatedAt       string  `json:"created_at"`
 	UpdatedAt       string  `json:"updated_at"`
 }
@@ -124,6 +127,9 @@ func WalletRowToEntity(w WalletScanRowWire) (*domain.ScanResultEntity, error) {
 		Connections:     w.Connections,
 		Status:          w.Status,
 		Error:           w.Error,
+		FirstSeen:       optionalTime(w.FirstSeen),
+		LastSeen:        optionalTime(w.LastSeen),
+		ScannedAt:       optionalTime(w.ScannedAt),
 		CreatedAt:       createdAt,
 		UpdatedAt:       updatedAt,
 	}, nil
@@ -178,6 +184,14 @@ func TLSRowToEntity(w TLSScanRowWire) (*domain.TLSScanResultEntity, error) {
 		ent.UserID = &parsed
 	}
 	return ent, nil
+}
+
+func optionalTime(value string) *time.Time {
+	parsed, err := parseTime(value)
+	if err != nil || parsed.IsZero() {
+		return nil
+	}
+	return &parsed
 }
 
 func parseTime(value string) (time.Time, error) {

@@ -25,6 +25,9 @@ func TestWalletRowToEntity_CopiesDelegations(t *testing.T) {
 		Networks:    `["ethereum"]`,
 		Delegations: raw,
 		Status:      "SUCCESS",
+		FirstSeen:   "2019-05-06T07:08:09Z",
+		LastSeen:    "2024-11-12T13:14:15Z",
+		ScannedAt:   "2026-10-05T08:47:00Z",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	})
@@ -33,6 +36,15 @@ func TestWalletRowToEntity_CopiesDelegations(t *testing.T) {
 	}
 	if ent.Delegations != raw {
 		t.Fatalf("stored delegations = %q", ent.Delegations)
+	}
+	if ent.FirstSeen == nil || !ent.FirstSeen.Equal(time.Date(2019, 5, 6, 7, 8, 9, 0, time.UTC)) {
+		t.Fatalf("first_seen = %v", ent.FirstSeen)
+	}
+	if ent.LastSeen == nil || !ent.LastSeen.Equal(time.Date(2024, 11, 12, 13, 14, 15, 0, time.UTC)) {
+		t.Fatalf("last_seen = %v", ent.LastSeen)
+	}
+	if ent.ScannedAt == nil || !ent.ScannedAt.Equal(time.Date(2026, 10, 5, 8, 47, 0, 0, time.UTC)) {
+		t.Fatalf("scanned_at = %v", ent.ScannedAt)
 	}
 	if ent.Type != domain.AccountTypeEOA {
 		t.Fatalf("type = %q", ent.Type)
