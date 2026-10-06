@@ -11,29 +11,28 @@ import (
 
 // WalletScanRowWire mirrors cafe-persistence internal scan v1 wallet row JSON.
 type WalletScanRowWire struct {
-	ID              string  `json:"id"`
-	UserID          string  `json:"user_id"`
-	Address         string  `json:"address"`
-	Type            string  `json:"type"`
-	Algorithm       string  `json:"algorithm"`
-	NISTLevel       int     `json:"nist_level"`
-	KeyExposed      bool    `json:"key_exposed"`
-	PublicKey       string  `json:"public_key"`
-	TransactionHash string  `json:"transaction_hash"`
-	ExposedNetwork  string  `json:"exposed_network"`
-	IsEOA           bool    `json:"is_eoa"`
-	IsERC4337       bool    `json:"is_erc4337"`
-	RiskScore       float64 `json:"risk_score"`
-	Networks        string  `json:"networks"`
-	Delegations     string  `json:"delegations"`
-	Connections     string  `json:"connections"`
-	Status          string  `json:"status"`
-	Error           string  `json:"error"`
-	FirstSeen       string  `json:"first_seen"`
-	LastSeen        string  `json:"last_seen"`
-	ScannedAt       string  `json:"scanned_at"`
-	CreatedAt       string  `json:"created_at"`
-	UpdatedAt       string  `json:"updated_at"`
+	ID                string  `json:"id"`
+	UserID            string  `json:"user_id"`
+	Address           string  `json:"address"`
+	Type              string  `json:"type"`
+	Algorithm         string  `json:"algorithm"`
+	NISTLevel         int     `json:"nist_level"`
+	KeyExposed        bool    `json:"key_exposed"`
+	PublicKey         string  `json:"public_key"`
+	TransactionHash   string  `json:"transaction_hash"`
+	ExposedNetwork    string  `json:"exposed_network"`
+	PublicKeyRecovery string  `json:"public_key_recovery"`
+	IsEOA             bool    `json:"is_eoa"`
+	IsERC4337         bool    `json:"is_erc4337"`
+	RiskScore         float64 `json:"risk_score"`
+	Networks          string  `json:"networks"`
+	Delegations       string  `json:"delegations"`
+	Connections       string  `json:"connections"`
+	Status            string  `json:"status"`
+	Error             string  `json:"error"`
+	ScannedAt         string  `json:"scanned_at"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 // TLSScanRowWire mirrors cafe-persistence internal scan v1 TLS row JSON.
@@ -109,29 +108,28 @@ func WalletRowToEntity(w WalletScanRowWire) (*domain.ScanResultEntity, error) {
 		return nil, err
 	}
 	return &domain.ScanResultEntity{
-		ID:              id,
-		UserID:          userID,
-		Address:         w.Address,
-		Type:            domain.AccountType(w.Type),
-		Algorithm:       domain.Algorithm(w.Algorithm),
-		NISTLevel:       domain.NISTLevel(w.NISTLevel),
-		KeyExposed:      w.KeyExposed,
-		PublicKey:       w.PublicKey,
-		TransactionHash: w.TransactionHash,
-		ExposedNetwork:  w.ExposedNetwork,
-		IsEOA:           w.IsEOA,
-		IsERC4337:       w.IsERC4337,
-		RiskScore:       w.RiskScore,
-		Networks:        w.Networks,
-		Delegations:     w.Delegations,
-		Connections:     w.Connections,
-		Status:          w.Status,
-		Error:           w.Error,
-		FirstSeen:       optionalTime(w.FirstSeen),
-		LastSeen:        optionalTime(w.LastSeen),
-		ScannedAt:       optionalTime(w.ScannedAt),
-		CreatedAt:       createdAt,
-		UpdatedAt:       updatedAt,
+		ID:                id,
+		UserID:            userID,
+		Address:           w.Address,
+		Type:              domain.AccountType(w.Type),
+		Algorithm:         domain.Algorithm(w.Algorithm),
+		NISTLevel:         domain.NISTLevel(w.NISTLevel),
+		KeyExposed:        w.KeyExposed,
+		PublicKey:         w.PublicKey,
+		TransactionHash:   w.TransactionHash,
+		ExposedNetwork:    w.ExposedNetwork,
+		PublicKeyRecovery: domain.PublicKeyRecovery(w.PublicKeyRecovery),
+		IsEOA:             w.IsEOA,
+		IsERC4337:         w.IsERC4337,
+		RiskScore:         w.RiskScore,
+		Networks:          w.Networks,
+		Delegations:       w.Delegations,
+		Connections:       w.Connections,
+		Status:            w.Status,
+		Error:             w.Error,
+		ScannedAt:         optionalTime(w.ScannedAt),
+		CreatedAt:         createdAt,
+		UpdatedAt:         updatedAt,
 	}, nil
 }
 

@@ -27,16 +27,18 @@ func walletScanResultV1(e *domain.ScanResultEntity, cfg *config.ChainConfig) fib
 		"current_pq_posture": nistLevelToPQPosture(e.NISTLevel),
 		"observations":       []any{},
 		// UI parity (legacy address-keyed hydration; PR13a)
-		"algorithm":   string(e.Algorithm),
-		"nist_level":  int(e.NISTLevel),
-		"risk_score":  e.RiskScore,
-		"key_exposed": e.KeyExposed,
-		"type":        string(accountType),
-		"networks":    networks,
-		"delegations": delegations,
-		"first_seen":  formatTimeRFC3339Nano(dto.FirstSeen),
-		"last_seen":   formatTimeRFC3339Nano(dto.LastSeen),
-		"scanned_at":  formatTimeRFC3339Nano(&dto.ScannedAt),
+		"algorithm":           string(e.Algorithm),
+		"nist_level":          int(e.NISTLevel),
+		"risk_score":          e.RiskScore,
+		"key_exposed":         e.KeyExposed,
+		"type":                string(accountType),
+		"networks":            networks,
+		"delegations":         delegations,
+		"public_key":          dto.PublicKey,
+		"transaction_hash":    dto.TransactionHash,
+		"exposed_network":     dto.ExposedNetwork,
+		"public_key_recovery": string(dto.PublicKeyRecovery),
+		"scanned_at":          formatTimeRFC3339Nano(&dto.ScannedAt),
 	}
 }
 

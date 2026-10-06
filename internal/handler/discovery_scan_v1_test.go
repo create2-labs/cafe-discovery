@@ -66,12 +66,16 @@ func (alwaysScanners) HasScanner(string) bool { return true }
 
 func (alwaysScanners) ListScanners() []service.ScannerInfo { return nil }
 
+func (alwaysScanners) OnchainIndexer() string { return service.OnchainIndexerUnknown }
+
 // walletScannerAbsent reports no wallet scanner (TLS may still be "present" but unused in this test).
 type walletScannerAbsent struct{}
 
 func (walletScannerAbsent) HasScanner(s string) bool { return s != "wallet" }
 
 func (walletScannerAbsent) ListScanners() []service.ScannerInfo { return nil }
+
+func (walletScannerAbsent) OnchainIndexer() string { return service.OnchainIndexerUnknown }
 
 type memoryPendingV1Repo struct {
 	mu       sync.Mutex

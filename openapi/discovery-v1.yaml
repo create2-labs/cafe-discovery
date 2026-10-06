@@ -426,6 +426,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScannerListResponse"
 
+  /onchainscanner:
+    get:
+      tags: [utilities]
+      summary: Wallet scanner availability and announced on-chain indexer
+      description: |
+        Public utility; no authentication. `scanner_available` is true when a wallet scanner is up.
+        `onchain_indexer` is the value announced by every living wallet instance (`etherscan`, `moralis`,
+        or `none`). It is `unknown` when no wallet metadata is known, when a living instance omitted the
+        field, or when living instances disagree. `unknown` is not `none`. The indexer describes the
+        scanner-wallet process; it is not per-chain RPC coverage and it is not a health control.
+      operationId: getOnchainScanner
+      security: []
+      responses:
+        "200":
+          description: Wallet scanner availability and the announced indexer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnchainScannerResponse"
+
   /scan:
     post:
       tags: [scan]
@@ -701,7 +721,7 @@ components:
 
     WalletScanResult:
       type: object
-      required: [delegations]
+      required: [delegations, public_key, transaction_hash, exposed_network, public_key_recovery]
       description: |
         Business result for wallet scan (distinct from TLS). Core shape §5.4.4 plus UI fields
         formerly exposed only via `GET /discovery/cbom/{address}` (PR13a).
@@ -743,15 +763,25 @@ components:
           description: EIP-7702 delegation targets. Always present, including when empty.
           items:
             $ref: "#/components/schemas/WalletDelegation"
-        first_seen:
+        public_key:
           type: string
-          format: date-time
-        last_seen:
+          description: Recovered public key. Empty when recovery did not produce one.
+        transaction_hash:
           type: string
-          format: date-time
+          description: Transaction whose signature verified the public key. Empty when none was kept.
+        exposed_network:
+          type: string
+          description: Chain of the verifying transaction. Empty when none was kept.
+        public_key_recovery:
+          type: string
+          enum: ["", "not_required", "recovered", "unresolved"]
+          description: |
+            ECDSA public-key recovery outcome. Empty until the scan completes; otherwise
+            not_required, recovered, or unresolved.
         scanned_at:
           type: string
           format: date-time
+          description: When this scan ran.
 
     TlsScanDetail:
       type: object
@@ -848,7 +878,7 @@ components:
 
     WalletCbomDocument:
       type: object
-      required: [delegations]
+      required: [delegations, public_key, transaction_hash, exposed_network, public_key_recovery]
       description: |
         CycloneDX CBOM envelope for a wallet scan execution (W6). Generated on read; not stored as a
         blob. Top-level fields mirror the former `GET /discovery/cbom/{address}` response.
@@ -866,12 +896,15 @@ components:
         risk_score:
           type: number
           format: double
-        first_seen:
+        public_key:
           type: string
-          format: date-time
-        last_seen:
+        transaction_hash:
           type: string
-          format: date-time
+        exposed_network:
+          type: string
+        public_key_recovery:
+          type: string
+          enum: ["", "not_required", "recovered", "unresolved"]
         networks:
           type: array
           items:
@@ -990,6 +1023,20 @@ components:
         count:
           type: integer
           minimum: 0
+
+    OnchainScannerResponse:
+      type: object
+      required: [scanner_available, onchain_indexer]
+      properties:
+        scanner_available:
+          type: boolean
+          description: True when a wallet scanner is considered up.
+        onchain_indexer:
+          type: string
+          enum: [etherscan, moralis, none, unknown]
+          description: |
+            Indexer announced by the living wallet scanners. `unknown` when Discovery cannot
+            determine a single value. `none` means the scanners agreed that no client is selected.
 
     ScannerListResponse:
       type: object
