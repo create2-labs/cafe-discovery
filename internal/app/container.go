@@ -238,6 +238,7 @@ func setupRoutes(app *fiber.App, discoveryHandler *handler.DiscoveryHandler, tls
 	v1Public := app.Group(discoveryroutes.V1Base)
 	v1Public.Get("/rpcs", discoveryHandler.ListRPCs)
 	v1Public.Get("/scanners", discoveryHandler.ListAvailableScanners)
+	v1Public.Get("/onchainscanner", discoveryHandler.GetOnchainScanner)
 
 	// WORKPLAN §0.1 — /discovery/v1 (PR2 skeleton, PR3 POST /scan, PR4–PR6 list/detail/delete).
 	apiV1 := app.Group(discoveryroutes.V1Base, middleware.JWTMiddleware(authService))

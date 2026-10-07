@@ -2,6 +2,7 @@ package cbom
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +46,42 @@ func TestWallet_CycloneDXEnvelope(t *testing.T) {
 	}
 	if _, ok := out["delegations"].([]domain.Delegation); !ok {
 		t.Fatalf("delegations = %#v", out["delegations"])
+	}
+	if _, ok := out["first_seen"]; ok {
+		t.Fatal("first_seen must not be published")
+	}
+	if _, ok := out["last_seen"]; ok {
+		t.Fatal("last_seen must not be published")
+	}
+	if out["public_key_recovery"] != "" {
+		t.Fatalf("public_key_recovery = %#v", out["public_key_recovery"])
+	}
+}
+
+func TestWallet_PublishesRecoveryFields(t *testing.T) {
+	t.Parallel()
+	out := Wallet(&domain.ScanResult{
+		Address:           "0xabc",
+		Type:              domain.AccountTypeEOA,
+		Algorithm:         domain.AlgorithmECDSAsecp256k1,
+		NISTLevel:         domain.NISTLevel1,
+		PublicKey:         "0x04abcd",
+		TransactionHash:   "0xhash",
+		ExposedNetwork:    "ethereum",
+		PublicKeyRecovery: domain.PublicKeyRecoveryRecovered,
+	}, "0xabc")
+	if out["public_key"] != "0x04abcd" || out["transaction_hash"] != "0xhash" || out["exposed_network"] != "ethereum" {
+		t.Fatalf("recovery proof = %#v", out)
+	}
+	if out["public_key_recovery"] != string(domain.PublicKeyRecoveryRecovered) {
+		t.Fatalf("public_key_recovery = %#v", out["public_key_recovery"])
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "first_seen") || strings.Contains(string(raw), "last_seen") {
+		t.Fatalf("activity dates leaked into %s", raw)
 	}
 }
 

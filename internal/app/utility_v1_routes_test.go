@@ -30,6 +30,7 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 	v1Public := app.Group(discoveryroutes.V1Base)
 	v1Public.Get("/rpcs", h.ListRPCs)
 	v1Public.Get("/scanners", h.ListAvailableScanners)
+	v1Public.Get("/onchainscanner", h.GetOnchainScanner)
 
 	req := httptest.NewRequest(http.MethodGet, discoveryroutes.RPCs, nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -73,4 +74,24 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 		t.Fatalf("scanners field missing")
 	}
 	_, _ = io.Copy(io.Discard, respScanners.Body)
+
+	reqIndexer := httptest.NewRequest(http.MethodGet, discoveryroutes.OnchainScanner, nil)
+	respIndexer, err := app.Test(reqIndexer, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
+	if err != nil {
+		t.Fatalf("GET onchainscanner: %v", err)
+	}
+	defer respIndexer.Body.Close()
+	if respIndexer.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200", discoveryroutes.OnchainScanner, respIndexer.StatusCode)
+	}
+	var indexerBody struct {
+		ScannerAvailable bool   `json:"scanner_available"`
+		OnchainIndexer   string `json:"onchain_indexer"`
+	}
+	if err := json.NewDecoder(respIndexer.Body).Decode(&indexerBody); err != nil {
+		t.Fatalf("decode onchainscanner: %v", err)
+	}
+	if indexerBody.ScannerAvailable || indexerBody.OnchainIndexer != "unknown" {
+		t.Fatalf("onchainscanner = %+v, want unavailable and unknown", indexerBody)
+	}
 }

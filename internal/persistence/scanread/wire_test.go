@@ -15,18 +15,23 @@ func TestWalletRowToEntity_CopiesDelegations(t *testing.T) {
 	target := "0x1111111111111111111111111111111111111111"
 	raw := `[{"chain_id":1,"delegated_address":"` + target + `"}]`
 	ent, err := WalletRowToEntity(WalletScanRowWire{
-		ID:          uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").String(),
-		UserID:      uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").String(),
-		Address:     "0xabc",
-		Type:        string(domain.AccountTypeEOA),
-		Algorithm:   string(domain.AlgorithmECDSAsecp256k1),
-		NISTLevel:   1,
-		IsEOA:       true,
-		Networks:    `["ethereum"]`,
-		Delegations: raw,
-		Status:      "SUCCESS",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").String(),
+		UserID:            uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").String(),
+		Address:           "0xabc",
+		Type:              string(domain.AccountTypeEOA),
+		Algorithm:         string(domain.AlgorithmECDSAsecp256k1),
+		NISTLevel:         1,
+		IsEOA:             true,
+		Networks:          `["ethereum"]`,
+		Delegations:       raw,
+		Status:            "SUCCESS",
+		PublicKey:         "0x04abcd",
+		TransactionHash:   "0xhash",
+		ExposedNetwork:    "ethereum",
+		PublicKeyRecovery: "recovered",
+		ScannedAt:         "2026-10-05T08:47:00Z",
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -34,12 +39,27 @@ func TestWalletRowToEntity_CopiesDelegations(t *testing.T) {
 	if ent.Delegations != raw {
 		t.Fatalf("stored delegations = %q", ent.Delegations)
 	}
+	if ent.PublicKeyRecovery != domain.PublicKeyRecoveryRecovered {
+		t.Fatalf("public_key_recovery = %q", ent.PublicKeyRecovery)
+	}
+	if ent.ScannedAt == nil || !ent.ScannedAt.Equal(time.Date(2026, 10, 5, 8, 47, 0, 0, time.UTC)) {
+		t.Fatalf("scanned_at = %v", ent.ScannedAt)
+	}
 	if ent.Type != domain.AccountTypeEOA {
 		t.Fatalf("type = %q", ent.Type)
 	}
 	out := ent.ToScanResult()
 	if len(out.Delegations) != 1 || out.Delegations[0].ChainID != 1 || out.Delegations[0].DelegatedAddress != target {
 		t.Fatalf("parsed delegations = %#v", out.Delegations)
+	}
+	if out.PublicKey != "0x04abcd" || out.TransactionHash != "0xhash" || out.ExposedNetwork != "ethereum" {
+		t.Fatalf("recovery proof = %#v", out)
+	}
+	if out.PublicKeyRecovery != domain.PublicKeyRecoveryRecovered {
+		t.Fatalf("public_key_recovery = %q", out.PublicKeyRecovery)
+	}
+	if !out.ScannedAt.Equal(time.Date(2026, 10, 5, 8, 47, 0, 0, time.UTC)) {
+		t.Fatalf("scanned_at = %s", out.ScannedAt)
 	}
 }
 

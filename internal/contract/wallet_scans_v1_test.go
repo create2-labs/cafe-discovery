@@ -696,6 +696,7 @@ func TestDiscoveryV1WalletScans_listItemSynopsisExcludesPostureFields(t *testing
 		"result", "wallet_type", "current_pq_posture", "algorithm", "type",
 		"nist_level", "risk_score", "key_exposed", "observations", "networks",
 		"delegations", "first_seen", "last_seen", "scanned_at",
+		"public_key", "transaction_hash", "exposed_network", "public_key_recovery",
 	}
 	for _, item := range items {
 		row := item.(map[string]any)
@@ -811,9 +812,18 @@ func TestDiscoveryV1WalletScans_detailIncludesResultAtTerminal(t *testing.T) {
 	if !ok {
 		t.Fatal("terminal detail must include result object")
 	}
-	for _, key := range []string{"wallet_type", "current_pq_posture", "target_address", "chain_ids"} {
+	for _, key := range []string{
+		"wallet_type", "current_pq_posture", "target_address", "chain_ids",
+		"public_key", "transaction_hash", "exposed_network", "public_key_recovery", "scanned_at",
+	} {
 		if _, ok := result[key]; !ok {
 			t.Fatalf("WalletScanResult missing %q on terminal detail", key)
 		}
+	}
+	if _, ok := result["first_seen"]; ok {
+		t.Fatal("terminal detail must not include first_seen")
+	}
+	if _, ok := result["last_seen"]; ok {
+		t.Fatal("terminal detail must not include last_seen")
 	}
 }

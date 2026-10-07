@@ -32,6 +32,7 @@ const (
 type ScannerPresenceChecker interface {
 	HasScanner(scannerType string) bool
 	ListScanners() []service.ScannerInfo
+	OnchainIndexer() string
 }
 
 // DiscoveryHandler handles discovery-related HTTP requests.
@@ -79,6 +80,24 @@ func (h *DiscoveryHandler) ListAvailableScanners(c fiber.Ctx) error {
 		scanners = h.scannerPresence.ListScanners()
 	}
 	return c.JSON(fiber.Map{"scanners": scanners})
+}
+
+// GetOnchainScanner handles GET /discovery/v1/onchainscanner.
+// scanner_available is HasScanner("wallet"). onchain_indexer is the value shared by every living
+// wallet instance, or unknown when the heartbeat is alone, metadata is missing, or the values diverge.
+func (h *DiscoveryHandler) GetOnchainScanner(c fiber.Ctx) error {
+	available := false
+	indexer := service.OnchainIndexerUnknown
+	if h.scannerPresence != nil {
+		available = h.scannerPresence.HasScanner("wallet")
+		if announced := strings.TrimSpace(h.scannerPresence.OnchainIndexer()); announced != "" {
+			indexer = announced
+		}
+	}
+	return c.JSON(fiber.Map{
+		"scanner_available": available,
+		"onchain_indexer":   indexer,
+	})
 }
 
 // getAuthenticatedUserID extracts user ID from JWT context. Call only on routes protected by JWTMiddleware.

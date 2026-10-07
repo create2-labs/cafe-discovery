@@ -54,6 +54,71 @@ func TestWalletScanResultV1_UIFields(t *testing.T) {
 	}
 }
 
+func TestWalletScanResultV1_recoveryFieldsAndScanTime(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	updated := created.Add(time.Minute)
+	scanned := time.Date(2026, 10, 5, 8, 47, 0, 0, time.UTC)
+	ent := &domain.ScanResultEntity{
+		Address:           "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+		Type:              domain.AccountTypeEOA,
+		Algorithm:         domain.AlgorithmECDSAsecp256k1,
+		IsEOA:             true,
+		Status:            scan.StateSUCCESS,
+		PublicKey:         "0x04abcd",
+		TransactionHash:   "0xhash",
+		ExposedNetwork:    "ethereum",
+		PublicKeyRecovery: domain.PublicKeyRecoveryRecovered,
+		CreatedAt:         created,
+		UpdatedAt:         updated,
+		ScannedAt:         &scanned,
+	}
+	body := walletScanResultV1(ent, nil)
+	if _, ok := body["first_seen"]; ok {
+		t.Fatalf("first_seen = %v", body["first_seen"])
+	}
+	if _, ok := body["last_seen"]; ok {
+		t.Fatalf("last_seen = %v", body["last_seen"])
+	}
+	if body["public_key"] != "0x04abcd" {
+		t.Fatalf("public_key = %v", body["public_key"])
+	}
+	if body["transaction_hash"] != "0xhash" {
+		t.Fatalf("transaction_hash = %v", body["transaction_hash"])
+	}
+	if body["exposed_network"] != "ethereum" {
+		t.Fatalf("exposed_network = %v", body["exposed_network"])
+	}
+	if body["public_key_recovery"] != string(domain.PublicKeyRecoveryRecovered) {
+		t.Fatalf("public_key_recovery = %v", body["public_key_recovery"])
+	}
+	if body["scanned_at"] != scanned.Format(time.RFC3339Nano) {
+		t.Fatalf("scanned_at = %v", body["scanned_at"])
+	}
+}
+
+func TestWalletScanResultV1_scanTimeFallsBackToUpdatedAt(t *testing.T) {
+	t.Parallel()
+	updated := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	ent := &domain.ScanResultEntity{
+		Address:   "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+		Type:      domain.AccountTypeEOA,
+		Algorithm: domain.AlgorithmECDSAsecp256k1,
+		Status:    scan.StateSUCCESS,
+		UpdatedAt: updated,
+	}
+	body := walletScanResultV1(ent, nil)
+	if body["public_key"] != "" || body["transaction_hash"] != "" || body["exposed_network"] != "" {
+		t.Fatalf("empty recovery proof = %#v", body)
+	}
+	if body["public_key_recovery"] != "" {
+		t.Fatalf("public_key_recovery = %v", body["public_key_recovery"])
+	}
+	if body["scanned_at"] != updated.Format(time.RFC3339Nano) {
+		t.Fatalf("scanned_at = %v", body["scanned_at"])
+	}
+}
+
 func TestWalletScanResultV1_typeEOAWithFalseIsEOA_alignsWalletType(t *testing.T) {
 	t.Parallel()
 	ent := &domain.ScanResultEntity{
