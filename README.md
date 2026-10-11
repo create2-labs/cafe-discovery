@@ -73,9 +73,10 @@
       9. [GET /discovery/v1/tls/scans/:scan_id](#get-discoveryv1tlsscansscan_id)
       10. [GET /discovery/v1/rpcs](#get-discoveryv1rpcs)
       11. [GET /discovery/v1/scanners](#get-discoveryv1scanners)
-      12. [Option A: Discovery wallet scan v1 ↔ CPM contract](#option-a-discovery-wallet-scan-v1--cpm-contract)
-      13. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
-      14. [GET /version](#get-version)
+      12. [GET /discovery/v1/onchainscanner](#get-discoveryv1onchainscanner)
+      13. [Option A: Discovery wallet scan v1 ↔ CPM contract](#option-a-discovery-wallet-scan-v1--cpm-contract)
+      14. [Policy assessment (CPM-owned)](#policy-assessment-cpm-owned)
+      15. [GET /version](#get-version)
       16. [GET /health](#get-health)
       17. [GET /metrics](#get-metrics)
       18. [AUTH-05: Internal scan authorization lookup for CPM](#auth-05-internal-scan-authorization-lookup-for-cpm)
@@ -1721,6 +1722,32 @@ Example (via edge):
 curl -sS "https://localhost/api/discovery/v1/scanners" | jq .
 ```
 
+### GET /discovery/v1/onchainscanner
+
+Returns whether a wallet scanner is up. `scanner_available` is `HasScanner("wallet")`. **No authentication required.** The JSON object contains only `scanner_available`. TLS availability is unchanged and remains on `GET /discovery/v1/scanners`.
+
+| Layer | Path |
+|-------|------|
+| Discovery backend (Fiber) | `GET /discovery/v1/onchainscanner` |
+| Edge / frontend / scripts | `GET /api/discovery/v1/onchainscanner` |
+
+**Response**:
+```json
+{
+  "scanner_available": true
+}
+```
+
+Example (direct backend):
+```bash
+curl -sS "http://localhost:8080/discovery/v1/onchainscanner" | jq .
+```
+
+Example (via edge):
+```bash
+curl -sS "https://localhost/api/discovery/v1/onchainscanner" | jq .
+```
+
 ### GET /version
 
 Get the backend version information.
@@ -2111,6 +2138,9 @@ curl http://localhost:8080/discovery/v1/rpcs
 
 # List available scanners (no auth required; backend path)
 curl http://localhost:8080/discovery/v1/scanners
+
+# Wallet scanner availability (no auth required; backend path)
+curl http://localhost:8080/discovery/v1/onchainscanner
 
 # Health check (no auth required)
 curl http://localhost:8080/health

@@ -429,18 +429,16 @@ paths:
   /onchainscanner:
     get:
       tags: [utilities]
-      summary: Wallet scanner availability and announced on-chain indexer
+      summary: Wallet scanner availability
       description: |
         Public utility; no authentication. `scanner_available` is true when a wallet scanner is up.
-        `onchain_indexer` is the value announced by every living wallet instance (`etherscan`, `moralis`,
-        or `none`). It is `unknown` when no wallet metadata is known, when a living instance omitted the
-        field, or when living instances disagree. `unknown` is not `none`. The indexer describes the
-        scanner-wallet process; it is not per-chain RPC coverage and it is not a health control.
+        The response contains only that field. TLS availability is unchanged and is listed by
+        `listScanners`, not by this operation.
       operationId: getOnchainScanner
       security: []
       responses:
         "200":
-          description: Wallet scanner availability and the announced indexer.
+          description: Wallet scanner availability.
           content:
             application/json:
               schema:
@@ -1026,17 +1024,11 @@ components:
 
     OnchainScannerResponse:
       type: object
-      required: [scanner_available, onchain_indexer]
+      required: [scanner_available]
       properties:
         scanner_available:
           type: boolean
           description: True when a wallet scanner is considered up.
-        onchain_indexer:
-          type: string
-          enum: [etherscan, moralis, none, unknown]
-          description: |
-            Indexer announced by the living wallet scanners. `unknown` when Discovery cannot
-            determine a single value. `none` means the scanners agreed that no client is selected.
 
     ScannerListResponse:
       type: object

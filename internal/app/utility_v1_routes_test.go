@@ -84,14 +84,17 @@ func TestDiscoveryV1UtilityRoutes_PublicRPCsAndScanners(t *testing.T) {
 	if respIndexer.StatusCode != fiber.StatusOK {
 		t.Fatalf("GET %s status = %d, want 200", discoveryroutes.OnchainScanner, respIndexer.StatusCode)
 	}
-	var indexerBody struct {
-		ScannerAvailable bool   `json:"scanner_available"`
-		OnchainIndexer   string `json:"onchain_indexer"`
-	}
+	var indexerBody map[string]any
 	if err := json.NewDecoder(respIndexer.Body).Decode(&indexerBody); err != nil {
 		t.Fatalf("decode onchainscanner: %v", err)
 	}
-	if indexerBody.ScannerAvailable || indexerBody.OnchainIndexer != "unknown" {
-		t.Fatalf("onchainscanner = %+v, want unavailable and unknown", indexerBody)
+	if indexerBody["scanner_available"] != false {
+		t.Fatalf("onchainscanner = %+v, want scanner_available false", indexerBody)
+	}
+	if _, ok := indexerBody["onchain_indexer"]; ok {
+		t.Fatalf("onchainscanner = %+v, want no onchain_indexer", indexerBody)
+	}
+	if _, ok := indexerBody["indexer_gateway_available"]; ok {
+		t.Fatalf("onchainscanner = %+v, want no indexer_gateway_available", indexerBody)
 	}
 }
