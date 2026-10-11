@@ -3,28 +3,21 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"sync"
 	"time"
 
 	"cafe-discovery/pkg/nats"
 	redisconn "cafe-discovery/pkg/redis"
+
+	presencev1 "github.com/create2-labs/cafe-contracts/discovery/scannerpresence/v1"
 	natsio "github.com/nats-io/nats.go"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 const scannerHeartbeatTTL = 20 * time.Second // Consider DOWN if no heartbeat for >15s; 20s TTL
 
 const (
-	// OnchainIndexerEtherscan is announced when the wallet scanner selected Etherscan.
-	OnchainIndexerEtherscan = "etherscan"
-	// OnchainIndexerMoralis is announced when the wallet scanner selected Moralis.
-	OnchainIndexerMoralis = "moralis"
-	// OnchainIndexerNone is announced when the wallet scanner has no indexer client.
-	OnchainIndexerNone = "none"
-	// OnchainIndexerUnknown means Discovery cannot name one indexer for the living wallet scanners.
-	OnchainIndexerUnknown = "unknown"
-
 	walletPresenceSweepInterval = 15 * time.Second
 	walletPresenceSilentAfter   = 75 * time.Second
 )
@@ -32,9 +25,11 @@ const (
 // ScannerPresenceTracker subscribes to scanner presence and heartbeat messages.
 // Backend considers a scanner UP if a heartbeat was received within the last 15s (Redis key TTL 20s).
 // Wallet joined messages also keep an in-memory indexer and last_seen, separate from the Redis key scanner:wallet:last_seen.
+// That reading stays inside Discovery. GET /discovery/v1/onchainscanner does not return it.
 type ScannerPresenceTracker struct {
 	conn   nats.Connection
 	redis  redisconn.Connection
+	logger zerolog.Logger
 	mu     sync.RWMutex
 	byType map[string]map[string]struct{}
 	// walletMeta is scanner_id -> indexer and the last wallet joined time. TLS presence is not stored here.
@@ -61,6 +56,7 @@ func NewScannerPresenceTracker(conn nats.Connection, redis redisconn.Connection)
 	t := &ScannerPresenceTracker{
 		conn:        conn,
 		redis:       redis,
+		logger:      log.Logger,
 		byType:      make(map[string]map[string]struct{}),
 		walletMeta:  make(map[string]walletPresenceMeta),
 		sweepEvery:  walletPresenceSweepInterval,
@@ -68,7 +64,7 @@ func NewScannerPresenceTracker(conn nats.Connection, redis redisconn.Connection)
 		sweepStop:   make(chan struct{}),
 		sweepDone:   make(chan struct{}),
 	}
-	sub, err := conn.Subscribe(nats.SubjectScannerPresence, t.handlePresence)
+	sub, err := conn.Subscribe(presencev1.Subject, t.handlePresence)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +86,7 @@ func NewScannerPresenceTracker(conn nats.Connection, redis redisconn.Connection)
 		log.Info().Str("heartbeat_tls", nats.SubjectScannerHeartbeatTLS).Str("heartbeat_wallet", nats.SubjectScannerHeartbeatWallet).Msg("Scanner heartbeat tracker subscribed")
 	}
 	go t.runWalletSweep()
-	log.Info().Str("subject", nats.SubjectScannerPresence).Msg("Scanner presence tracker subscribed")
+	log.Info().Str("subject", presencev1.Subject).Msg("Scanner presence tracker subscribed")
 	return t, nil
 }
 
@@ -115,12 +111,13 @@ func (t *ScannerPresenceTracker) handlePresence(msg *natsio.Msg) {
 }
 
 func (t *ScannerPresenceTracker) handleMessage(msg *natsio.Msg) {
-	var presence nats.ScannerPresenceMessage
-	if err := json.Unmarshal(msg.Data, &presence); err != nil {
-		log.Warn().Err(err).Msg("Invalid scanner presence message")
+	presence, err := presencev1.Decode(msg.Data)
+	if err != nil {
+		t.logger.Warn().Err(err).Msg("Invalid scanner presence message")
 		return
 	}
-	if presence.Type == "" || presence.ScannerID == "" {
+	// An unknown type, including indexer-gateway, is a valid message and is ignored.
+	if !trackedScannerType(presence.Type) {
 		return
 	}
 	t.mu.Lock()
@@ -129,15 +126,15 @@ func (t *ScannerPresenceTracker) handleMessage(msg *natsio.Msg) {
 		t.byType[presence.Type] = make(map[string]struct{})
 	}
 	switch presence.Event {
-	case nats.ScannerPresenceJoined:
+	case presencev1.EventJoined:
 		t.byType[presence.Type][presence.ScannerID] = struct{}{}
 		if presence.Type == "wallet" {
 			t.walletMeta[presence.ScannerID] = walletPresenceMeta{
-				indexer:  normalizeOnchainIndexer(presence.OnchainIndexer),
+				indexer:  presence.Indexer(),
 				lastSeen: t.clock(),
 			}
 		}
-	case nats.ScannerPresenceLeft:
+	case presencev1.EventLeft:
 		delete(t.byType[presence.Type], presence.ScannerID)
 		if presence.Type == "wallet" {
 			delete(t.walletMeta, presence.ScannerID)
@@ -145,13 +142,8 @@ func (t *ScannerPresenceTracker) handleMessage(msg *natsio.Msg) {
 	}
 }
 
-func normalizeOnchainIndexer(raw string) string {
-	switch strings.TrimSpace(raw) {
-	case OnchainIndexerEtherscan, OnchainIndexerMoralis, OnchainIndexerNone:
-		return strings.TrimSpace(raw)
-	default:
-		return OnchainIndexerUnknown
-	}
+func trackedScannerType(typ string) bool {
+	return typ == "wallet" || typ == "tls"
 }
 
 func (t *ScannerPresenceTracker) clock() time.Time {
@@ -220,21 +212,22 @@ func (t *ScannerPresenceTracker) HasScanner(scannerType string) bool {
 }
 
 // OnchainIndexer returns the indexer shared by every living wallet instance.
+// The value stays inside Discovery and is not written to GET /discovery/v1/onchainscanner.
 // A Redis heartbeat alone, a missing announcement, or disagreeing instances yield unknown.
-// An absent onchain_indexer field is unknown, never none.
+// An absent, unknown, or invalid onchain_indexer reads as unknown, never none.
 func (t *ScannerPresenceTracker) OnchainIndexer() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	ids := t.byType["wallet"]
 	if len(ids) == 0 {
-		return OnchainIndexerUnknown
+		return presencev1.IndexerUnknown
 	}
 	var common string
 	seen := false
 	for id := range ids {
 		meta, ok := t.walletMeta[id]
 		if !ok || meta.indexer == "" {
-			return OnchainIndexerUnknown
+			return presencev1.IndexerUnknown
 		}
 		if !seen {
 			common = meta.indexer
@@ -242,11 +235,11 @@ func (t *ScannerPresenceTracker) OnchainIndexer() string {
 			continue
 		}
 		if meta.indexer != common {
-			return OnchainIndexerUnknown
+			return presencev1.IndexerUnknown
 		}
 	}
 	if !seen {
-		return OnchainIndexerUnknown
+		return presencev1.IndexerUnknown
 	}
 	return common
 }

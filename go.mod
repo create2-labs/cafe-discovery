@@ -1,9 +1,9 @@
 module cafe-discovery
 
-go 1.26.9
+go 1.27.2
 
 require (
-	github.com/create2-labs/cafe-contracts v0.0.2-0.20260427135040-13e8ec5f9ea0
+	github.com/create2-labs/cafe-contracts v0.1.0
 	github.com/gofiber/fiber/v3 v3.4.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0

@@ -171,10 +171,9 @@ func PublishJSONJetStream(conn Connection, subject string, payload interface{}) 
 
 // Subjects for NATS messaging
 const (
-	SubjectWalletScan      = "cafe.discovery.wallet.scan"
-	SubjectTLSScan         = "cafe.discovery.tls.scan"
-	SubjectScannerPresence = "cafe.discovery.scanners.presence"
-	QueueScanners          = "cafe.scanners"
+	SubjectWalletScan = "cafe.discovery.wallet.scan"
+	SubjectTLSScan    = "cafe.discovery.tls.scan"
+	QueueScanners     = "cafe.scanners"
 
 	// Event subjects for persistence service (scan lifecycle)
 	SubjectScanRequestedTLS    = "scan.requested.tls"
