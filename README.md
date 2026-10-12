@@ -183,7 +183,7 @@ The application is designed to be scalable with a focus on performance.
   - Subscribing to NATS subjects `scan.started`, `scan.completed`, `scan.failed` (queue `cafe.persistence`)
   - Writing scan results idempotently to PostgreSQL (TLS and wallet scan tables) and to Redis (write-through cache for performance)
   - When a scan result has been written to Redis (and PostgreSQL), publishing a NATS message (`scan.ready`); the **backend consumes this message** so GET requests can return the result
-  - After a **successful wallet** `scan.completed` write, publishing a **normative observation** JSON on `cafe.discovery.events.wallet.observed.v0_1` (see [Data structure (CPM export contract)](#data-structure-cpm-export-contract)); best-effort, does not roll back the scan if publish fails
+  - After a **successful wallet** `scan.completed` write, publishing a **normative observation** JSON on `cafenatsv01.NATSSubjectDiscoveryWalletObservedV01` (see [Data structure (CPM export contract)](#data-structure-cpm-export-contract)); best-effort, does not roll back the scan if publish fails
   - Enforcing valid scan state transitions
   - Publishing `persistence.ready` on startup so the backend can wait for persistence before initializing default endpoints
 - **Startup order**: The backend waits for `persistence.ready` (and scanner heartbeats) before seeding default TLS endpoints. Run cafe-persistence before or with the backend for full functionality.
@@ -198,7 +198,7 @@ The application is designed to be scalable with a focus on performance.
   - `cafe.discovery.tls.scan`: TLS scan requests
   - `scan.started`, `scan.completed`, `scan.failed`: Scan lifecycle events (consumed by persistence service)
   - `scan.ready`: Published by persistence when a scan result has been written to Redis (and PostgreSQL); consumed by the backend so GET requests can return the result
-  - `cafe.discovery.events.wallet.observed.v0_1`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `cafe.discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
+  - `cafenatsv01.NATSSubjectDiscoveryWalletObservedV01`: Published by persistence after a successful **wallet** scan write; JSON matches `cafe-contracts` `cafe.discovery.wallet.observed` **v0.1** (informational observation on the bus — not a CPM command; see execution pack **v0.7** in `cafe-crypto-policy-mgt`)
   - `cafe.policy.events.policy.assessment.requested.v0_1`: Published on explicit authenticated user action via **CPM** (`POST /api/cpm/v1/policies/assessment/request`, see `cafe-crypto-policy-mgt`); JSON matches `cafe-contracts` `cafenatsv01.PolicyAssessmentRequested`. Discovery does **not** expose an HTTP assessment trigger.
   - `persistence.ready`: Published by persistence on startup (consumed by backend to know when to seed default endpoints)
 - Queues: `cafe.scanners` (scanners), `cafe.persistence` (persistence service)
@@ -357,7 +357,7 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
 
 Discovery remains the **owner** of internal scan models and persistence (for example wallet scan results and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
 
-**Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafe.discovery.events.wallet.observed.v0_1`** after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
+**Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafenatsv01.NATSSubjectDiscoveryWalletObservedV01`** after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
 
 **Integration semantics (execution pack v0.7):** that message is an **observation / informational** event on the bus. **Crypto Policy Management (CPM)** must **not** treat it as an automatic trigger for policy assessment. Assessment is started only from an explicit command (e.g. **`policy.assessment.requested.v0.1`**) or equivalent API, as described in [`cafe_cpm_v1_prompts_0.7.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/cafe_cpm_v1_prompts_0.7.md) in repository **`cafe-crypto-policy-mgt`**. The same wire types may be **embedded** in that command as a snapshot.
 
