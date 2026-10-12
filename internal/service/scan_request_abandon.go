@@ -10,6 +10,7 @@ import (
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/nats"
 
+	lifecyclev1 "github.com/create2-labs/cafe-contracts/discovery/scanlifecycle/v1"
 	"github.com/google/uuid"
 )
 
@@ -134,10 +135,10 @@ func publishAbandonedScan(conn nats.Connection, row repository.OpenScanReservati
 	if row.ScanKind == domain.ScanUsageKindEndpoint {
 		kind = "tls"
 	}
-	return nats.PublishJSON(conn, nats.SubjectScanFailed, nats.ScanFailedMessage{
-		ScanID:      row.ScanID,
+	return nats.PublishJSON(conn, lifecyclev1.SubjectScanFailed, lifecyclev1.Failed{
+		ScanID:      row.ScanID.String(),
 		Kind:        kind,
-		UserID:      row.UserID,
+		UserID:      row.UserID.String(),
 		Error:       scanRequestLeftQueue,
 		CompletedAt: time.Now().UTC().Format(time.RFC3339),
 	})

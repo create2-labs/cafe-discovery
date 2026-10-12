@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
 	"cafe-discovery/pkg/nats"
 	redisconn "cafe-discovery/pkg/redis"
 
+	heartbeatv1 "github.com/create2-labs/cafe-contracts/discovery/scannerheartbeat/v1"
 	presencev1 "github.com/create2-labs/cafe-contracts/discovery/scannerpresence/v1"
 	natsio "github.com/nats-io/nats.go"
 	"github.com/rs/zerolog"
@@ -70,20 +70,20 @@ func NewScannerPresenceTracker(conn nats.Connection, redis redisconn.Connection)
 	}
 	t.sub = sub
 	if redis != nil {
-		subTLS, err := conn.Subscribe(nats.SubjectScannerHeartbeatTLS, t.handleHeartbeat("tls"))
+		subTLS, err := conn.Subscribe(heartbeatv1.SubjectScannerHeartbeatTLS, t.handleHeartbeat("tls"))
 		if err != nil {
 			_ = sub.Unsubscribe()
 			return nil, err
 		}
 		t.subTLS = subTLS
-		subWallet, err := conn.Subscribe(nats.SubjectScannerHeartbeatWallet, t.handleHeartbeat("wallet"))
+		subWallet, err := conn.Subscribe(heartbeatv1.SubjectScannerHeartbeatWallet, t.handleHeartbeat("wallet"))
 		if err != nil {
 			_ = subTLS.Unsubscribe()
 			_ = sub.Unsubscribe()
 			return nil, err
 		}
 		t.subWallet = subWallet
-		log.Info().Str("heartbeat_tls", nats.SubjectScannerHeartbeatTLS).Str("heartbeat_wallet", nats.SubjectScannerHeartbeatWallet).Msg("Scanner heartbeat tracker subscribed")
+		log.Info().Str("heartbeat_tls", heartbeatv1.SubjectScannerHeartbeatTLS).Str("heartbeat_wallet", heartbeatv1.SubjectScannerHeartbeatWallet).Msg("Scanner heartbeat tracker subscribed")
 	}
 	go t.runWalletSweep()
 	log.Info().Str("subject", presencev1.Subject).Msg("Scanner presence tracker subscribed")
@@ -92,8 +92,8 @@ func NewScannerPresenceTracker(conn nats.Connection, redis redisconn.Connection)
 
 func (t *ScannerPresenceTracker) handleHeartbeat(kind string) func(*natsio.Msg) {
 	return func(msg *natsio.Msg) {
-		var h nats.ScannerHeartbeatMessage
-		if err := json.Unmarshal(msg.Data, &h); err != nil || h.Kind == "" {
+		h, err := heartbeatv1.Decode(msg.Data)
+		if err != nil {
 			return
 		}
 		if t.redis == nil {

@@ -18,6 +18,7 @@ import (
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
 
+	requestv1 "github.com/create2-labs/cafe-contracts/discovery/scanrequest/v1"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -485,18 +486,18 @@ func cpmContextCheckUnavailableQueueError() *queueScanError {
 }
 
 func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, normalized string) *queueScanError {
-	scanMsg := nats.WalletScanMessage{
-		ScanID:  scanID,
-		UserID:  userID,
+	scanMsg := requestv1.Wallet{
+		ScanID:  scanID.String(),
+		UserID:  userID.String(),
 		Address: normalized,
 	}
 	log.Info().
-		Str("subject", nats.SubjectScanRequestedWallet).
-		Str("scan_id", scanMsg.ScanID.String()).
+		Str("subject", requestv1.SubjectScanRequestedWallet).
+		Str("scan_id", scanMsg.ScanID).
 		Str("address", normalized).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.wallet")
-	if err := nats.PublishJSONJetStream(h.natsConn, nats.SubjectScanRequestedWallet, scanMsg); err != nil {
+	if err := nats.PublishJSONJetStream(h.natsConn, requestv1.SubjectScanRequestedWallet, scanMsg); err != nil {
 		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},
@@ -553,18 +554,18 @@ func (h *DiscoveryHandler) prepareTLSScanQueue(c fiber.Ctx, endpointURL string) 
 }
 
 func (h *DiscoveryHandler) publishTLSScanRequested(scanID, userID uuid.UUID, endpointURL string) *queueScanError {
-	scanMsg := nats.TLSScanMessage{
-		ScanID:   scanID,
-		UserID:   userID,
+	scanMsg := requestv1.TLS{
+		ScanID:   scanID.String(),
+		UserID:   userID.String(),
 		Endpoint: endpointURL,
 	}
 	log.Info().
-		Str("subject", nats.SubjectScanRequestedTLS).
-		Str("scan_id", scanMsg.ScanID.String()).
+		Str("subject", requestv1.SubjectScanRequestedTLS).
+		Str("scan_id", scanMsg.ScanID).
 		Str("endpoint", scanMsg.Endpoint).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.tls")
-	if err := nats.PublishJSONJetStream(h.natsConn, nats.SubjectScanRequestedTLS, scanMsg); err != nil {
+	if err := nats.PublishJSONJetStream(h.natsConn, requestv1.SubjectScanRequestedTLS, scanMsg); err != nil {
 		return &queueScanError{
 			status: fiber.StatusInternalServerError,
 			body:   fiber.Map{"error": "failed to queue scan request"},

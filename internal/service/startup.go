@@ -7,14 +7,15 @@ import (
 
 	"cafe-discovery/pkg/nats"
 
+	signalv1 "github.com/create2-labs/cafe-contracts/discovery/persistencesignal/v1"
 	natsio "github.com/nats-io/nats.go"
 )
 
 const (
 	defaultPersistenceWaitTimeout = 15 * time.Second
-	defaultScannersWaitTimeout     = 30 * time.Second
-	defaultEndpointsPollInterval   = 2 * time.Second
-	defaultEndpointsPollTimeout    = 3 * time.Minute
+	defaultScannersWaitTimeout    = 30 * time.Second
+	defaultEndpointsPollInterval  = 2 * time.Second
+	defaultEndpointsPollTimeout   = 3 * time.Minute
 )
 
 // WaitForPersistence blocks until a message is received on persistence.ready or the context times out.
@@ -26,7 +27,10 @@ func WaitForPersistence(ctx context.Context, conn nats.Connection, timeout time.
 	defer cancel()
 
 	done := make(chan struct{})
-	sub, err := conn.Subscribe(nats.SubjectPersistenceReady, func(msg *natsio.Msg) {
+	sub, err := conn.Subscribe(signalv1.SubjectPersistenceReady, func(msg *natsio.Msg) {
+		if _, err := signalv1.Decode(msg.Data); err != nil {
+			return
+		}
 		select {
 		case done <- struct{}{}:
 		default:
