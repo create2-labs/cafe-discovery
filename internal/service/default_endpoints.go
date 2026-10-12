@@ -8,6 +8,7 @@ import (
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/nats"
 
+	requestv1 "github.com/create2-labs/cafe-contracts/discovery/scanrequest/v1"
 	"github.com/google/uuid"
 )
 
@@ -69,13 +70,13 @@ func InitializeDefaultEndpointsSync(ctx context.Context, natsConn nats.Connectio
 
 	// Publish scan requests (scanners + persistence must be up)
 	for _, url := range toRequest {
-		msg := nats.TLSScanMessage{
-			ScanID:    uuid.New(),
-			UserID:    uuid.Nil,
+		msg := requestv1.TLS{
+			ScanID:    uuid.New().String(),
+			UserID:    requestv1.NilID,
 			Endpoint:  url,
 			IsDefault: true,
 		}
-		if err := nats.PublishJSONJetStream(natsConn, nats.SubjectScanRequestedTLS, msg); err != nil {
+		if err := nats.PublishJSONJetStream(natsConn, requestv1.SubjectScanRequestedTLS, msg); err != nil {
 			log.Printf("  ⚠️  %s: failed to publish scan.requested.tls: %v", url, err)
 			continue
 		}

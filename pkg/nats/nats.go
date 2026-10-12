@@ -169,27 +169,16 @@ func PublishJSONJetStream(conn Connection, subject string, payload interface{}) 
 	return conn.PublishJetStream(subject, data)
 }
 
-// Subjects for NATS messaging
+// Queue groups and the scan-request stream stay local.
+// Scan subjects and message types come from cafe-contracts.
 const (
-	SubjectWalletScan = "cafe.discovery.wallet.scan"
-	SubjectTLSScan    = "cafe.discovery.tls.scan"
-	QueueScanners     = "cafe.scanners"
+	QueueScanners = "cafe.scanners"
 
-	// Event subjects for persistence service (scan lifecycle)
-	SubjectScanRequestedTLS    = "scan.requested.tls"
-	SubjectScanRequestedWallet = "scan.requested.wallet"
 	// StreamScanRequested is the work queue that captures the two scan.requested subjects.
-	StreamScanRequested  = "SCAN_REQUESTED"
-	SubjectScanStarted   = "scan.started"
-	SubjectScanCompleted = "scan.completed"
-	SubjectScanFailed    = "scan.failed"
-	SubjectScanReady     = "scan.ready" // published by persistence after writing to Redis/Postgres so API can return result on GET
+	StreamScanRequested = "SCAN_REQUESTED"
 	// SubjectDiscoveryWalletObserved carries JSON matching cafe-contracts cafe.discovery.wallet.observed v0.1 (observation/informational).
 	// CPM must not use this stream as the canonical assessment trigger (v0.7: use policy.assessment.requested).
 	SubjectDiscoveryWalletObserved = "cafe.discovery.events.wallet.observed.v0_1"
-	SubjectScannerHeartbeatTLS     = "scanner.heartbeat.tls"
-	SubjectScannerHeartbeatWallet  = "scanner.heartbeat.wallet"
-	SubjectPersistenceReady        = "persistence.ready"
 )
 
 // QueuePersistence is the queue name for persistence service consumers

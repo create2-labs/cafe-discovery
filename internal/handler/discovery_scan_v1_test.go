@@ -17,9 +17,9 @@ import (
 	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/policyref"
 	"cafe-discovery/internal/service"
-	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
+	requestv1 "github.com/create2-labs/cafe-contracts/discovery/scanrequest/v1"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
@@ -249,8 +249,8 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
 	}
-	if n.lastSubject != nats.SubjectScanRequestedWallet {
-		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, nats.SubjectScanRequestedWallet)
+	if n.lastSubject != requestv1.SubjectScanRequestedWallet {
+		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, requestv1.SubjectScanRequestedWallet)
 	}
 	var out map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -270,11 +270,8 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	if out["location"] != wantLoc {
 		t.Fatalf("location = %q, want %q", out["location"], wantLoc)
 	}
-	var published struct {
-		ScanID  string `json:"scan_id"`
-		Address string `json:"address"`
-	}
-	if err := json.Unmarshal(n.lastData, &published); err != nil {
+	published, err := requestv1.DecodeWallet(n.lastData)
+	if err != nil {
 		t.Fatalf("published json: %v", err)
 	}
 	if published.ScanID != scanID {
@@ -509,8 +506,8 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
 	}
-	if n.lastSubject != nats.SubjectScanRequestedWallet {
-		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, nats.SubjectScanRequestedWallet)
+	if n.lastSubject != requestv1.SubjectScanRequestedWallet {
+		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, requestv1.SubjectScanRequestedWallet)
 	}
 }
 
@@ -620,8 +617,8 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
 	}
-	if n.lastSubject != nats.SubjectScanRequestedWallet {
-		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, nats.SubjectScanRequestedWallet)
+	if n.lastSubject != requestv1.SubjectScanRequestedWallet {
+		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, requestv1.SubjectScanRequestedWallet)
 	}
 }
 
@@ -650,8 +647,8 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, b)
 	}
-	if n.lastSubject != nats.SubjectScanRequestedTLS {
-		t.Fatalf("NATS subject = %q", n.lastSubject)
+	if n.lastSubject != requestv1.SubjectScanRequestedTLS {
+		t.Fatalf("NATS subject = %q, want %q", n.lastSubject, requestv1.SubjectScanRequestedTLS)
 	}
 	var out map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -664,6 +661,13 @@ func TestPostDiscoveryScanV1_TLSAccepted(t *testing.T) {
 	wantLoc := discoveryroutes.EdgeTLSScans + scanID
 	if out["location"] != wantLoc {
 		t.Fatalf("location = %q, want %q", out["location"], wantLoc)
+	}
+	published, err := requestv1.DecodeTLS(n.lastData)
+	if err != nil {
+		t.Fatalf("published json: %v", err)
+	}
+	if published.ScanID != scanID || published.Endpoint != "https://example.com/path" || published.IsDefault {
+		t.Fatalf("published = %+v", published)
 	}
 }
 
