@@ -140,6 +140,15 @@ func Init() *ScanMetrics {
 	return defaultMetrics
 }
 
+// RecordWalletLifecycle counts one wallet lifecycle signal.
+// reason is a low-cardinality label: metadata, invalid, rejected, retryable, transport, or projection.
+func (m *ScanMetrics) RecordWalletLifecycle(reason string) {
+	if m == nil || m.WalletLifecycleTotal == nil {
+		return
+	}
+	m.WalletLifecycleTotal.WithLabelValues(reason).Inc()
+}
+
 // RecordScanAuthzDecision records a single scan-authorization decision.
 // outcome must be one of "allowed", "denied", "malformed", or "unavailable".
 // route is the static route pattern (e.g. "/internal/authz/scans/:scanId/can-read").
