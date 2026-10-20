@@ -3,10 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
+	"cafe-discovery/internal/address"
 	"cafe-discovery/internal/domain"
+	"cafe-discovery/internal/metrics"
+	"cafe-discovery/internal/persistence/scanpending"
 	"cafe-discovery/internal/repository"
 	"cafe-discovery/pkg/nats"
 
@@ -76,18 +80,20 @@ func (a *ScanRequestAbandoner) Due(now time.Time, open []repository.OpenScanRese
 }
 
 // MarkSent records that scan.failed was published for this scan.
+// A wallet scan is marked only after the JetStream acknowledgement.
 func (a *ScanRequestAbandoner) MarkSent(id uuid.UUID) {
 	a.sent[id] = struct{}{}
 }
 
 // RunScanRequestAbandoner publishes scan.failed for reservations whose message
 // left the work queue and never produced a terminal result.
-func RunScanRequestAbandoner(ctx context.Context, conn nats.Connection, ledger repository.ScanUsageLedgerRepository) {
+// Wallet events are acknowledged on JetStream. TLS keeps core publication.
+func RunScanRequestAbandoner(ctx context.Context, conn nats.Connection, ledger repository.ScanUsageLedgerRepository, pending scanpending.Store) {
 	a := NewScanRequestAbandoner(scanRequestMissingGrace)
 	ticker := time.NewTicker(scanRequestAbandonEvery)
 	defer ticker.Stop()
 	for {
-		if err := a.publishMissing(ctx, conn, ledger); err != nil {
+		if err := a.publishMissing(ctx, conn, ledger, pending); err != nil {
 			log.Printf("scan request abandon: %v", err)
 		}
 		select {
@@ -98,7 +104,11 @@ func RunScanRequestAbandoner(ctx context.Context, conn nats.Connection, ledger r
 	}
 }
 
-func (a *ScanRequestAbandoner) publishMissing(ctx context.Context, conn nats.Connection, ledger repository.ScanUsageLedgerRepository) error {
+type openScanReservations interface {
+	ListOpenScanReservations() ([]repository.OpenScanReservation, error)
+}
+
+func (a *ScanRequestAbandoner) publishMissing(ctx context.Context, conn nats.Connection, ledger openScanReservations, pending scanpending.Store) error {
 	payloads, err := conn.ListStreamPayloads(ctx)
 	if err != nil {
 		return err
@@ -108,10 +118,13 @@ func (a *ScanRequestAbandoner) publishMissing(ctx context.Context, conn nats.Con
 		return err
 	}
 	for _, row := range a.Due(time.Now(), open, scanIDsFromPayloads(payloads)) {
-		if err := publishAbandonedScan(conn, row); err != nil {
+		sent, err := publishAbandonedScan(ctx, conn, pending, row)
+		if err != nil {
 			return err
 		}
-		a.MarkSent(row.ScanID)
+		if sent {
+			a.MarkSent(row.ScanID)
+		}
 	}
 	return nil
 }
@@ -130,16 +143,40 @@ func scanIDsFromPayloads(payloads [][]byte) map[uuid.UUID]struct{} {
 	return out
 }
 
-func publishAbandonedScan(conn nats.Connection, row repository.OpenScanReservation) error {
-	kind := "wallet"
-	if row.ScanKind == domain.ScanUsageKindEndpoint {
-		kind = "tls"
-	}
-	return nats.PublishJSON(conn, lifecyclev1.SubjectScanFailed, lifecyclev1.Failed{
+func publishAbandonedScan(ctx context.Context, conn nats.Connection, pending scanpending.Store, row repository.OpenScanReservation) (bool, error) {
+	event := lifecyclev1.Failed{
 		ScanID:      row.ScanID.String(),
-		Kind:        kind,
+		Kind:        "wallet",
 		UserID:      row.UserID.String(),
 		Error:       scanRequestLeftQueue,
 		CompletedAt: time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if row.ScanKind == domain.ScanUsageKindEndpoint {
+		event.Kind = "tls"
+		err := nats.PublishJSON(conn, lifecyclev1.SubjectScanFailed, event)
+		return err == nil, err
+	}
+	normalized, err := abandonedWalletAddress(ctx, pending, row)
+	if err != nil {
+		log.Printf("scan request abandon: wallet %s address: %v", row.ScanID, err)
+		metrics.Get().RecordWalletLifecycle(walletLifecycleInvalid)
+		return false, nil
+	}
+	event.Address = normalized
+	err = nats.PublishJSONJetStream(conn, lifecyclev1.SubjectScanFailed, event)
+	return err == nil, err
+}
+
+func abandonedWalletAddress(ctx context.Context, pending scanpending.Store, row repository.OpenScanReservation) (string, error) {
+	if pending == nil {
+		return "", errors.New("pending store unavailable")
+	}
+	rec, err := pending.Get(ctx, row.UserID, "", row.ScanID)
+	if err != nil {
+		return "", err
+	}
+	if rec == nil || rec.Address == "" {
+		return "", errors.New("pending wallet address missing")
+	}
+	return address.ValidateAndNormalizeAddress(rec.Address)
 }
