@@ -20,6 +20,7 @@ type Connection interface {
 	Publish(subject string, data []byte) error
 	PublishJetStream(subject string, data []byte) error
 	ListStreamPayloads(ctx context.Context) ([][]byte, error)
+	ConsumeWalletLifecycle(ctx context.Context, handler func(msg jetstream.Msg)) error
 	Subscribe(subject string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	QueueSubscribe(subject, queue string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	Close()
@@ -176,6 +177,8 @@ const (
 
 	// StreamScanRequested is the work queue that captures the two scan.requested subjects.
 	StreamScanRequested = "SCAN_REQUESTED"
+	// StreamScanLifecycle is the work queue that captures scan.started, scan.completed, and scan.failed.
+	StreamScanLifecycle = "SCAN_LIFECYCLE"
 	// SubjectDiscoveryWalletObserved carries JSON matching cafe-contracts cafe.discovery.wallet.observed v0.1 (observation/informational).
 	// CPM must not use this stream as the canonical assessment trigger (v0.7: use policy.assessment.requested).
 	SubjectDiscoveryWalletObserved = "cafe.discovery.events.wallet.observed.v0_1"

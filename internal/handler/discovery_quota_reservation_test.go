@@ -20,6 +20,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -43,6 +44,10 @@ func (m *countingNATS) PublishJetStream(string, []byte) error {
 
 func (m *countingNATS) ListStreamPayloads(context.Context) ([][]byte, error) {
 	return nil, nil
+}
+
+func (m *countingNATS) ConsumeWalletLifecycle(context.Context, func(jetstream.Msg)) error {
+	return nil
 }
 
 func (m *countingNATS) Subscribe(string, func(msg *natsio.Msg)) (*natsio.Subscription, error) {
