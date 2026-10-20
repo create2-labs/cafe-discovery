@@ -25,6 +25,11 @@ type ScanMetrics struct {
 	// Labels are intentionally restricted to outcome, reason_code, and route
 	// pattern; user_id, tenant_id, scan_id, and request_id MUST NOT be added.
 	ScanAuthzDecisionsTotal *prometheus.CounterVec
+
+	// WalletLifecycleTotal counts wallet lifecycle signals that terminate or defer a delivery.
+	// The only label is reason: metadata, invalid, rejected, retryable, transport, or projection.
+	// scan_id, user_id, and address MUST NOT be added.
+	WalletLifecycleTotal *prometheus.CounterVec
 }
 
 var (
@@ -109,6 +114,13 @@ func Init() *ScanMetrics {
 			},
 			[]string{"outcome", "reason_code", "route"},
 		),
+		WalletLifecycleTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "cafe_discovery_wallet_lifecycle_total",
+				Help: "Wallet lifecycle deliveries terminated or deferred, by reason",
+			},
+			[]string{"reason"},
+		),
 	}
 
 	registerCollectors(
@@ -121,6 +133,7 @@ func Init() *ScanMetrics {
 		defaultMetrics.TLSScanSuccessTotal,
 		defaultMetrics.TLSScanErrorTotal,
 		defaultMetrics.ScanAuthzDecisionsTotal,
+		defaultMetrics.WalletLifecycleTotal,
 	)
 
 	initHTTPMetrics()
