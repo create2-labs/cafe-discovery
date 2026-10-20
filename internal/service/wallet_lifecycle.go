@@ -8,6 +8,7 @@ import (
 
 	"cafe-discovery/internal/metrics"
 	"cafe-discovery/internal/persistence/scanhttp"
+	"cafe-discovery/pkg/nats"
 	"cafe-discovery/pkg/scan"
 
 	"github.com/google/uuid"
@@ -61,6 +62,17 @@ func SettleWalletLifecycle(ctx context.Context, client *scanhttp.Client, msg Wal
 		record: metrics.Get().RecordWalletLifecycle,
 		log:    log.Logger,
 	}.settle(ctx, msg)
+}
+
+// RunWalletLifecycleConsumer binds discovery-wallet-lifecycle.
+// Each delivery is settled by SettleWalletLifecycle. This function does not decide outcomes.
+func RunWalletLifecycleConsumer(ctx context.Context, conn nats.Connection, client *scanhttp.Client) {
+	err := conn.ConsumeWalletLifecycle(ctx, func(msg jetstream.Msg) {
+		SettleWalletLifecycle(ctx, client, msg)
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("wallet lifecycle consumer failed")
+	}
 }
 
 func waitWalletLifecycle(ctx context.Context, d time.Duration) error {

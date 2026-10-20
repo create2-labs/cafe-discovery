@@ -23,6 +23,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 type mockNATSConn struct {
@@ -46,6 +47,10 @@ func (m *mockNATSConn) PublishJetStream(subject string, data []byte) error {
 
 func (m *mockNATSConn) ListStreamPayloads(context.Context) ([][]byte, error) {
 	return nil, nil
+}
+
+func (m *mockNATSConn) ConsumeWalletLifecycle(context.Context, func(jetstream.Msg)) error {
+	return nil
 }
 
 func (m *mockNATSConn) Subscribe(string, func(msg *natsio.Msg)) (*natsio.Subscription, error) {

@@ -193,6 +193,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
 	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo)
+	go service.RunWalletLifecycleConsumer(context.Background(), natsConn, scanClient)
 
 	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres).
 	if _, err := natsConn.Subscribe(lifecyclev1.SubjectScanReady, func(msg *natsio.Msg) {
