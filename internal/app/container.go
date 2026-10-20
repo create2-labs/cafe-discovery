@@ -192,7 +192,7 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
-	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo)
+	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo, scanClient)
 	go service.RunWalletLifecycleConsumer(context.Background(), natsConn, scanClient)
 
 	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres).
