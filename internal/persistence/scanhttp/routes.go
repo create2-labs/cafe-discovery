@@ -12,6 +12,9 @@ const (
 	TLSScans         = "/tls/scans"
 	TLSScansDefaults = "/tls/scans/defaults"
 	TLSScanByID      = "/tls/scans/{scan_id}"
+
+	// WalletScanTransition is POST /internal/scan/v1/wallets/scans/{scan_id}/transition.
+	WalletScanTransition = "/wallets/scans/{scan_id}/transition"
 )
 
 const (
