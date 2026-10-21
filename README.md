@@ -6,7 +6,7 @@
       1. [Goals](#goals)
       2. [System Components](#system-components)
          1. [1. API Server (`cmd/server`)](#1-api-server-cmdserver)
-         2. [2. Scanners (`cmd/scanner`)](#2-scanners-cmdscanner)
+         2. [2. Scanners (separate repositories)](#2-scanners-separate-repositories)
          3. [3. Persistence Service (cafe-persistence)](#3-persistence-service-cafe-persistence)
          4. [4. NATS](#4-nats)
          5. [5. PostgreSQL](#5-postgresql)
@@ -155,26 +155,20 @@ The application is designed to be scalable with a focus on performance.
 
 #### 1. API Server (`cmd/server`)
 
-- Role: HTTP server (Fiber) that exposes REST endpoints. **All API calls require authentication**. Target role: **control-plane** (HTTP API + NATS publish/subscribe + Redis reads).
+- Role: HTTP server (Fiber) that exposes REST endpoints. Target role: **control-plane** (HTTP API + NATS publish/subscribe + Redis reads).
 - Responsibilities:
-  - User authentication with hybrid PQC JWT tokens
   - Receiving scan requests (wallet and TLS)
   - Publishing NATS messages for asynchronous processing
   - Consuming `scan.ready` NATS messages (when persistence has written a result to Redis) so GET requests can return results
   - Serving scan list/GET from Redis; on cache miss, **currently** the backend uses **read-through** from PostgreSQL (see [Architecture Decisions](#architecture-decisions) and [docs/CHECKARCH.md](docs/CHECKARCH.md)).
 - **Current state (PostgreSQL usage):** The backend **currently** connects to PostgreSQL and uses it for: (1) **Auth and users** (signup/signin, user and plan records), (2) **Plans and usage** (plan limits, scan counts), (3) **Cafe wallets** (CRUD), (4) **Pending scan records** (creating a row when a scan is requested, before the scanner runs), (5) **Read-through** for scan list/GET when Redis is empty (e.g. after sign-in warm or first request). The intended direction is to reserve Postgres for the persistence service only (scan lifecycle) and to serve scan data from Redis only from the API; see [docs/CHECKARCH.md](docs/CHECKARCH.md) for verification and envisioned changes.
 
-#### 2. Scanners (`cmd/scanner`)
+#### 2. Scanners (separate repositories)
 
-- Role: NATS consumers that process scans (**compute-only**: NATS in/out + heartbeat; no Postgres). The scanner process can run **one or both** scanner types (TLS and Wallet) depending on `DISCOVERY_SCANNER_TYPE`.
-- **Scanner core** (`internal/scanner/core`): Shared bootstrap — **NATS**, chain config, health server, graceful shutdown. Defines the `Runner` interface and `Deps`. Scanners do **not** have a DB or plan service; they only publish `scan.started` / `scan.completed` / `scan.failed` to NATS for the persistence service.
-- **TLS scanner** (`internal/scanner/tlsrunner`): Consumes `cafe.discovery.tls.scan`, runs TLS scans via the TLS plugin (requires OQS/liboqs for PQC scanning).
-- **Wallet scanner**: moved to [cafe-scanner-wallet](https://github.com/create2-labs/cafe-scanner-wallet) (dedicated repository and image).
-- Responsibilities:
-  - Consuming NATS messages (wallet and/or TLS subject)
-  - Decoding messages and running scans via the **scan plugins** (`plugin.DecodeMessage`, `plugin.Run`)
-  - Publishing scan lifecycle events to NATS (`scan.started`, `scan.completed`, `scan.failed`) for the **persistence service** to write to storage
-- **Deployment**: For production you can run one process per type (`DISCOVERY_SCANNER_TYPE=tls` or `wallet`), each with its own Docker image (TLS image uses OQS; Wallet image is Alpine without OQS).
+This repository does not build a scanner. Scan execution lives in two NATS consumers. They do not write Postgres. They publish `scan.started`, `scan.completed`, and `scan.failed` for `cafe-persistence`.
+
+- **Wallet scanner**: [cafe-scanner-wallet](https://github.com/create2-labs/cafe-scanner-wallet), binary `cmd/scanner-wallet`.
+- **TLS scanner**: [cafe-scanner-tls](https://github.com/create2-labs/cafe-scanner-tls), binary `cmd/scanner-tls`.
 
 #### 3. Persistence Service (cafe-persistence)
 
@@ -1051,10 +1045,6 @@ export CORS_ALLOW_ORIGINS="http://localhost:3000,http://localhost:3001,http://lo
 export CORS_ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS"
 ```
 
-#### Discovery → CPM internal policy reference (WORKPLAN PR5 / PR6)
-
-CPM (`cafe-crypto-policy-mgt`, **PR5**) exposes **`POST /internal/policies/references/scan`**, gated by **`CAFE_POLICY_REFERENCE_INTERNAL_SERVICE_TOKEN`** (Bearer). When **PR6** lands in Discovery, this service will call CPM over the **Docker/service network** (e.g. `http://cafe-cpm:8080`, not the browser-facing **`/api`** edge); the outbound **`Authorization: Bearer`** must match that secret. Until then, only CPM needs the variable — see **`cafe-deploy`** `compose/25-cpm.yml` and `env/dev.env.template`. Central reference: **`cafe-documentation/docs/security/cpm-auth-only-contract.md`** (§9–§10).
-
 Using config.yaml vs Environment Variables:
 
 - For local Docker Compose: Use `config.yaml` with Docker service names (postgres, nats, redis)
@@ -1080,9 +1070,9 @@ Example:
 export LOG_LEVEL=debug
 go run cmd/server/main.go
 
-# Terminal 2 - Worker in debug mode
+# Terminal 2 - wallet scanner, from cafe-scanner-wallet
 export LOG_LEVEL=debug
-go run cmd/scanner/main.go
+go run ./cmd/scanner-wallet/main.go
 ```
 
 
