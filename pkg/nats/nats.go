@@ -179,9 +179,6 @@ const (
 	StreamScanRequested = "SCAN_REQUESTED"
 	// StreamScanLifecycle is the work queue that captures scan.started, scan.completed, and scan.failed.
 	StreamScanLifecycle = "SCAN_LIFECYCLE"
-	// SubjectDiscoveryWalletObserved carries JSON matching cafe-contracts cafe.discovery.wallet.observed v0.1 (observation/informational).
-	// CPM must not use this stream as the canonical assessment trigger (v0.7: use policy.assessment.requested).
-	SubjectDiscoveryWalletObserved = "cafe.discovery.events.wallet.observed.v0_1"
 )
 
 // QueuePersistence is the queue name for persistence service consumers
