@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	postgresdb "cafe-discovery/pkg/postgres"
 	redisconn "cafe-discovery/pkg/redis"
 
+	lifecyclev1 "github.com/create2-labs/cafe-contracts/discovery/scanlifecycle/v1"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/google/uuid"
@@ -192,15 +192,16 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 		log.Printf("Warning: scanners not ready in time: %v (default endpoints may be empty)", err)
 	}
 	service.InitializeDefaultEndpointsSync(ctx, natsConn, redisTLSRepo)
-	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo)
+	go service.RunScanRequestAbandoner(context.Background(), natsConn, scanUsageLedgerRepo, scanClient)
+	go service.RunWalletLifecycleConsumer(context.Background(), natsConn, scanClient)
 
 	// Subscribe to scan.ready so backend is notified when a scan is stored (Redis/Postgres).
-	if _, err := natsConn.Subscribe(nats.SubjectScanReady, func(msg *natsio.Msg) {
-		var m nats.ScanReadyMessage
-		if err := json.Unmarshal(msg.Data, &m); err != nil {
+	if _, err := natsConn.Subscribe(lifecyclev1.SubjectScanReady, func(msg *natsio.Msg) {
+		m, err := lifecyclev1.DecodeReady(msg.Data)
+		if err != nil {
 			return
 		}
-		log.Printf("scan.ready: user=%s kind=%s status=%s endpoint=%s address=%s", m.UserID.String(), m.Kind, m.Status, m.Endpoint, m.Address)
+		log.Printf("scan.ready: user=%s kind=%s status=%s endpoint=%s address=%s", m.UserID, m.Kind, m.Status, m.Endpoint, m.Address)
 	}); err != nil {
 		log.Printf("Warning: subscribe scan.ready failed: %v", err)
 	}

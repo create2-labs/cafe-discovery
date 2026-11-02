@@ -20,6 +20,7 @@ type Connection interface {
 	Publish(subject string, data []byte) error
 	PublishJetStream(subject string, data []byte) error
 	ListStreamPayloads(ctx context.Context) ([][]byte, error)
+	ConsumeWalletLifecycle(ctx context.Context, handler func(msg jetstream.Msg)) error
 	Subscribe(subject string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	QueueSubscribe(subject, queue string, handler func(msg *nats.Msg)) (*nats.Subscription, error)
 	Close()
@@ -169,24 +170,15 @@ func PublishJSONJetStream(conn Connection, subject string, payload interface{}) 
 	return conn.PublishJetStream(subject, data)
 }
 
-// Subjects for NATS messaging
+// Queue groups and the scan-request stream stay local.
+// Scan subjects and message types come from cafe-contracts.
 const (
-	SubjectWalletScan = "cafe.discovery.wallet.scan"
-	SubjectTLSScan    = "cafe.discovery.tls.scan"
-	QueueScanners     = "cafe.scanners"
+	QueueScanners = "cafe.scanners"
 
-	// Event subjects for persistence service (scan lifecycle)
-	SubjectScanRequestedTLS    = "scan.requested.tls"
-	SubjectScanRequestedWallet = "scan.requested.wallet"
 	// StreamScanRequested is the work queue that captures the two scan.requested subjects.
-	StreamScanRequested           = "SCAN_REQUESTED"
-	SubjectScanStarted            = "scan.started"
-	SubjectScanCompleted          = "scan.completed"
-	SubjectScanFailed             = "scan.failed"
-	SubjectScanReady              = "scan.ready" // published by persistence after writing to Redis/Postgres so API can return result on GET
-	SubjectScannerHeartbeatTLS    = "scanner.heartbeat.tls"
-	SubjectScannerHeartbeatWallet = "scanner.heartbeat.wallet"
-	SubjectPersistenceReady       = "persistence.ready"
+	StreamScanRequested = "SCAN_REQUESTED"
+	// StreamScanLifecycle is the work queue that captures scan.started, scan.completed, and scan.failed.
+	StreamScanLifecycle = "SCAN_LIFECYCLE"
 )
 
 // QueuePersistence is the queue name for persistence service consumers

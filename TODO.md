@@ -4,6 +4,31 @@ Items deferred; not blocking current IMM work unless noted.
 
 ---
 
+## Reprendre plus tard le cycle de vie du scanner TLS
+
+**Priorité :** reporté. Le travail reste concentré sur la correction du scanner wallet, puis sur le scanner de smart contracts. Le scanner TLS, son déclenchement public par `POST /scan`, son quota, son cycle de vie et l'éditeur actuel de `scan.ready` restent inchangés pendant ces étapes.
+
+**Cible architecturale à conserver :** Discovery porte la machine d'état et les décisions du cycle de scan. Persistence effectue les entrées-sorties et les transactions demandées ; il ne calcule pas l'état et n'agrège pas les événements.
+
+**Éditeur de `scan.ready` TLS :** Persistence publie aujourd'hui `scan.ready` après l'écriture d'un scan TLS. C'est un héritage qui peut rester en place : son déplacement vers Discovery n'est pas nécessaire aux travaux wallet et smart contracts. Si cette migration est décidée plus tard, Discovery publiera l'avis de fin après la réussite de l'écriture TLS demandée à Persistence. Aucun sujet, corps ou statut TLS de remplacement n'est choisi ici.
+
+**Défaillances TLS à traiter ensemble lors de cette reprise :**
+
+- borner une tentative TLS et arrêter le renouvellement `InProgress` à cette borne ;
+- traiter le cas où le handler ne revient pas sur la dernière livraison, afin qu'une sixième livraison ne soit pas nécessaire pour produire la fin ;
+- ne pas assimiler une erreur ou une absence de métadonnées JetStream à une première livraison ;
+- vérifier et borner les appels natifs PQC qui n'observent pas aujourd'hui le contexte Go ;
+- définir les durées propres au TLS au lieu de recopier automatiquement celles du scanner wallet ;
+- appliquer une seule transition terminale logique et laisser Discovery décider l'état, y compris face aux doublons ou aux événements tardifs ;
+- préciser l'écriture terminale idempotente demandée à Persistence, son résultat synchrone et le traitement d'une erreur d'écriture avant de considérer le scan comme terminé ;
+- conserver ou déplacer séparément la publication de `scan.ready` : cette question ne doit pas bloquer la correction du cycle de vie.
+
+**Références à réviser au moment de cette reprise :** `cafe-adr/ADR_20261013_scanner_contract.md` (notamment la section 7.6, « Migration reportée de l'éditeur TLS ») et `cafe-adr/ADR_20261007_onchain_indexer_service.md`. La solution wallet pourra servir de modèle, mais elle ne devra pas être appliquée au TLS sans valider ses contraintes propres.
+
+**Dépôts probables :** `cafe-scanner-tls`, `cafe-discovery` et `cafe-persistence`. `cafe-deploy` seulement si un contrat NATS ou un réglage de déploiement change.
+
+---
+
 ## IMM-9 follow-up — Deduplicate CPM internal HTTP client (`cpmpolicyref`)
 
 **Context:** IMM-9 added `ActiveWalletCPMContextForTarget` beside existing `PersistedPoliciesReferenceScan` in `internal/cpmpolicyref/http_client.go`.
