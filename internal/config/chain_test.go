@@ -98,3 +98,30 @@ func TestChainConfig_ChainIDByNetwork(t *testing.T) {
 		t.Fatalf("got %#v", m)
 	}
 }
+
+func TestLoadChainConfigIgnoresUnreadKeys(t *testing.T) {
+	t.Parallel()
+	const doc = `blockchains:
+  - name: base
+    rpc: "https://base-rpc.example"
+    moralis_chain_name: "base"
+    supports_eip7702: true
+    chain_id: 8453
+`
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadChainConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Blockchains) != 1 {
+		t.Fatalf("got %d blockchains, want 1", len(cfg.Blockchains))
+	}
+	got := cfg.Blockchains[0]
+	want := Blockchain{Name: "base", RPC: "https://base-rpc.example", ChainID: 8453}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
