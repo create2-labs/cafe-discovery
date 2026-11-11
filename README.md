@@ -249,7 +249,7 @@ Scans are implemented as **plugins** registered in a central registry:
 - **TLS plugin** (`internal/scan/tls`): Implements `scan.Plugin` for TLS endpoint scans. Adapter wraps `domain.TLSScanResult` as `scan.ScanResult` while preserving the current v1 detail payload. Consumes NATS subject `cafe.discovery.tls.scan`.
 - **Wallet plugin** (`internal/scan/wallet`): Implements `scan.Plugin` for wallet scans. Adapter wraps `domain.ScanResult` as `scan.ScanResult`. Consumes NATS subject `cafe.discovery.wallet.scan`.
 
-Handlers validate requests (optionally via `plugin.DecodeHTTP`) and publish the same NATS messages as before. Workers unmarshal messages, call `plugin.DecodeMessage` then `plugin.Run`. Plan limits use kind-based constants (`scan.KindWallet`, `scan.PlanLimitKeyEndpoint`). Plugin versions are configurable via `scan.plugins.tls.version` and `scan.plugins.wallet.version` in config.
+Handlers validate requests (optionally via `plugin.DecodeHTTP`) and publish the same NATS messages as before. Workers unmarshal messages, call `plugin.DecodeMessage` then `plugin.Run`. Plan limits use kind-based constants (`scan.KindWallet`, `scan.PlanLimitKeyEndpoint`).
 
 ### Project Structure
 
@@ -689,10 +689,6 @@ Wallet-scanner protocol capabilities are deployment-owned chain configuration. T
 The `config.yaml` file contains all configuration settings. Here's the complete structure:
 
 ```yaml
-server:
-  host: "0.0.0.0"
-  port: "8080"
-
 # PostgreSQL configuration (for Docker, use service name 'postgres')
 POSTGRES_HOST: "postgres"
 POSTGRES_PORT: "5432"
@@ -710,23 +706,10 @@ REDIS_URL: "redis://redis:6379"
 # JWT configuration (required for authentication)
 JWT_SECRET: "change-me-for-local"
 
-# Cloudflare Turnstile configuration (optional, uses dev keys by default)
 TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA"
-TURNSTILE_SITE_KEY: "1x00000000000000000AA"
 
 # Logging
 LOG_LEVEL: "info"
-
-# Scanner type: "tls" | "wallet" | "all" (default). For separate scanner processes set via DISCOVERY_SCANNER_TYPE.
-# DISCOVERY_SCANNER_TYPE: "all"
-
-# Scan plugin versions (optional; default "1.0")
-scan:
-  plugins:
-    tls:
-      version: "1.0"
-    wallet:
-      version: "1.0"
 
 # CORS configuration
 CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:5173"
@@ -735,11 +718,9 @@ CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
 blockchains:
   - name: ethereum-mainnet
     rpc: "https://ethereum-rpc.publicnode.com"          # exposed via GET /discovery/v1/rpcs; live RPC calls run in cafe-scanner-wallet
-    moralis_chain_name: "eth"                           # scanner-wallet indexer only (ignored by discovery-backend)
     chain_id: 1   # EIP-155; required for wallet observation export (persistence); must be unique per row
   - name: polygon
     rpc: "https://polygon-bor-rpc.publicnode.com"
-    moralis_chain_name: "polygon amoy"
     chain_id: 137
   # ... more networks
 ```
@@ -1041,7 +1022,6 @@ export JWT_SECRET=
 # For staging/production (cafe-deploy), get your keys from https://developers.cloudflare.com/turnstile/
 # Note: The service will log a warning when using development keys
 export TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA  # Dev key (default)
-export TURNSTILE_SITE_KEY=1x00000000000000000000AA  # Dev key (default)
 
 # Logging
 export LOG_LEVEL=info  # Options: trace, debug, info, warn, error, fatal, panic
