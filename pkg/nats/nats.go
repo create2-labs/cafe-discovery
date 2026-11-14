@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +35,28 @@ type natsConnection struct {
 	js   jetstream.JetStream
 }
 
+// unparseableURL replaces a server URL entry that cannot be logged safely.
+const unparseableURL = "[unparseable]"
+
+// errNATSURLUnparseable replaces a connect error that wraps a *url.Error,
+// whose text quotes the raw URL.
+var errNATSURLUnparseable = errors.New("NATS URL could not be parsed")
+
+// redactedURL keeps only scheme://host of each comma-separated entry of raw.
+// An entry that does not parse, or has no host, becomes unparseableURL.
+func redactedURL(raw string) string {
+	entries := strings.Split(raw, ",")
+	for i, entry := range entries {
+		u, err := url.Parse(strings.TrimSpace(entry))
+		if err != nil || u.Host == "" {
+			entries[i] = unparseableURL
+			continue
+		}
+		entries[i] = u.Scheme + "://" + u.Host
+	}
+	return strings.Join(entries, ",")
+}
+
 // New creates a new NATS connection
 func New() (Connection, error) {
 	natsURL := viper.GetString(config.NATSURL)
@@ -40,7 +64,7 @@ func New() (Connection, error) {
 		natsURL = "nats://localhost:4222"
 	}
 
-	log.Info().Str("url", natsURL).Msg("Connecting to NATS")
+	log.Info().Str("url", redactedURL(natsURL)).Msg("Connecting to NATS")
 
 	conn, err := nats.Connect(natsURL,
 		nats.Name("cafe-discovery"),
@@ -59,6 +83,11 @@ func New() (Connection, error) {
 		}),
 	)
 	if err != nil {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			// The *url.Error text quotes the raw URL, user-info included.
+			return nil, fmt.Errorf("failed to connect to NATS: %w", errNATSURLUnparseable)
+		}
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
