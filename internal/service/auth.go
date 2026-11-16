@@ -128,20 +128,28 @@ type AuthResponse struct {
 	User  *domain.User `json:"user"`
 }
 
+// CheckSignInChallengeConfig returns an error when the sign-in challenge secret
+// (config.TurnstileSecretKey) is not set.
+func CheckSignInChallengeConfig() error {
+	if viper.GetString(config.TurnstileSecretKey) == "" {
+		return fmt.Errorf("%s not set in config file or environment variable", config.TurnstileSecretKey)
+	}
+	return nil
+}
+
 // verifyTurnstileToken verifies a Cloudflare Turnstile token
 func verifyTurnstileToken(token string) error {
 	secretKey := viper.GetString(config.TurnstileSecretKey)
 
+	// An unset secret fails closed; the startup check normally prevents it.
+	if secretKey == "" {
+		return ErrTurnstileValidation
+	}
+
 	// Check if using Cloudflare development keys (always pass verification)
 	const devSecretKey = "1x0000000000000000000000000000000AA"
-	isDevMode := secretKey == "" || secretKey == devSecretKey
-
-	if isDevMode {
-		if secretKey == devSecretKey {
-			log.Printf("⚠️  WARNING: Using Cloudflare Turnstile development keys. Turnstile verification is disabled in development mode.")
-		} else {
-			log.Printf("⚠️  WARNING: TURNSTILE_SECRET_KEY not configured. Turnstile verification is disabled.")
-		}
+	if secretKey == devSecretKey {
+		log.Printf("⚠️  WARNING: Using Cloudflare Turnstile development keys. Turnstile verification is disabled in development mode.")
 		// In development mode, accept any non-empty token
 		if token == "" {
 			return ErrTurnstileValidation
