@@ -80,6 +80,9 @@ func NewContainer(cfgChain *config.ChainConfig) (*Container, error) {
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET not set in config file or environment variable")
 	}
+	if err := service.CheckSignInChallengeConfig(); err != nil {
+		return nil, err
+	}
 	jwtExpiry := 24 * time.Hour // Token expires in 24 hours
 
 	// Initialize repositories
