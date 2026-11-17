@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -26,6 +27,17 @@ func NewAuthHandler(authService *service.AuthService, userScanCache *service.Use
 	}
 }
 
+// respondChallengeFailure answers a failed sign-in challenge verification with
+// the fixed answer of a refused token. A provider failure is logged server-side.
+func respondChallengeFailure(c fiber.Ctx, err error) error {
+	if err != service.ErrTurnstileValidation {
+		log.Printf("auth: sign-in challenge provider failure: %v", err)
+	}
+	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"error": service.ErrTurnstileValidation.Error(),
+	})
+}
+
 // Signup handles POST /auth/signup
 func (h *AuthHandler) Signup(c fiber.Ctx) error {
 	var req service.SignupRequest
@@ -37,6 +49,9 @@ func (h *AuthHandler) Signup(c fiber.Ctx) error {
 
 	response, err := h.authService.Signup(req)
 	if err != nil {
+		if errors.Is(err, service.ErrTurnstileValidation) {
+			return respondChallengeFailure(c, err)
+		}
 		if err == service.ErrUserAlreadyExists {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 				"error": err.Error(),
@@ -61,6 +76,9 @@ func (h *AuthHandler) Signin(c fiber.Ctx) error {
 
 	response, err := h.authService.Signin(req)
 	if err != nil {
+		if errors.Is(err, service.ErrTurnstileValidation) {
+			return respondChallengeFailure(c, err)
+		}
 		if err == service.ErrUserNotFound || err == service.ErrInvalidPassword {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid email or password",

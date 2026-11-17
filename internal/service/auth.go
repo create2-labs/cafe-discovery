@@ -137,6 +137,16 @@ func CheckSignInChallengeConfig() error {
 	return nil
 }
 
+// challengeVerifyTimeout bounds one call to the sign-in challenge provider.
+const challengeVerifyTimeout = 5 * time.Second
+
+var (
+	// challengeHTTPClient is the one client of every provider call.
+	challengeHTTPClient = &http.Client{Timeout: challengeVerifyTimeout}
+	// challengeVerifyURL is the provider endpoint; only tests replace it.
+	challengeVerifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+)
+
 // verifyTurnstileToken verifies a Cloudflare Turnstile token
 func verifyTurnstileToken(token string) error {
 	secretKey := viper.GetString(config.TurnstileSecretKey)
@@ -162,19 +172,18 @@ func verifyTurnstileToken(token string) error {
 	}
 
 	// Call Cloudflare Turnstile API to verify the token
-	url := "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 	data := map[string]string{
 		"secret":   secretKey,
 		"response": token,
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("failed to marshal turnstile request: %w", err)
+		return fmt.Errorf("%w: failed to marshal turnstile request: %w", ErrTurnstileValidation, err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	resp, err := challengeHTTPClient.Post(challengeVerifyURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to verify turnstile token: %w", err)
+		return fmt.Errorf("%w: failed to verify turnstile token: %w", ErrTurnstileValidation, err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -183,9 +192,13 @@ func verifyTurnstileToken(token string) error {
 		}
 	}()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: unexpected provider status %d", ErrTurnstileValidation, resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read turnstile response: %w", err)
+		return fmt.Errorf("%w: failed to read turnstile response: %w", ErrTurnstileValidation, err)
 	}
 
 	var result struct {
@@ -193,7 +206,7 @@ func verifyTurnstileToken(token string) error {
 		Errors  []string `json:"error-codes"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("failed to unmarshal turnstile response: %w", err)
+		return fmt.Errorf("%w: failed to unmarshal turnstile response: %w", ErrTurnstileValidation, err)
 	}
 
 	if !result.Success {
