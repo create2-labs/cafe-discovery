@@ -71,7 +71,7 @@ WORKDIR /app
 ENV GO_TOOLING_VERSION=1.27.4
 ENV PATH=/root/go/bin:/usr/local/go/bin:/usr/local/bin:$PATH
 
-RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
+RUN go install golang.org/x/vuln/cmd/govulncheck@1.9.0 \
     && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 CMD ["sh", "-c", "go mod download && golangci-lint run ./... && go test ./... && /root/go/bin/govulncheck ./..."]
