@@ -355,7 +355,7 @@ Client HTTP → Discovery  → NATS (publish) → Scanner → NATS (scan.started
 
 ### Data structure (CPM export contract)
 
-Discovery remains the **owner** of internal scan models and persistence (for example wallet scan results and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`). Discovery maps `domain.ScanResult` to that contract in **`internal/walletobservation`** and uses **`config.ChainConfig.ChainIDByNetwork()`** built from **`blockchains[].name`** + **`chain_id`** in `config.yaml` (validated at startup where `LoadChainConfig` runs).
+Discovery remains the **owner** of internal scan models and persistence (for example wallet scan results and `ScanResultEntity`). The **normative wire contract** for a wallet observation is defined in **`cafe-contracts`** (`observation/wallet/v01`, `event_type` `cafe.discovery.wallet.observed`, `event_version` `v0.1`).
 
 **Runtime:** the **persistence service** publishes the JSON to NATS subject **`cafe.discovery.events.wallet.observed.v0_1`** (constant `cafenatsv01.NATSSubjectDiscoveryWalletObservedV01` in `cafe-contracts`) after a successful wallet `scan.completed` persistence path (Postgres + Redis + `scan.ready`). Publication is best-effort (logged on validation/publish failure; scan write is not rolled back).
 
@@ -399,7 +399,7 @@ Discovery remains the **owner** of internal scan models and persistence (for exa
 - **Subject type (v0.1):** `wallet`
 - **PQ posture:** `classical_only`, `hybrid`, `full_pq`, `unknown`
 
-**Canonical JSON fixture:** [`cafe-contracts` `observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json`](https://github.com/create2-labs/cafe-contracts/blob/main/observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json) (module `github.com/create2-labs/cafe-contracts`). Local placeholder tests also use `internal/walletobservation/testdata/`.
+**Canonical JSON fixture:** [`cafe-contracts` `observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json`](https://github.com/create2-labs/cafe-contracts/blob/main/observation/wallet/v01/testdata/cafe_discovery_wallet_observed_v01.json) (module `github.com/create2-labs/cafe-contracts`).
 
 **Further reading:** [cafe-crypto-policy-mgt `cafe_cpm_v1_prompts_0.7.md`](https://github.com/create2-labs/cafe-crypto-policy-mgt/blob/main/cafe_cpm_v1_prompts_0.7.md) — authoritative pack for CPM integration (explicit assessment trigger, not auto-consume of observation stream).
 
