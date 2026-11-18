@@ -1,8 +1,6 @@
 package metrics
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -165,23 +163,4 @@ func Get() *ScanMetrics {
 		return Init()
 	}
 	return defaultMetrics
-}
-
-// RecordWalletScan records metrics for a wallet scan operation
-// This is a convenience method that records all related metrics atomically
-func (m *ScanMetrics) RecordWalletScan(duration time.Duration, success bool) {
-	scanType := "wallet"
-
-	// Increment total scans counter
-	m.WalletScansTotal.WithLabelValues(scanType).Inc()
-
-	// Record duration
-	m.WalletScanDuration.WithLabelValues(scanType).Observe(duration.Seconds())
-
-	// Record success or error
-	if success {
-		m.WalletScanSuccessTotal.WithLabelValues(scanType, "success").Inc()
-	} else {
-		m.WalletScanErrorTotal.WithLabelValues(scanType, "failure").Inc()
-	}
 }
