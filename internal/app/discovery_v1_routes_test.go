@@ -71,7 +71,7 @@ func TestDiscoveryV1Routes_WalletsScansNotCapturedAsPubKeyHash(t *testing.T) {
 	}
 	_ = respCbom.Body.Close()
 
-	del := httptest.NewRequest("DELETE", discoveryroutes.WalletScanByID("550e8400-e29b-41d4-a716-446655440000"), nil)
+	del := httptest.NewRequest("DELETE", discoveryroutes.WalletScans+"/"+"550e8400-e29b-41d4-a716-446655440000", nil)
 	respDel, err := app.Test(del, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("DELETE wallets/scans: %v", err)
@@ -113,7 +113,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 		discoveryroutes.TLSScans,
 		discoveryroutes.TLSScansDefaults,
 		discoveryroutes.TLSScanCBOMByID("550e8400-e29b-41d4-a716-446655440000"),
-		discoveryroutes.TLSScanByID("550e8400-e29b-41d4-a716-446655440000"),
+		discoveryroutes.TLSScans + "/" + "550e8400-e29b-41d4-a716-446655440000",
 	} {
 		req := httptest.NewRequest("GET", path, nil)
 		resp, err := app.Test(req, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
@@ -127,7 +127,7 @@ func TestDiscoveryV1Routes_TLSAndScanStubs(t *testing.T) {
 		_ = resp.Body.Close()
 	}
 
-	delTLS := httptest.NewRequest("DELETE", discoveryroutes.TLSScanByID("550e8400-e29b-41d4-a716-446655440000"), nil)
+	delTLS := httptest.NewRequest("DELETE", discoveryroutes.TLSScans+"/"+"550e8400-e29b-41d4-a716-446655440000", nil)
 	respDel, err := app.Test(delTLS, fiber.TestConfig{Timeout: 0, FailOnTimeout: false})
 	if err != nil {
 		t.Fatalf("DELETE tls scan: %v", err)

@@ -36,14 +36,3 @@ func NormalizeWalletAccountKind(t AccountType, isEOA, is4337 bool) (AccountType,
 		return AccountTypeUnknown, false, false, WalletTypeUnknown
 	}
 }
-
-// NormalizeScanResultWalletKind aligns Type, IsEOA, and IsERC4337 on a scanner completion payload.
-func NormalizeScanResultWalletKind(r *ScanResult) {
-	if r == nil {
-		return
-	}
-	t, isEOA, is4337, _ := NormalizeWalletAccountKind(r.Type, r.IsEOA, r.IsERC4337)
-	r.Type = t
-	r.IsEOA = isEOA
-	r.IsERC4337 = is4337
-}

@@ -23,19 +23,9 @@ const (
 	EdgeOnchainScanner = EdgeV1Base + "/onchainscanner"
 )
 
-// WalletScanByID returns the upstream path for a wallet scan detail/delete.
-func WalletScanByID(scanID string) string {
-	return WalletScans + "/" + scanID
-}
-
 // WalletScanCBOMByID returns the upstream path for wallet scan CBOM (W6).
 func WalletScanCBOMByID(scanID string) string {
 	return WalletScans + "/" + scanID + "/cbom"
-}
-
-// TLSScanByID returns the upstream path for a TLS scan detail/delete.
-func TLSScanByID(scanID string) string {
-	return TLSScans + "/" + scanID
 }
 
 // TLSScanCBOMByID returns the upstream path for TLS scan CBOM (W6).

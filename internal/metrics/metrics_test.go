@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"cafe-discovery/internal/metrics"
 
@@ -14,7 +13,7 @@ import (
 
 func TestMetricsHandlerReturns200(t *testing.T) {
 	m := metrics.Init()
-	m.RecordWalletScan(time.Second, true)
+	m.WalletScansTotal.WithLabelValues("wallet").Inc()
 
 	rec := httptest.NewRecorder()
 	metrics.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
