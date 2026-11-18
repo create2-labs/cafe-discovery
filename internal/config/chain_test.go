@@ -21,6 +21,49 @@ func TestChainConfig_Validate_ok(t *testing.T) {
 	}
 }
 
+func TestChainConfig_Validate_empty(t *testing.T) {
+	t.Parallel()
+	const want = "blockchains: at least one chain is required"
+	tests := []struct {
+		name string
+		cfg  *ChainConfig
+	}{
+		{"absent", &ChainConfig{}},
+		{"empty", &ChainConfig{Blockchains: []Blockchain{}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.cfg.Validate()
+			if err == nil || err.Error() != want {
+				t.Fatalf("got %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+// CA2.5: the chain set is the configured set, in configuration order.
+func TestChainConfig_ChainIDs(t *testing.T) {
+	t.Parallel()
+	c := &ChainConfig{
+		Blockchains: []Blockchain{
+			{Name: "a", ChainID: 10},
+			{Name: "b", ChainID: 1},
+			{Name: "c", ChainID: 137},
+		},
+	}
+	got := c.ChainIDs()
+	want := []int64{10, 1, 137}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
 func TestChainConfig_Validate_duplicateName(t *testing.T) {
 	t.Parallel()
 	c := &ChainConfig{

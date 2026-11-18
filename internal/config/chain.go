@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -20,8 +21,11 @@ type ChainConfig struct {
 	Blockchains []Blockchain `yaml:"blockchains"`
 }
 
-// Validate checks blockchains: non-empty names, positive chain_id, no duplicate names or chain IDs.
+// Validate checks blockchains: at least one entry, non-empty names, positive chain_id, no duplicate names or chain IDs.
 func (c *ChainConfig) Validate() error {
+	if len(c.Blockchains) == 0 {
+		return errors.New("blockchains: at least one chain is required")
+	}
 	seenName := make(map[string]struct{})
 	seenChain := make(map[int64]string)
 	for i, b := range c.Blockchains {
@@ -54,6 +58,17 @@ func (c *ChainConfig) ChainIDByNetwork() map[string]int64 {
 		}
 	}
 	return m
+}
+
+// ChainIDs returns the chain_id of each blockchains[] entry, in configuration order,
+// in a new slice on each call. It neither filters nor sorts: Validate guarantees at
+// least one entry and positive, unique identifiers.
+func (c *ChainConfig) ChainIDs() []int64 {
+	ids := make([]int64, 0, len(c.Blockchains))
+	for _, b := range c.Blockchains {
+		ids = append(ids, b.ChainID)
+	}
+	return ids
 }
 
 // LoadChainConfig reads and parses the configuration file and validates blockchains.

@@ -88,4 +88,3 @@ func (r *cafeWalletRepository) Delete(pubKeyHash string, userID uuid.UUID) error
 	}
 	return nil
 }
-

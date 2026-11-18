@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"cafe-discovery/internal/config"
 	"cafe-discovery/internal/discoveryroutes"
 	"cafe-discovery/internal/domain"
 	"cafe-discovery/internal/persistence/scanpending"
@@ -227,10 +229,21 @@ func (s policyRefStub) ActiveWalletCPMContextForTarget(context.Context, uuid.UUI
 	return s.walletTarget, nil
 }
 
+// testWalletChainConfig returns three configured chains whose identifiers are
+// not sorted (10, 1, 137), so that a sorted chain set fails the tests.
+func testWalletChainConfig() *config.ChainConfig {
+	return &config.ChainConfig{Blockchains: []config.Blockchain{
+		{Name: "chain-a", ChainID: 10},
+		{Name: "chain-b", ChainID: 1},
+		{Name: "chain-c", ChainID: 137},
+	}}
+}
+
 func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	t.Parallel()
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
+		cfgChain:        testWalletChainConfig(),
 		natsConn:        n,
 		scannerPresence: alwaysScanners{},
 		scanPending:     newMemoryPendingV1Repo(),
@@ -285,6 +298,10 @@ func TestPostDiscoveryScanV1_WalletAccepted(t *testing.T) {
 	wantAddr := "0x742d35cc6634c0532925a3b844bc454e4438f44e"
 	if published.Address != wantAddr {
 		t.Fatalf("published address = %q, want %q", published.Address, wantAddr)
+	}
+	// CA2.5, ET2: the chain set is the configured set, in configuration order.
+	if !slices.Equal(published.ChainIDs, []int64{10, 1, 137}) {
+		t.Fatalf("published chain_ids = %v, want [10 1 137]", published.ChainIDs)
 	}
 }
 
@@ -486,6 +503,7 @@ func TestPostDiscoveryScanV1_WalletCPMDraftOnlyAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
+		cfgChain:        testWalletChainConfig(),
 		natsConn:        n,
 		scannerPresence: alwaysScanners{},
 		scanPending:     newMemoryPendingV1Repo(),
@@ -594,6 +612,7 @@ func TestPostDiscoveryScanV1_WalletFailedNewestAccepted(t *testing.T) {
 	userID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	n := &mockNATSConn{}
 	h := &DiscoveryHandler{
+		cfgChain:        testWalletChainConfig(),
 		natsConn:        n,
 		scannerPresence: alwaysScanners{},
 		scanPending:     newMemoryPendingV1Repo(),

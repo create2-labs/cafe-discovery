@@ -730,7 +730,7 @@ Note:
 - Environment variables always override values from `config.yaml` 
 - For local Docker Compose, use service names (e.g., `postgres`, `nats`, `redis`) as hostnames
 - The `CONFIG_PATH` environment variable can be used to specify a custom config file path (default: `config.yaml`)
-- Each **`blockchains[]`** entry must include a positive **`chain_id`** (validated when `LoadChainConfig` runs — used by API/scanner **and** persistence for `cafe.discovery.wallet.observed` `chain_ids` mapping)
+- `blockchains[]` holds at least one entry, each with a positive `chain_id` unique in the list (validated when `LoadChainConfig` runs). Its chain identifiers, in configuration order, are the `chain_ids` of every address scan request on `scan.requested.wallet`.
 
 ## Prerequisites
 
