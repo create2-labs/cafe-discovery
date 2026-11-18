@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0-alpha](https://github.com/create2-labs/cafe-discovery/compare/v0.2.0-alpha...v0.3.0-alpha) (2026-11-18)
+
+
+### Features
+
+* **scan:** send the configured chain_ids in the address scan request ([#153](https://github.com/create2-labs/cafe-discovery/issues/153)) ([6a6056f](https://github.com/create2-labs/cafe-discovery/commit/6a6056fa5941eeddeb08d8bf1387579eaa454bfc))
+
+
+### Bug Fixes
+
+* **auth:** bound the sign-in challenge provider call and return a fixed error on its failures ([#151](https://github.com/create2-labs/cafe-discovery/issues/151)) ([3bf52ce](https://github.com/create2-labs/cafe-discovery/commit/3bf52ce84e83bd17b98ef4af7802ffffdfd6689a))
+* govulncheck version ([#148](https://github.com/create2-labs/cafe-discovery/issues/148)) ([f621b3b](https://github.com/create2-labs/cafe-discovery/commit/f621b3b29bae70907e5cb559f15944288005302a))
+
 ## [0.2.0-alpha](https://github.com/create2-labs/cafe-discovery/compare/v0.1.1-alpha...v0.2.0-alpha) (2026-11-17)
 
 
