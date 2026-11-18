@@ -15,8 +15,8 @@ import (
 func TestListDiscoveryV1WalletScans_ChainIDWithoutAddress(t *testing.T) {
 	t.Parallel()
 	h := &DiscoveryHandler{
-		cfgChain:         &config.ChainConfig{},
-		scanRead:         nil,
+		cfgChain: &config.ChainConfig{},
+		scanRead: nil,
 	}
 	app := fiber.New(fiber.Config{})
 	app.Get("/wallets/scans", func(c fiber.Ctx) error {

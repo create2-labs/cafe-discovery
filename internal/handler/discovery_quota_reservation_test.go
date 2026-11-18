@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"cafe-discovery/internal/service"
 	"cafe-discovery/pkg/nats"
 
+	requestv1 "github.com/create2-labs/cafe-contracts/discovery/scanrequest/v1"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	natsio "github.com/nats-io/nats.go"
@@ -28,16 +30,22 @@ import (
 type countingNATS struct {
 	publishes atomic.Int32
 	err       error
+
+	mu       sync.Mutex
+	payloads [][]byte
 }
 
 func (m *countingNATS) Publish(string, []byte) error {
 	return nil
 }
 
-func (m *countingNATS) PublishJetStream(string, []byte) error {
+func (m *countingNATS) PublishJetStream(_ string, data []byte) error {
 	if m.err != nil {
 		return m.err
 	}
+	m.mu.Lock()
+	m.payloads = append(m.payloads, append([]byte(nil), data...))
+	m.mu.Unlock()
 	m.publishes.Add(1)
 	return nil
 }
@@ -94,6 +102,7 @@ func newQuotaReservationHandler(t *testing.T, walletLimit, endpointLimit int, co
 		scanUsageLedger: ledger,
 		scanPending:     pending,
 		policyRef:       policyRefStub{},
+		cfgChain:        testWalletChainConfig(),
 	}
 	return h, ledger, pending
 }
@@ -248,6 +257,20 @@ func TestPostDiscoveryScanV1_ConcurrentOneCreditOnePublish(t *testing.T) {
 	}
 	if n.publishes.Load() != 1 {
 		t.Fatalf("publishes = %d, want 1", n.publishes.Load())
+	}
+	// ET1: the single publication carries every configured chain.
+	n.mu.Lock()
+	payloads := n.payloads
+	n.mu.Unlock()
+	if len(payloads) != 1 {
+		t.Fatalf("recorded payloads = %d, want 1", len(payloads))
+	}
+	published, err := requestv1.DecodeWallet(payloads[0])
+	if err != nil {
+		t.Fatalf("published json: %v", err)
+	}
+	if !slices.Equal(published.ChainIDs, []int64{10, 1, 137}) {
+		t.Fatalf("published chain_ids = %v, want [10 1 137]", published.ChainIDs)
 	}
 	count, err := ledger.CountSuccessUsage(userID, domain.ScanUsageKindWallet)
 	if err != nil {

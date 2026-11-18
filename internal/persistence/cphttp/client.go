@@ -50,9 +50,9 @@ type scanReferenceWire struct {
 }
 
 type walletReferenceWire struct {
-	Exists       bool `json:"exists"`
-	PolicyCount  int  `json:"policy_count"`
-	DraftCount   int  `json:"draft_count"`
+	Exists      bool `json:"exists"`
+	PolicyCount int  `json:"policy_count"`
+	DraftCount  int  `json:"draft_count"`
 }
 
 // PersistedPoliciesReferenceScan implements policyref.Checker (W3).

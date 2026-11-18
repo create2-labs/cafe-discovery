@@ -18,7 +18,7 @@ func (r *planQuotaUserRepo) FindByID(string) (*domain.User, error) {
 	return r.user, nil
 }
 func (r *planQuotaUserRepo) FindByEmail(string) (*domain.User, error) { return nil, nil }
-func (r *planQuotaUserRepo) ExistsByEmail(string) (bool, error)      { return false, nil }
+func (r *planQuotaUserRepo) ExistsByEmail(string) (bool, error)       { return false, nil }
 
 type planQuotaPlanRepo struct {
 	plan *domain.Plan
@@ -33,8 +33,8 @@ func (r *planQuotaPlanRepo) FindAll() ([]*domain.Plan, error)                 { 
 func (r *planQuotaPlanRepo) FindActive() ([]*domain.Plan, error)              { return nil, nil }
 
 var (
-	_ repository.UserRepository       = (*planQuotaUserRepo)(nil)
-	_ repository.PlanRepository       = (*planQuotaPlanRepo)(nil)
+	_ repository.UserRepository = (*planQuotaUserRepo)(nil)
+	_ repository.PlanRepository = (*planQuotaPlanRepo)(nil)
 )
 
 func TestGetPlanUsage_WalletExecutionCount(t *testing.T) {

@@ -144,4 +144,3 @@ func (s *CafeWalletService) DeleteWallet(userID uuid.UUID, pubKeyHash string) er
 
 	return nil
 }
-

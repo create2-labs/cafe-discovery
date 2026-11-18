@@ -487,14 +487,16 @@ func cpmContextCheckUnavailableQueueError() *queueScanError {
 
 func (h *DiscoveryHandler) publishWalletScanRequested(scanID, userID uuid.UUID, normalized string) *queueScanError {
 	scanMsg := requestv1.Wallet{
-		ScanID:  scanID.String(),
-		UserID:  userID.String(),
-		Address: normalized,
+		ScanID:   scanID.String(),
+		UserID:   userID.String(),
+		Address:  normalized,
+		ChainIDs: h.cfgChain.ChainIDs(),
 	}
 	log.Info().
 		Str("subject", requestv1.SubjectScanRequestedWallet).
 		Str("scan_id", scanMsg.ScanID).
 		Str("address", normalized).
+		Ints64("chain_ids", scanMsg.ChainIDs).
 		Str("component", "backend").
 		Msg("NATS → PUB scan.requested.wallet")
 	if err := nats.PublishJSONJetStream(h.natsConn, requestv1.SubjectScanRequestedWallet, scanMsg); err != nil {
