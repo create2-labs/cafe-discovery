@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1](https://github.com/create2-labs/cafe-discovery/compare/v2.2.0...v2.2.1) (2026-11-25)
+
+
+### 🐞 Bug Fixes
+
+* release plase will promote versions bu itself ([#155](https://github.com/create2-labs/cafe-discovery/issues/155)) ([51deca0](https://github.com/create2-labs/cafe-discovery/commit/51deca0c23995cc3b457e08095ea95e77f1f102e))
+
 ## [2.2.0](https://github.com/create2-labs/cafe-discovery/compare/v0.2.0-alpha...v2.2.0) (2026-11-25)
 
 
