@@ -18,7 +18,10 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # release-type go lives in release-please-config.json.
+      # Passing release-type here would skip that file and the manifest.
       - uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: go
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
